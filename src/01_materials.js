@@ -2,99 +2,81 @@
    材质与程序化纹理
    ========================================================================== */
 function stdMat(o) { return new THREE.MeshStandardMaterial(Object.assign({ vertexColors: true, roughness: 0.9, metalness: 0 }, o)); }
-function regMat(key, material, extra = {}) { MATS[key] = Object.assign({ material }, extra); return material; }
+/* tint：顶点色对照片纹理的染色强度（0 = 保持照片原色，1 = 完全染色） */
+function regMat(key, material, extra = {}) { MATS[key] = Object.assign({ material, tint: 1 }, extra); return material; }
 
-/* --- 平铺纹理（灰度为主，由顶点色染色） --- */
-const TEX = {};
-TEX.plaster = canvasTex(256, 256, (g, w, h) => { noiseFill(g, w, h, 0xeeeeee, 0.09, 1.4, 3); }, { repeat: true });
-TEX.siding = canvasTex(256, 256, (g, w, h) => {
-  noiseFill(g, w, h, 0xf2f2f2, 0.05, 2, 5);
-  for (let y = 0; y < h; y += 32) { g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(0, y, w, 3); g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(0, y + 3, w, 2); }
-}, { repeat: true });
-TEX.brick = canvasTex(256, 256, (g, w, h) => {
-  g.fillStyle = '#cfc6bd'; g.fillRect(0, 0, w, h);
-  for (let r = 0; r < 8; r++) for (let c = -1; c < 5; c++) {
-    const x = c * 64 + (r % 2) * 32, y = r * 32; const k = 0.82 + hash2(r, c) * 0.25;
-    g.fillStyle = `rgb(${255 * k | 0},${232 * k | 0},${222 * k | 0})`; g.fillRect(x + 3, y + 3, 58, 26);
+/* --- 照片纹理（由生图 API 生成，构建时加载；法线贴图由亮度实时推导） --- */
+const PHOTOS = [];
+function photo(name, o = {}) {
+  const t = new THREE.Texture(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = MAX_ANISO; t.encoding = o.data ? THREE.LinearEncoding : THREE.sRGBEncoding;
+  const entry = { name, tex: t, file: o.file || (name + '.jpg'), normal: null, nStrength: o.normal || 0 };
+  if (o.normal) { entry.normal = new THREE.Texture(); entry.normal.wrapS = entry.normal.wrapT = THREE.RepeatWrapping; entry.normal.anisotropy = MAX_ANISO; }
+  PHOTOS.push(entry); t._entry = entry; return t;
+}
+function normalFromImage(img, strength) {
+  const w = Math.min(512, img.width), h = Math.min(512, img.height); const c = makeCanvas(w, h); const g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+  const src = g.getImageData(0, 0, w, h).data; const L = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) L[i] = (src[i * 4] * 0.3 + src[i * 4 + 1] * 0.59 + src[i * 4 + 2] * 0.11) / 255;
+  const out = g.createImageData(w, h); const d = out.data; const at = (x, y) => L[((y + h) % h) * w + ((x + w) % w)];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const dx = (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1)) - (at(x - 1, y - 1) + 2 * at(x - 1, y) + at(x - 1, y + 1));
+    const dy = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1)) - (at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1));
+    let nx = -dx * strength, ny = dy * strength, nz = 1; const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+    const i = (y * w + x) * 4; d[i] = (nx * 0.5 + 0.5) * 255; d[i + 1] = (ny * 0.5 + 0.5) * 255; d[i + 2] = (nz * 0.5 + 0.5) * 255; d[i + 3] = 255;
   }
-}, { repeat: true });
-TEX.tile = canvasTex(256, 256, (g, w, h) => {
-  g.fillStyle = '#d9d9d9'; g.fillRect(0, 0, w, h);
-  for (let y = 0; y < 16; y++) for (let x = 0; x < 8; x++) { const k = 0.9 + hash2(x + 40, y) * 0.12; g.fillStyle = `rgb(${250 * k | 0},${250 * k | 0},${250 * k | 0})`; g.fillRect(x * 32 + 1, y * 16 + 1, 30, 14); }
-}, { repeat: true });
-TEX.wood = canvasTex(256, 256, (g, w, h) => {
-  for (let i = 0; i < 8; i++) { const k = 0.82 + hash2(i, 7) * 0.2; g.fillStyle = `rgb(${255 * k | 0},${245 * k | 0},${230 * k | 0})`; g.fillRect(0, i * 32, w, 32); g.fillStyle = 'rgba(60,30,10,0.25)'; g.fillRect(0, i * 32, w, 2); }
-  g.globalAlpha = 0.12; for (let i = 0; i < 160; i++) { g.fillStyle = '#5a3a20'; g.fillRect(R(0, w), R(0, h), R(10, 60), 1); } g.globalAlpha = 1;
-}, { repeat: true });
-TEX.roof = canvasTex(256, 256, (g, w, h) => {
-  g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
-  for (let x = 0; x < w; x += 32) { const gr = g.createLinearGradient(x, 0, x + 32, 0); gr.addColorStop(0, '#9a9a9a'); gr.addColorStop(0.45, '#ffffff'); gr.addColorStop(1, '#8a8a8a'); g.fillStyle = gr; g.fillRect(x, 0, 32, h); }
-  for (let y = 0; y < h; y += 42) { g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, y, w, 4); }
-}, { repeat: true });
-TEX.metal = canvasTex(128, 128, (g, w, h) => {
-  for (let x = 0; x < w; x += 16) { const gr = g.createLinearGradient(x, 0, x + 16, 0); gr.addColorStop(0, '#b8b8b8'); gr.addColorStop(0.5, '#ffffff'); gr.addColorStop(1, '#a8a8a8'); g.fillStyle = gr; g.fillRect(x, 0, 16, h); }
-}, { repeat: true });
-TEX.concrete = canvasTex(256, 256, (g, w, h) => { noiseFill(g, w, h, 0xdadada, 0.12, 2.2, 11); g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(0, 0, w, 2); g.fillRect(0, 0, 2, h); }, { repeat: true });
-TEX.asphalt = canvasTex(256, 256, (g, w, h) => {
-  noiseFill(g, w, h, 0x8a8c92, 0.1, 3, 17);
-  for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${hash2(i, 1) > 0.5 ? '255,255,255' : '0,0,0'},0.12)`; g.fillRect(R(0, w), R(0, h), 2, 2); }
-}, { repeat: true });
-TEX.paving = canvasTex(256, 256, (g, w, h) => {
-  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
-    const k = 0.86 + hash2(x + 3, y + 9) * 0.16; g.fillStyle = `rgb(${255 * k | 0},${250 * k | 0},${244 * k | 0})`; g.fillRect(x * 64 + 2, y * 64 + 2, 60, 60);
-  }
-  g.fillStyle = 'rgba(120,110,105,0.22)'; for (let i = 0; i <= 4; i++) { g.fillRect(i * 64 - 1, 0, 2, h); g.fillRect(0, i * 64 - 1, w, 2); }
-}, { repeat: true });
+  g.putImageData(out, 0, 0); return c;
+}
+function loadImage(url) { return new Promise((res, rej) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => res(im); im.onerror = () => rej(new Error('无法加载 ' + url)); im.src = url; }); }
+async function loadPhotos(onProgress) {
+  let n = 0;
+  await Promise.all(PHOTOS.map(async (e) => {
+    const img = await loadImage(ASSET_BASE + 'tex/' + e.file);
+    e.tex.image = img; e.tex.needsUpdate = true;
+    if (e.normal) { e.normal.image = normalFromImage(img, e.nStrength); e.normal.needsUpdate = true; }
+    onProgress && onProgress(++n / PHOTOS.length);
+  }));
+}
+const TEX = {
+  plaster: photo('plaster', { normal: 1.2 }), siding: photo('siding', { normal: 2.0 }), brick: photo('brick', { normal: 2.5 }), tile: photo('tilewall', { normal: 2.0 }),
+  wood: photo('planks', { normal: 2.0 }), woodwall: photo('woodwall', { normal: 2.0 }), roof: photo('roof', { normal: 3.0 }), metal: photo('metalroof', { normal: 3.0 }),
+  concrete: photo('concrete', { normal: 1.5 }), asphalt: photo('asphalt', { normal: 2.0 }), paving: photo('sidewalk', { normal: 2.5 }), gravel: photo('gravel', { normal: 3.0 }),
+  ballast: photo('ballast', { normal: 3.0 }), stone: photo('stonewall', { normal: 3.0 }), grass: photo('grass', { normal: 1.0 }), sand: photo('sand', { normal: 1.5 }),
+  ground: photo('ground', { normal: 2.0 }), rock: photo('rock', { normal: 3.0 }), paddy: photo('paddy'), bark: photo('bark', { normal: 3.0 }),
+  sakura: photo('sakura', { file: 'sakura.png' }), leaves: photo('leaves', { file: 'leaves.png' }), pine: photo('pine', { file: 'pine.png' }),
+};
+const N = (t) => t._entry && t._entry.normal;
 TEX.tactile = canvasTex(128, 128, (g, w, h) => {
-  g.fillStyle = '#f1c400'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#e9b800'; g.fillRect(0, 0, w, h);
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 0, w, 2); g.fillRect(0, 0, 2, h);
-  for (let i = 0; i < 4; i++) { g.fillStyle = '#ffde4a'; g.fillRect(i * 32 + 12, 8, 8, h - 16); g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(i * 32 + 20, 8, 2, h - 16); }
+  for (let i = 0; i < 4; i++) { g.fillStyle = '#ffd21f'; g.fillRect(i * 32 + 12, 8, 8, h - 16); g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(i * 32 + 20, 8, 2, h - 16); }
 }, { repeat: true });
-TEX.gravel = canvasTex(256, 256, (g, w, h) => {
-  noiseFill(g, w, h, 0xd8d2c8, 0.06, 3, 23);
-  for (let i = 0; i < 2600; i++) { const k = 0.7 + hash2(i, 3) * 0.45; g.fillStyle = `rgb(${245 * k | 0},${238 * k | 0},${228 * k | 0})`; g.beginPath(); g.ellipse(R(0, w), R(0, h), R(1, 3), R(1, 2.5), R(0, 3), 0, TAU); g.fill(); }
-}, { repeat: true });
-TEX.ballast = canvasTex(256, 256, (g, w, h) => {
-  g.fillStyle = '#8a8580'; g.fillRect(0, 0, w, h);
-  for (let i = 0; i < 3500; i++) { const k = 0.6 + hash2(i, 13) * 0.6; g.fillStyle = `rgb(${190 * k | 0},${180 * k | 0},${172 * k | 0})`; g.fillRect(R(0, w), R(0, h), R(2, 5), R(2, 4)); }
-}, { repeat: true });
-TEX.stone = canvasTex(256, 256, (g, w, h) => {
-  g.fillStyle = '#9c968e'; g.fillRect(0, 0, w, h);
-  for (let r = 0; r < 6; r++) for (let c = -1; c < 5; c++) {
-    const x = c * 60 + (r % 2) * 30 + R(-4, 4), y = r * 44 + R(-3, 3); const k = 0.85 + hash2(r + 5, c) * 0.25;
-    g.fillStyle = `rgb(${236 * k | 0},${232 * k | 0},${224 * k | 0})`; rrect(g, x + 3, y + 3, 54, 38, 8); g.fill();
-  }
-}, { repeat: true });
-TEX.grass = canvasTex(256, 256, (g, w, h) => {
-  noiseFill(g, w, h, 0xe8e8e8, 0.16, 1.2, 31);
-  for (let i = 0; i < 1600; i++) { g.strokeStyle = `rgba(${hash2(i, 9) > 0.5 ? '255,255,255' : '60,90,30'},0.25)`; const x = R(0, w), y = R(0, h); g.beginPath(); g.moveTo(x, y); g.lineTo(x + R(-2, 2), y - R(3, 8)); g.stroke(); }
-}, { repeat: true });
-TEX.sand = canvasTex(256, 256, (g, w, h) => {
-  noiseFill(g, w, h, 0xf2ece0, 0.07, 2, 41);
-  for (let i = 0; i < 1500; i++) { g.fillStyle = `rgba(${hash2(i, 5) > 0.5 ? '255,255,255' : '120,100,80'},0.2)`; g.fillRect(R(0, w), R(0, h), 1.5, 1.5); }
-}, { repeat: true });
+const pm = (map, o = {}) => { const { ns = 0.8, ...rest } = o; const m = stdMat(Object.assign({ map, normalScale: new THREE.Vector2(ns, ns) }, rest)); if (N(map)) m.normalMap = N(map); return m; };
 
-regMat('vc', stdMat({}));
-regMat('vcNoShadow', stdMat({}), { cast: false });
-regMat('blob', stdMat({ emissive: 0x3a2228 }));
-regMat('paint', stdMat({ roughness: 0.45 }));
-regMat('plaster', stdMat({ map: TEX.plaster }));
-regMat('siding', stdMat({ map: TEX.siding }));
-regMat('brick', stdMat({ map: TEX.brick }));
-regMat('tile', stdMat({ map: TEX.tile }));
-regMat('wood', stdMat({ map: TEX.wood }));
-regMat('roof', stdMat({ map: TEX.roof, roughness: 0.7 }));
-regMat('metal', stdMat({ map: TEX.metal, roughness: 0.55 }));
-regMat('concrete', stdMat({ map: TEX.concrete }));
-regMat('asphalt', stdMat({ map: TEX.asphalt, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }), { cast: false });
-regMat('paving', stdMat({ map: TEX.paving }), { cast: false });
-regMat('tactile', stdMat({ map: TEX.tactile, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), { cast: false });
-regMat('gravel', stdMat({ map: TEX.gravel, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }), { cast: false });
-regMat('ballast', stdMat({ map: TEX.ballast }), { cast: false });
-regMat('stone', stdMat({ map: TEX.stone }));
-regMat('sandMat', stdMat({ map: TEX.sand }), { cast: false });
-regMat('glass', new THREE.MeshStandardMaterial({ color: 0xbfe0ee, roughness: 0.08, metalness: 0, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide }), { cast: false, receive: false });
-/* 发光体（灯泡、灯笼）：夜里提亮 */
+regMat('vc', stdMat({ roughness: 0.85 }));
+regMat('vcNoShadow', stdMat({ roughness: 0.85 }), { cast: false });
+regMat('blob', stdMat({ emissive: 0x2a1a1e }));
+regMat('paint', stdMat({ roughness: 0.35, metalness: 0.15, envMapIntensity: 1.2 }));
+regMat('chrome', stdMat({ roughness: 0.2, metalness: 0.9, envMapIntensity: 1.3 }));
+regMat('plaster', pm(TEX.plaster, { roughness: 0.92 }), { tint: 0.9 });
+regMat('siding', pm(TEX.siding, { roughness: 0.8 }), { tint: 0.75 });
+regMat('brick', pm(TEX.brick, { roughness: 0.9 }), { tint: 0.25 });
+regMat('tile', pm(TEX.tile, { roughness: 0.55 }), { tint: 0.5 });
+regMat('wood', pm(TEX.wood, { roughness: 0.85 }), { tint: 0.55 });
+regMat('woodwall', pm(TEX.woodwall, { roughness: 0.85 }), { tint: 0.4 });
+regMat('roof', pm(TEX.roof, { roughness: 0.5, envMapIntensity: 1.1 }), { tint: 0.45 });
+regMat('metal', pm(TEX.metal, { roughness: 0.45, metalness: 0.45 }), { tint: 0.6 });
+regMat('concrete', pm(TEX.concrete, { roughness: 0.92 }), { tint: 0.35 });
+regMat('asphalt', pm(TEX.asphalt, { roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }), { cast: false, tint: 0 });
+regMat('paving', pm(TEX.paving, { roughness: 0.9 }), { cast: false, tint: 0.25 });
+regMat('tactile', stdMat({ map: TEX.tactile, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), { cast: false });
+regMat('gravel', pm(TEX.gravel, { roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }), { cast: false, tint: 0.2 });
+regMat('ballast', pm(TEX.ballast, { roughness: 1 }), { cast: false, tint: 0 });
+regMat('stone', pm(TEX.stone, { roughness: 0.92 }), { tint: 0.3 });
+regMat('sandMat', pm(TEX.sand, { roughness: 1 }), { cast: false, tint: 0.2 });
+regMat('rockMat', pm(TEX.rock, { roughness: 0.95 }), { tint: 0.3 });
+regMat('paddyMat', stdMat({ map: TEX.paddy, roughness: 0.25, envMapIntensity: 1.4 }), { cast: false, tint: 0 });
+regMat('glass', new THREE.MeshStandardMaterial({ color: lin(0xa9c4cf), roughness: 0.03, metalness: 0.1, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.6 }), { cast: false, receive: false });
+/* 发光体（灯泡、灯笼）：夜里亮度超过 1，交给辉光 */
 const glowMat = regMat('glow', new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xcfcfcf }), { cast: false, receive: false });
 /* 道路标线 */
 regMat('paint2d', stdMat({ transparent: true, alphaTest: 0.4, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, depthWrite: false }), { cast: false });
@@ -109,9 +91,9 @@ const winDay = makeCanvas(1024, 1024), winNight = makeCanvas(1024, 1024);
     const cx = (i % 4) * 256, cy = Math.floor(i / 4) * 256; const kind = i % 8; const lit = i < 12;
     // 白天：天空反射
     const gr = gd.createLinearGradient(cx, cy, cx + 256, cy + 256);
-    gr.addColorStop(0, '#d9ecf6'); gr.addColorStop(0.45, '#8fb2c8'); gr.addColorStop(0.55, '#a9c6d6'); gr.addColorStop(1, '#5e7d92');
+    gr.addColorStop(0, '#3b4650'); gr.addColorStop(0.5, '#2a333b'); gr.addColorStop(1, '#1d242a');
     gd.fillStyle = gr; gd.fillRect(cx, cy, 256, 256);
-    gd.fillStyle = 'rgba(255,255,255,0.35)'; gd.beginPath(); gd.moveTo(cx + 30, cy + 256); gd.lineTo(cx + 120, cy); gd.lineTo(cx + 150, cy); gd.lineTo(cx + 60, cy + 256); gd.fill();
+    
     // 夜晚：暖光
     if (lit) { const ng = gn.createRadialGradient(cx + 128, cy + 90, 10, cx + 128, cy + 128, 200); const warm = ['#ffd58a', '#ffe6b0', '#ffc878', '#fff0cf'][i % 4]; ng.addColorStop(0, warm); ng.addColorStop(1, '#b8743a'); gn.fillStyle = ng; gn.fillRect(cx, cy, 256, 256); }
     const curtain = ['#f4e3c8', '#e8c9c9', '#cfe0d0', '#ffffff', '#d8d0ea', '#f0d9a8', '#cfd8e0', '#f5f5f0'][kind];
@@ -126,13 +108,13 @@ const winDay = makeCanvas(1024, 1024), winNight = makeCanvas(1024, 1024);
     both((g, n) => { g.fillStyle = n ? '#2a1c12' : '#e9e6df'; g.fillRect(cx + 124, cy, 8, 256); g.fillRect(cx, cy, 256, 6); g.fillRect(cx, cy + 250, 256, 6); g.fillRect(cx, cy, 6, 256); g.fillRect(cx + 250, cy, 6, 256); });
   }
 })();
-const TEX_WIN = new THREE.CanvasTexture(winDay); TEX_WIN.anisotropy = MAX_ANISO;
-const TEX_WIN_N = new THREE.CanvasTexture(winNight);
-const winMat = regMat('win', new THREE.MeshStandardMaterial({ vertexColors: true, map: TEX_WIN, emissiveMap: TEX_WIN_N, emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.25, metalness: 0 }), { cast: false });
+const TEX_WIN = new THREE.CanvasTexture(winDay); TEX_WIN.anisotropy = MAX_ANISO; TEX_WIN.encoding = THREE.sRGBEncoding;
+const TEX_WIN_N = new THREE.CanvasTexture(winNight); TEX_WIN_N.encoding = THREE.sRGBEncoding;
+const winMat = regMat('win', new THREE.MeshStandardMaterial({ vertexColors: true, map: TEX_WIN, emissiveMap: TEX_WIN_N, emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.04, metalness: 0.2, envMapIntensity: 1.8 }), { cast: false });
 function winUV(i) { const cx = i % 4, cy = Math.floor(i / 4); const e = 0.004; return [cx / 4 + e, 1 - (cy + 1) / 4 + e, (cx + 1) / 4 - e, 1 - cy / 4 - e]; }
 
 /* --- 招牌图集（动态装箱） --- */
-const SIGN_W = 4096, SIGN_H = 2048;
+const SIGN_W = 4096, SIGN_H = 3072;
 const signCanvas = makeCanvas(SIGN_W, SIGN_H); const sg = signCanvas.getContext('2d');
 sg.fillStyle = '#777'; sg.fillRect(0, 0, SIGN_W, SIGN_H);
 const signPack = { shelves: [], y: 0 };
@@ -148,7 +130,7 @@ function allocSign(w, h, draw) {
   sg.save(); sg.translate(x, y); sg.beginPath(); sg.rect(0, 0, w, h); sg.clip(); draw(sg, w, h); sg.restore();
   return [x / SIGN_W, 1 - (y + h) / SIGN_H, (x + w) / SIGN_W, 1 - y / SIGN_H];
 }
-const TEX_SIGN = new THREE.CanvasTexture(signCanvas); TEX_SIGN.anisotropy = MAX_ANISO;
+const TEX_SIGN = new THREE.CanvasTexture(signCanvas); TEX_SIGN.anisotropy = MAX_ANISO; TEX_SIGN.encoding = THREE.sRGBEncoding;
 const signMat = regMat('sign', new THREE.MeshStandardMaterial({ vertexColors: true, map: TEX_SIGN, emissiveMap: TEX_SIGN, emissive: 0xffffff, emissiveIntensity: 0.0, roughness: 0.6, metalness: 0 }));
 const signCutMat = regMat('signCut', new THREE.MeshStandardMaterial({ vertexColors: true, map: TEX_SIGN, alphaTest: 0.5, transparent: false, side: THREE.DoubleSide, roughness: 0.8, metalness: 0 }));
 // 透明招牌需要带 alpha 的画布：图集底色设为透明区域时使用 clearRect
@@ -171,7 +153,7 @@ const awnCanvas = makeCanvas(512, 1280);
     g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(0, y0 + 96, 512, 3);
   });
 })();
-const TEX_AWN = new THREE.CanvasTexture(awnCanvas); TEX_AWN.anisotropy = MAX_ANISO; TEX_AWN.wrapS = THREE.RepeatWrapping;
+const TEX_AWN = new THREE.CanvasTexture(awnCanvas); TEX_AWN.anisotropy = MAX_ANISO; TEX_AWN.encoding = THREE.sRGBEncoding; TEX_AWN.wrapS = THREE.RepeatWrapping;
 regMat('awning', new THREE.MeshStandardMaterial({ vertexColors: true, map: TEX_AWN, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85, metalness: 0 }), { depth: new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: TEX_AWN, alphaTest: 0.5 }) });
 function awnUV(i, part, rep) { const y0 = i * 128; if (part === 0) return [0, 1 - (y0 + 92) / 1280, rep, 1 - y0 / 1280]; return [0, 1 - (y0 + 128) / 1280, rep, 1 - (y0 + 96) / 1280]; }
 
@@ -199,6 +181,17 @@ function buildHalos() {
   haloPoints = new THREE.Points(g, m); haloPoints.frustumCulled = false; haloPoints.renderOrder = 5; scene.add(haloPoints);
 }
 
+/* --- 夜间地面光斑（廉价的路灯投光） --- */
+const POOLS = { pos: [], mat: null };
+function addLightPool(x, y, z, r = 6, col = 0xffd8a0) { POOLS.pos.push([x, y, z, r, new THREE.Color(col)]); }
+function buildPools() {
+  const tex = canvasTex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,0.55)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.18)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); }, { data: true });
+  const pos = [], uv = [], col = [], idx = [];
+  for (const [x, y, z, r, c] of POOLS.pos) { const b = pos.length / 3; for (const [u, v] of [[0, 0], [1, 0], [1, 1], [0, 1]]) { const px = x + (u - 0.5) * 2 * r, pz = z + (v - 0.5) * 2 * r; pos.push(px, groundAt(px, pz, y + 1) + 0.06, pz); uv.push(u, v); col.push(c.r, c.g, c.b); } idx.push(b, b + 2, b + 1, b, b + 3, b + 2); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+  POOLS.mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, fog: true });
+  const m = new THREE.Mesh(g, POOLS.mat); m.renderOrder = 3; m.frustumCulled = false; scene.add(m);
+}
 /* --- 电线 --- */
 const wirePos = [];
 function addWire(a, b, sag = 0.6, seg = 10) {

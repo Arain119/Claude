@@ -63,7 +63,7 @@ function streetLampPlaza(x, z) {
   const K = new Kit(x, TOWN_Y + 0.12, z, 0);
   K.cyl('paint', 0, 1.9, 0, 0.07, 3.8, 0x2f4a4a, { rt: 0.75, seg: 10 }); K.cyl('paint', 0, 0.2, 0, 0.14, 0.4, 0x2f4a4a, { seg: 10 });
   K.sph('glow', 0, 4.05, 0, 0.3, 0.32, 0.3, 0xfff2d8); K.cyl('paint', 0, 4.42, 0, 0.32, 0.1, 0x2f4a4a, { rt: 0.3, seg: 12 });
-  addHalo(x, TOWN_Y + 4.1, z, 4.5, 0xffe6b8);
+  addHalo(x, TOWN_Y + 4.1, z, 4.5, 0xffe6b8); addLightPool(x, TOWN_Y, z, 7, 0xffdcae);
   addCollider(x, z, 0.15, 0.15, 0, TOWN_Y, TOWN_Y + 4, 'wall');
 }
 
@@ -76,7 +76,7 @@ function buildRiverbanks() {
     const a = RIVER[i], b = RIVER[i + 1]; const dx = b[0] - a[0], dz = b[1] - a[1]; const L = Math.hypot(dx, dz); const nx = -dz / L, nz = dx / L;
     const ry = Math.atan2(dx, dz);
     const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
-    if (mz > 128) continue;
+    if (mz > 128 || mz < -100) continue;
     for (const s of [-1, 1]) {
       const top = Math.min(terrainH(mx + nx * s * 9, mz + nz * s * 9), TOWN_Y);
       const hgt = top + 0.9;
@@ -92,6 +92,12 @@ function buildRiverbanks() {
       }
     }
   }
+  // 河源：混凝土涵洞出水口
+  { const [x0, z0] = RIVER[0], [x1, z1] = RIVER[1]; const ry = Math.atan2(x1 - x0, z1 - z0); const wy = riverProfile()[0]; const K = new Kit(x0, wy - 1.3, z0, ry);
+    K.box('concrete', 0, 3.2, -1.2, 16, 6.4, 1.6, 0xb8b4ac, { wuv: 0.4 }); K.box('concrete', 0, 6.5, -1.0, 16.6, 0.4, 2.2, 0xa8a49c);
+    for (const sx of [-1, 1]) K.box('concrete', sx * 7.6, 3.0, 3, 1.2, 6, 8, 0xb8b4ac, { wuv: 0.4 });
+    K.box('vcNoShadow', 0, 1.9, -0.35, 6.2, 3.0, 0.2, 0x0b0c0e); K.geo('concrete', new THREE.TorusGeometry(3.1, 0.35, 8, 24, Math.PI), 0, 1.9, -0.3, 0xa8a49c);
+    K.box('paint', 0, 7.2, -0.2, 16, 0.08, 0.08, 0x8a9096); for (let i = 0; i <= 8; i++) K.box('paint', -8 + i * 2, 6.95, -0.2, 0.06, 0.5, 0.06, 0x8a9096); }
   // 樱花隧道：东岸两排、西岸一排
   for (let z = -42; z <= 82; z += 9.5) {
     const rx = riverAtZ(z); if (Math.abs(z + 20) < 4 || Math.abs(z - 40) < 4) continue;
@@ -110,7 +116,7 @@ function bankLantern(x, z) {
   K.box('wood', 0, 1.0, 0, 0.1, 2.0, 0.1, 0x5a3a20);
   K.box('wood', 0.25, 2.0, 0, 0.6, 0.06, 0.06, 0x5a3a20);
   K.cyl('glow', 0.45, 1.72, 0, 0.16, 0.42, 0xfff0d8, { seg: 12 }); K.cyl('vc', 0.45, 1.95, 0, 0.12, 0.05, 0x222222, { seg: 12 }); K.cyl('vc', 0.45, 1.49, 0, 0.12, 0.05, 0x222222, { seg: 12 });
-  const p = K.w(0.45, 1.72, 0); addHalo(p[0], p[1], p[2], 2.6, 0xffd8a8);
+  const p = K.w(0.45, 1.72, 0); addHalo(p[0], p[1], p[2], 2.6, 0xffd8a8); addLightPool(p[0], y, p[2], 3.5, 0xffc890);
 }
 function bridge(z, width) {
   const rx = riverAtZ(z); const span = 19;
@@ -288,6 +294,7 @@ function warehouse(x, z, col, label) {
   K.plane('sign', 0, 5.8, 0.06, 5, 0.9, 0xffffff, { uvr: uv });
 }
 function fishingBoat(x, z, ry) {
+  if (MODELS.boat) { const M = MODELS.boat; const g = new THREE.Mesh(M.geo, M.mat); g.castShadow = true; g.receiveShadow = true; g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g); return { g, x, z, ry, ph: R(0, TAU), sink: 0.75 }; }
   const g = buildLocal(() => {
     const K = new Kit(0, 0, 0, 0);
     const hull = new THREE.Shape(); hull.moveTo(-4, 1.4); hull.lineTo(4.6, 1.6); hull.quadraticCurveTo(4.2, 0.2, 2.5, -0.4); hull.lineTo(-3.6, -0.4); hull.lineTo(-4, 1.4);

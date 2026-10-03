@@ -54,6 +54,22 @@ function musicBox(midi, t, dur) {
   tone(f, t, dur * 1.8 + 0.8, v, 'sine', AUDIO.master, 0.003); tone(f * 2, t, 0.6, v * 0.35, 'sine', AUDIO.rev, 0.002); tone(f * 3.01, t, 0.25, v * 0.12, 'sine', AUDIO.master, 0.002);
   tone(f, t, dur * 1.8 + 0.8, v * 0.6, 'sine', AUDIO.rev, 0.003);
 }
+/* 引擎声：两组锯齿波 + 低通，转速随车速 */
+AUDIO.engine = function (on) {
+  if (!AUDIO.ok) return; const ctx = AUDIO.ctx;
+  if (on && !AUDIO.eng) {
+    const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(); o1.type = 'sawtooth'; o2.type = 'square'; const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 600; const g = ctx.createGain(); g.gain.value = 0;
+    o1.connect(f); o2.connect(f); f.connect(g); g.connect(AUDIO.master); o1.start(); o2.start(); AUDIO.eng = { o1, o2, f, g };
+  }
+  if (AUDIO.eng) AUDIO.eng.g.gain.setTargetAtTime(on ? 0.05 : 0, ctx.currentTime, 0.2);
+};
+AUDIO.engineUpdate = function (rpm, thr, bike) {
+  if (!AUDIO.eng) return; const t = AUDIO.ctx.currentTime; const base = bike ? 70 : 38; const gear = rpm * 4.5 % 1; const f = base + (rpm * 60 + gear * 45) * (bike ? 1.6 : 1);
+  AUDIO.eng.o1.frequency.setTargetAtTime(f, t, 0.08); AUDIO.eng.o2.frequency.setTargetAtTime(f * 0.5, t, 0.08); AUDIO.eng.f.frequency.setTargetAtTime(400 + thr * 900 + rpm * 600, t, 0.1);
+  AUDIO.eng.g.gain.setTargetAtTime(0.035 + thr * 0.04, t, 0.15);
+};
+AUDIO.horn = function (v = 1) { if (!AUDIO.ok) return; const t = AUDIO.ctx.currentTime; tone(415, t, 0.45, 0.06 * v, 'square'); tone(523, t, 0.45, 0.05 * v, 'square'); };
+AUDIO.crash = function (v = 1) { if (!AUDIO.ok) return; const ctx = AUDIO.ctx, t = ctx.currentTime; const s = ctx.createBufferSource(); s.buffer = AUDIO.waves.s.buffer; const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900; const g = ctx.createGain(); g.gain.setValueAtTime(0.5 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.6); s.connect(f); f.connect(g); g.connect(AUDIO.master); s.start(t, Math.random()); s.stop(t + 0.7); tone(90, t, 0.3, 0.2 * v, 'square'); };
 AUDIO.update = function (dt, env) {
   if (!AUDIO.ok) return; const ctx = AUDIO.ctx, now = ctx.currentTime; const k = 0.3;
   const day = 1 - env.night;

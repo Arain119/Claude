@@ -31,9 +31,9 @@ const store = {
 /* ---------- 画质 ---------- */
 const IS_TOUCH = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
 const QUALITY = {
-  high: { label: '高', pr: 2, shadow: 2048, sakura: 1.0, petals: 2600, far: 1400, npc: 150, outline: 55, waves: 1, grass: 1 },
-  mid: { label: '中', pr: 1.5, shadow: 1024, sakura: 0.62, petals: 1300, far: 1000, npc: 110, outline: 35, waves: 1, grass: 0.6 },
-  low: { label: '低', pr: 1.15, shadow: 0, sakura: 0.38, petals: 500, far: 650, npc: 75, outline: 18, waves: 0, grass: 0.25 }
+  high: { label: '高', pr: 1.75, shadow: 4096, sakura: 1.0, petals: 1800, far: 1600, npc: 160, waves: 1, grass: 1, forest: 1, bloom: true, msaa: 4 },
+  mid: { label: '中', pr: 1.35, shadow: 2048, sakura: 0.65, petals: 900, far: 1100, npc: 110, waves: 1, grass: 0.55, forest: 0.6, bloom: true, msaa: 0 },
+  low: { label: '低', pr: 1.0, shadow: 0, sakura: 0.4, petals: 350, far: 700, npc: 70, waves: 0, grass: 0.2, forest: 0.35, bloom: false, msaa: 0 }
 };
 let qName = store.get('quality', IS_TOUCH ? 'low' : 'high');
 if (!QUALITY[qName]) qName = 'mid';
@@ -46,16 +46,22 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.pr));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
 renderer.shadowMap.autoUpdate = true;
 const MAX_ANISO = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.08, 3000);
+const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 4000);
+/* sRGB 十六进制颜色 → 线性颜色（r128 不会自动转换） */
+const lin = (c) => new THREE.Color(c).convertSRGBToLinear();
+const ASSET_BASE = (window.HOSHIMI_ASSETS || 'assets/');
 
 /* ---------- Canvas 纹理 ---------- */
 function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 function canvasTex(w, h, fn, o = {}) {
   const c = makeCanvas(w, h); const g = c.getContext('2d'); fn(g, w, h, c);
-  const t = new THREE.CanvasTexture(c); t.anisotropy = MAX_ANISO;
+  const t = new THREE.CanvasTexture(c); t.anisotropy = MAX_ANISO; if (!o.data) t.encoding = THREE.sRGBEncoding;
   if (o.repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
   if (o.nearest) { t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; }
   t.needsUpdate = true; return t;
@@ -82,7 +88,7 @@ function fitText(g, text, maxW, size, font, weight = '700') {
 
 /* ---------- 几何合并（按材质 × 区块） ---------- */
 const _m4 = new THREE.Matrix4(), _n3 = new THREE.Matrix3(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _c = new THREE.Color();
-const MATS = {};
+const MATS = {}; const _white = new THREE.Color(1, 1, 1);
 const BATCH = new Map(); const CHUNK = 64; let BATCH_NOCHUNK = false;
 function bucketFor(mk, x, z, nochunk) {
   const key = (nochunk || BATCH_NOCHUNK) ? mk + '|g' : mk + '|' + Math.floor(x / CHUNK) + ',' + Math.floor(z / CHUNK);
@@ -97,7 +103,8 @@ function addGeo(geo, mk, matrix, color, o = {}) {
   _v.set(0, 0, 0).applyMatrix4(matrix);
   const b = bucketFor(mk, _v.x, _v.z, o.nochunk);
   const base = b.n;
-  const col = color && color.isColor ? color : _c.set(color == null ? 0xffffff : color);
+  const col = (color && color.isColor ? _c.copy(color) : _c.set(color == null ? 0xffffff : color)).convertSRGBToLinear();
+  const tint = MATS[mk] ? MATS[mk].tint : 1; if (tint < 1) col.lerp(_white, 1 - tint);
   const cr = col.r, cg = col.g, cb = col.b;
   const wuv = o.wuv, uvr = o.uvr, grad = o.grad;
   let ymin = 0, ymax = 1;

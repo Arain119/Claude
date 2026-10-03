@@ -80,7 +80,7 @@ function buildStation() {
   const cy = PLAT_Y + 3.2;
   for (let x = 38; x <= 84; x += 6.5) { WK.cyl('paint', x, (PLAT_Y + cy) / 2, cz, 0.12, cy - PLAT_Y, 0x7d8a8f, { seg: 10 }); addCollider(x, cz, 0.15, 0.15, 0, PLAT_Y, cy, 'wall'); WK.box('paint', x, cy - 0.15, cz, 0.12, 0.2, 4.6, 0x7d8a8f); }
   for (const s of [-1, 1]) WK.box('metal', 61, cy + 0.12 + 0.12, cz + s * 1.3, 48, 0.08, 2.75, 0xd6dbe0, { rx: s * 0.09, wuv: 0.8 });
-  for (let x = 40; x <= 82; x += 6.5) for (const s of [-1, 1]) { WK.box('glow', x + 3, cy - 0.05, cz + s * 1.4, 1.6, 0.05, 0.12, 0xfafafa); addHalo(x + 3, cy - 0.3, cz + s * 1.4, 2.0, 0xf2f6ff); }
+  for (let x = 40; x <= 82; x += 6.5) for (const s of [-1, 1]) { WK.box('glow', x + 3, cy - 0.05, cz + s * 1.4, 1.6, 0.05, 0.12, 0xfafafa); addHalo(x + 3, cy - 0.3, cz + s * 1.4, 2.0, 0xf2f6ff); addLightPool(x + 3, PLAT_Y, cz + s * 1.4, 4, 0xe8f0ff); }
   // 站名牌
   for (const x of [46, 76]) stationNameBoard(x, cz);
   const hUV = allocSign(400, 80, (g, w, h) => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h); g.fillStyle = '#e48fa6'; g.fillRect(0, h - 12, w, 12); g.fillStyle = '#222'; g.font = `900 40px ${FONT.sans}`; g.textAlign = 'center'; g.fillText('樱丘  SAKURAGAOKA', w / 2, 50); });

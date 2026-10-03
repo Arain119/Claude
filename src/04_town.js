@@ -422,7 +422,7 @@ function streetLamp(x, z, side) {
   k.rod('paint', [0, 5.2, 0], [-0.7, 5.55, 0], 0.035, 0x3b4a4a);
   k.cyl('paint', -0.75, 5.62, 0, 0.26, 0.12, 0x3b4a4a, { rt: 0.4, seg: 12 });
   k.cyl('glow', -0.75, 5.35, 0, 0.18, 0.42, 0xfff1d0, { rt: 1.2, seg: 12 });
-  const p = k.w(-0.75, 5.3, 0); addHalo(p[0], p[1], p[2], 4, 0xffe2b0);
+  const p = k.w(-0.75, 5.3, 0); addHalo(p[0], p[1], p[2], 4, 0xffe2b0); addLightPool(p[0], SW_Y, p[2], 6.5, 0xffd8a8);
   // 横幅
   const txt = pick([['樱丘商店街', '海风通'], ['春之樱花祭', '4/1-4/14'], ['欢迎来到星见岛', 'WELCOME']]);
   const uv = allocSign(64, 200, (g, w, h) => { g.fillStyle = '#f7e1e8'; g.fillRect(0, 0, w, h); g.fillStyle = '#d24d73'; g.fillRect(0, 0, w, 14); g.fillRect(0, h - 14, w, 14); for (let i = 0; i < 6; i++) { g.fillStyle = 'rgba(232,140,170,0.5)'; g.beginPath(); g.arc(R(0, w), R(20, h - 20), R(4, 8), 0, TAU); g.fill(); } g.fillStyle = '#7a2f45'; g.font = `900 30px ${FONT.wei}`; g.textAlign = 'center'; [...txt[0]].forEach((c, i) => g.fillText(c, w / 2, 48 + i * 30)); g.font = `700 10px ${FONT.sans}`; g.fillText(txt[1], w / 2, h - 20); });

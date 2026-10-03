@@ -24,69 +24,70 @@ GAME.stamp = (id) => {
 function refreshHomeBoard() { if (homeBoardCanvas) drawHomeBoard(S().day, S().stamps.map(id => STAMP_DEFS.find(s => s.id === id))); }
 
 /* ---------------- 光照与时间 ---------------- */
-const hemi = new THREE.HemisphereLight(0xbcd8ff, 0x9a90b8, 0.65); scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xfff4e0, 1.2); sun.castShadow = true; scene.add(sun); scene.add(sun.target);
-const amb = new THREE.AmbientLight(0xffffff, 0.08); scene.add(amb);
-scene.fog = new THREE.Fog(0xcfe4f0, 90, Q.far);
+const hemi = new THREE.HemisphereLight(0xbcd8ff, 0x6a6458, 0.4); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff4e0, 2.6); sun.castShadow = true; scene.add(sun); scene.add(sun.target);
+const amb = new THREE.AmbientLight(0xffffff, 0.0); scene.add(amb);
+scene.fog = new THREE.FogExp2(0xc4d8e8, 0.001);
 function applyShadowQuality() {
   sun.castShadow = Q.shadow > 0; renderer.shadowMap.enabled = Q.shadow > 0;
   if (Q.shadow) { sun.shadow.mapSize.set(Q.shadow, Q.shadow); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
-  const sc = sun.shadow.camera; sc.left = -55; sc.right = 55; sc.top = 55; sc.bottom = -55; sc.near = 1; sc.far = 320; sc.updateProjectionMatrix();
-  sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
+  const ext = Q.shadow >= 4096 ? 75 : 55; const sc = sun.shadow.camera; sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext; sc.near = 1; sc.far = 400; sc.updateProjectionMatrix();
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04; sun.shadow.radius = 2;
   scene.traverse(o => { if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach(m => m.needsUpdate = true); } });
 }
 const KEYS_T = [
-  // h, top, hor, sun, sunI, hemiSky, hemiGround, hemiI, fog, cloudLit, cloudShade, night
-  [0, 0x0b1a3a, 0x1d2f5a, 0x8fa6d8, 0.32, 0x3a4f88, 0x1a1a2e, 0.5, 0x15233f, 0x3e4c7a, 0x1a2240, 1],
-  [4.6, 0x0f1f44, 0x24386a, 0x8fa6d8, 0.3, 0x3a4f88, 0x1a1a2e, 0.5, 0x1a2a4a, 0x46548a, 0x1e2648, 1],
-  [5.8, 0x4a6aa8, 0xf0b8a8, 0xffb890, 0.42, 0xa8b0e0, 0x6a5a7a, 0.46, 0xd8b8c0, 0xffd0c0, 0x8a7aa8, 0.35],
-  [7.5, 0x5a9ae0, 0xd8ecf6, 0xfff2dc, 0.84, 0xc4dcff, 0x9a94b8, 0.5, 0xcfe4f0, 0xffffff, 0xb0b8d8, 0],
-  [15, 0x3f8fe0, 0xcfe8f6, 0xfff4e0, 0.88, 0xb8d0ff, 0x9a90c0, 0.5, 0xcfe4f0, 0xffffff, 0xa9b4d6, 0],
-  [17.2, 0x4a84d0, 0xffdcb8, 0xffc888, 0.85, 0xc0b8e8, 0x9a88b0, 0.5, 0xf0d6c4, 0xfff0d8, 0xc8a8c8, 0],
-  [18.3, 0x3a5aa0, 0xff9e80, 0xff8a5a, 0.62, 0xa890d0, 0x6a5070, 0.48, 0xe8a49a, 0xffb890, 0x8a6a98, 0.22],
-  [19.2, 0x1e2e6a, 0x8a6aa8, 0xc8a0d0, 0.38, 0x6a6aa8, 0x3a3050, 0.5, 0x5a5a8a, 0xa888b8, 0x4a4a78, 0.75],
-  [20.5, 0x0d1c40, 0x223666, 0x8fa6d8, 0.32, 0x3a4f88, 0x1a1a2e, 0.5, 0x1a2a4a, 0x46548a, 0x1e2648, 1],
-  [24, 0x0b1a3a, 0x1d2f5a, 0x8fa6d8, 0.32, 0x3a4f88, 0x1a1a2e, 0.5, 0x15233f, 0x3e4c7a, 0x1a2240, 1],
+  // 时, 太阳色, 太阳强度, 天光, 地光, 半球强度, 雾色, 雾密度, 云亮面, 云暗面, 夜, 曝光, 浑浊度
+  [0, 0x9fb4e0, 0.5, 0x405890, 0x161620, 0.55, 0x101a2c, 0.0015, 0x2a3450, 0x10141f, 1, 1.0, 4],
+  [4.6, 0x9fb4e0, 0.48, 0x405890, 0x161620, 0.55, 0x141e32, 0.0015, 0x323c5a, 0x141826, 1, 0.8, 4],
+  [5.8, 0xffb080, 0.9, 0x8a90b0, 0x4a3c3c, 0.35, 0xd8b0a0, 0.0014, 0xffc8b0, 0x7a6a88, 0.3, 0.85, 7],
+  [7.5, 0xfff0dc, 2.4, 0xbcd4f0, 0x6a6458, 0.38, 0xa9c2d8, 0.0011, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
+  [15, 0xfff4e6, 2.7, 0xbcd4f0, 0x6a6458, 0.38, 0xaec6dc, 0.0009, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
+  [17.2, 0xffcf98, 2.3, 0xc0b8e0, 0x6a5a50, 0.36, 0xe6ceba, 0.0012, 0xfff0d8, 0xb8a0b0, 0, 0.88, 6],
+  [18.3, 0xff8a50, 1.3, 0xa890c8, 0x504048, 0.34, 0xd89a84, 0.0013, 0xffb080, 0x806078, 0.2, 0.95, 9],
+  [19.2, 0xb0a0d0, 0.5, 0x5a5a90, 0x2a2438, 0.45, 0x4a4a72, 0.0014, 0x9888b0, 0x3a3a60, 0.7, 0.95, 6],
+  [20.5, 0x9fb4e0, 0.5, 0x405890, 0x161620, 0.55, 0x141e32, 0.0015, 0x323c5a, 0x141826, 1, 1.0, 4],
+  [24, 0x9fb4e0, 0.5, 0x405890, 0x161620, 0.55, 0x101a2c, 0.0015, 0x2a3450, 0x10141f, 1, 1.0, 4],
 ];
 const _ca = new THREE.Color(), _cb = new THREE.Color();
-function lerpHex(a, b, t, out) { _ca.setHex(a); _cb.setHex(b); return out.copy(_ca).lerp(_cb, t); }
-const LT = { top: new THREE.Color(), hor: new THREE.Color(), sun: new THREE.Color(), hs: new THREE.Color(), hg: new THREE.Color(), fog: new THREE.Color(), cl: new THREE.Color(), cs: new THREE.Color() };
+function lerpHex(a, b, t, out) { _ca.setHex(a).convertSRGBToLinear(); _cb.setHex(b).convertSRGBToLinear(); return out.copy(_ca).lerp(_cb, t); }
+const LT = { sun: new THREE.Color(), hs: new THREE.Color(), hg: new THREE.Color(), fog: new THREE.Color(), cl: new THREE.Color(), cs: new THREE.Color() };
+const LIGHT_DIR = new THREE.Vector3(0.4, 0.7, 0.3);
 function applyTimeOfDay(h) {
   let i = 0; while (i < KEYS_T.length - 2 && h >= KEYS_T[i + 1][0]) i++;
   const A = KEYS_T[i], B = KEYS_T[i + 1]; const t = smooth(0, 1, (h - A[0]) / (B[0] - A[0]));
-  lerpHex(A[1], B[1], t, LT.top); lerpHex(A[2], B[2], t, LT.hor); lerpHex(A[3], B[3], t, LT.sun); const sunI = lerp(A[4], B[4], t);
-  lerpHex(A[5], B[5], t, LT.hs); lerpHex(A[6], B[6], t, LT.hg); const hemiI = lerp(A[7], B[7], t); lerpHex(A[8], B[8], t, LT.fog);
-  lerpHex(A[9], B[9], t, LT.cl); lerpHex(A[10], B[10], t, LT.cs); const night = lerp(A[11], B[11], t);
+  lerpHex(A[1], B[1], t, LT.sun); const sunI = lerp(A[2], B[2], t);
+  lerpHex(A[3], B[3], t, LT.hs); lerpHex(A[4], B[4], t, LT.hg); const hemiI = lerp(A[5], B[5], t); lerpHex(A[6], B[6], t, LT.fog);
+  const fogD = lerp(A[7], B[7], t); lerpHex(A[8], B[8], t, LT.cl); lerpHex(A[9], B[9], t, LT.cs); const night = lerp(A[10], B[10], t);
+  const expo = lerp(A[11], B[11], t), turb = lerp(A[12], B[12], t);
   NIGHT.v = night;
-  // 太阳/月亮方向
-  const dayT = (h - 5.6) / (18.9 - 5.6);
-  let dir;
-  if (dayT > 0 && dayT < 1) { const az = lerp(-0.35, Math.PI + 0.35, dayT), el = Math.sin(dayT * Math.PI) * 1.05 + 0.03; dir = new THREE.Vector3(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el) * 0.75 + 0.25); }
-  else { dir = new THREE.Vector3(0.45, 0.62, 0.5); }
-  dir.normalize(); SEA_U.sunDir.value.copy(dayT > 0 && dayT < 1 ? dir : new THREE.Vector3(0, -1, 0));
-  SEA_U.moonDir.value.set(-0.4, 0.45, 0.6).normalize();
-  sun.color.copy(LT.sun); sun.intensity = sunI; LIGHT_DIR.copy(dayT > 0 && dayT < 1 ? dir : SEA_U.moonDir.value);
+  const dayT = (h - 5.6) / (18.9 - 5.6); const isDay = dayT > 0 && dayT < 1;
+  const sd = new THREE.Vector3();
+  if (isDay) { const az = lerp(-0.35, Math.PI + 0.35, dayT), el = Math.sin(dayT * Math.PI) * 1.0 + 0.02; sd.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el) * 0.75 + 0.25).normalize(); }
+  else { const nt = (h < 12 ? h + 24 : h) - 18.9; const el = clamp(Math.sin(nt / 10.7 * Math.PI), 0, 1) * 0.15 - 0.12; sd.set(-0.6, el, 0.5).normalize(); }
+  SKY_U.sunDir.value.copy(sd); SKY_U.moonDir.value.set(-0.45, 0.42, 0.62).normalize(); SKY_U.night.value = night;
+  if (SKY.sky) { const u = SKY.sky.material.uniforms; u.sunPosition.value.copy(sd).multiplyScalar(4000); u.turbidity.value = turb * 0.7; u.rayleigh.value = lerp(1.1, 2.2, smooth(16.5, 18.6, h) * (1 - night)); u.skyGain.value = lerp(0.42, 0.6, smooth(16.5, 18.8, h)); }
+  SKY_U.cloudLit.value.copy(LT.cl).multiplyScalar(lerp(1.4, 0.25, night)); SKY_U.cloudShade.value.copy(LT.cs).multiplyScalar(lerp(1.0, 0.3, night)); SKY_U.cover.value = 0.52;
+  sun.color.copy(LT.sun); sun.intensity = sunI; LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);
   hemi.color.copy(LT.hs); hemi.groundColor.copy(LT.hg); hemi.intensity = hemiI;
-  scene.fog.color.copy(LT.fog);
-  SKY_U.topCol.value.copy(LT.top); SKY_U.horCol.value.copy(LT.hor); SKY_U.botCol.value.copy(LT.hor).lerp(LT.fog, 0.5);
-  SKY_U.cloudLit.value.copy(LT.cl); SKY_U.cloudShade.value.copy(LT.cs); SKY_U.sunGlow.value.copy(LT.sun);
-  SEA_U.skyCol.value.copy(LT.hor).lerp(LT.top, 0.35); SEA_U.sunCol.value.copy(LT.sun); SEA_U.light.value = lerp(1.0, 0.22, night); SEA_U.night.value = night;
-  SEA_U.fogColor.value.copy(LT.fog); SEA_U.fogNear.value = scene.fog.near; SEA_U.fogFar.value = scene.fog.far;
-  SEA_U.deepCol.value.setHex(0x1e6aa6).lerp(_ca.setHex(0x0a1a38), night); SEA_U.shallowCol.value.setHex(0x58d1c9).lerp(_ca.setHex(0x1a3a58), night);
-  PETAL_U.light.value = lerp(1, 0.4, night);
-  if (farMat) farMat.color.copy(LT.fog).lerp(LT.top, 0.25).multiplyScalar(0.92);
+  scene.fog.color.copy(LT.fog); scene.fog.density = fogD * (Q === QUALITY.low ? 1.5 : 1);
+  SEA_U.sunCol.value.copy(LT.sun).multiplyScalar(isDay ? 1 : 0.3); SEA_U.light.value = lerp(1.0, 0.18, night);
+  SEA_U.fogColor.value.copy(LT.fog); SEA_U.fogDensity.value = scene.fog.density;
+  PETAL_U.light.value = lerp(1, 0.3, night);
+  if (farMat) farMat.color.copy(LT.fog).multiplyScalar(0.75);
+  renderer.toneMappingExposure = expo;
   // 夜灯
-  winMat.emissiveIntensity = night * 0.95; SAK_M.m.emissiveIntensity = 1 + night * 1.8; signMat.emissiveIntensity = 0.04 + night * 0.55;
-  glowMat.color.setScalar(lerp(0.82, 1.15, night));
-  if (haloPoints) haloPoints.material.uniforms.night.value = smooth(0.25, 0.85, night);
-  if (LIGHTHOUSE.beamM) LIGHTHOUSE.beamM.opacity = smooth(0.3, 0.9, night) * 0.6;
-  amb.intensity = 0.06 + night * 0.06;
-  renderer.toneMappingExposure = 1;
+  winMat.emissiveIntensity = night * 1.6; signMat.emissiveIntensity = 0.02 + night * 0.9; SAK_M.m.emissiveIntensity = 1 + night * 1.2;
+  glowMat.color.setScalar(lerp(0.85, 6, night));
+  if (haloPoints) haloPoints.material.uniforms.night.value = smooth(0.25, 0.85, night) * 0.45;
+  if (LIGHTHOUSE.beamM) LIGHTHOUSE.beamM.opacity = smooth(0.3, 0.9, night) * 0.5;
+  scene.environment && (envIntensity(lerp(1, 0.6, night)));
+  if (POOLS.mat) POOLS.mat.opacity = smooth(0.3, 0.85, night) * 0.75;
+  if (SKY.cubeRT) updateSkyEnv(false);
 }
-const LIGHT_DIR = new THREE.Vector3(0.4, 0.7, 0.3);
+let _envI = -1; function envIntensity(k) { if (Math.abs(k - _envI) < 0.03) return; _envI = k; for (const key in MATS) { const m = MATS[key].material; if (m.isMeshStandardMaterial) m.envMapIntensity = (m.userData.envBase || (m.userData.envBase = m.envMapIntensity || 1)) * k; } toonMat.envMapIntensity = 0.7 * k; }
 
 /* ---------------- 玩家 ---------------- */
-const PLAYER = { pos: new THREE.Vector3(), vy: 0, yaw: Math.PI / 2, camYaw: Math.PI / 2, camPitch: 0.12, onGround: true, mode: 'walk', speed: 0, fly: false, stepT: 0, camDist: 4.6 };
+const PLAYER = { pos: new THREE.Vector3(), vy: 0, yaw: Math.PI / 2, camYaw: Math.PI / 2, camPitch: 0.16, onGround: true, mode: 'walk', speed: 0, fly: false, stepT: 0, camDist: 4.2 };
 let playerChar, playerHolder, lanternLight, lanternSprite, rod, fishLine, bobber;
 function initPlayer() {
   playerChar = makeCharacter({ gender: 'f', age: 'teen', scale: 0.9, outfit: 'messenger', hat: 'messenger', hair: 'bob', hairCol: 0x6b4a3a, eye: EYES[0], mouth: 1, skin: 0xf9d2bc });
@@ -114,9 +115,9 @@ addEventListener('keydown', (e) => {
   KEYS.add(k);
   if (k === ' ') { e.preventDefault(); INPUT.jump = true; }
   if (k === 'e') GAME.interact();
-  if (k === 'f') GAME.toggleFly();
-  if (k === 'v') GAME.toggleCam();
-  if (k === 'h') UI.toggleHUD();
+  if (k === 'f') GAME.vehicleKey();
+  if (k === 'h') { if (DRIVE.v) AUDIO.horn && AUDIO.horn(1); else UI.toggleHUD(); }
+  if (k === 'u') UI.toggleHUD();
   if (k === 'm') AUDIO.setMuted(!AUDIO.muted), UI.toast(AUDIO.muted ? '已静音' : '声音已开启');
   if (k === 't') GAME.cycleTime();
   if (k === 'b') UI.openPanel('bag');
@@ -160,8 +161,7 @@ canvasEl.addEventListener('touchmove', (e) => {
 const endTouch = (e) => { for (const t of e.changedTouches) { if (TOUCH.move && t.identifier === TOUCH.move.id) { TOUCH.move = null; UI.joy(false); } if (TOUCH.look && t.identifier === TOUCH.look.id) TOUCH.look = null; } };
 canvasEl.addEventListener('touchend', endTouch); canvasEl.addEventListener('touchcancel', endTouch);
 
-GAME.toggleFly = () => { if (GAME.sitting) return; PLAYER.fly = !PLAYER.fly; PLAYER.vy = 0; UI.toast(PLAYER.fly ? '飞行模式：空格上升，Shift 加速，C 下降' : '回到地面'); };
-GAME.toggleCam = () => { GAME.cam = GAME.cam === 'third' ? 'first' : 'third'; store.set('cam', GAME.cam); UI.toast(GAME.cam === 'first' ? '第一人称视角' : '第三人称视角'); UI.syncSettings(); };
+GAME.vehicleKey = () => { if (DRIVE.v) { exitVehicle(); return; } if (GAME.sitting || GAME.fishing) return; const v = nearestVehicle(PLAYER.pos); if (v) enterVehicle(v); else UI.toast('附近没有可以驾驶的车辆。'); };
 GAME.cycleTime = () => { const presets = [[15 * 60, '下午'], [18 * 60, '黄昏'], [21 * 60, '夜樱']]; const h = S().min; let i = presets.findIndex(p => p[0] > h + 1); if (i < 0) i = 0; GAME.setTime(presets[i][0]); UI.toast('时间来到「' + presets[i][1] + '」'); };
 GAME.setTime = (m) => { if (m < S().min - 60 && m < 6 * 60) { } S().min = m; UI.refreshHUD(); };
 GAME.teleport = (i) => { const p = PLACES[i]; if (!p) return; GAME.standUp(); PLAYER.fly = false; PLAYER.pos.set(p.x, 0, p.z); PLAYER.pos.y = groundAt(p.x, p.z, terrainH(p.x, p.z) + 1.5); PLAYER.yaw = p.ry; PLAYER.camYaw = p.ry; PLAYER.vy = 0; UI.toast('来到「' + p.name + '」'); UI.closeAll(); };
@@ -187,7 +187,8 @@ GAME.standUp = () => {
 let currentInteract = null;
 function findInteract() {
   const p = PLAYER.pos; let best = null, bd = 1e9;
-  if (GAME.sitting) return null;
+  if (GAME.sitting || DRIVE.v) return null;
+  { const v = nearestVehicle(p, 2.6); if (v) { const d = Math.hypot(v.x - p.x, v.z - p.z) - v.M.halfW; best = { kind: 'veh', v, label: '驾驶「' + v.T.name + '」', key: 'F' }; bd = d + 0.6; } }
   // 居民
   for (const n of NPCS) {
     if (!n.holder.visible || !n.holder.parent) continue; const d = Math.hypot(n.pos.x - p.x, n.pos.z - p.z);
@@ -204,10 +205,12 @@ function findInteract() {
 GAME.interact = () => {
   if (GAME.fishing) { GAME.fish(); return; }
   if (GAME.sitting) { GAME.standUp(); return; }
+  if (DRIVE.v) { exitVehicle(); return; }
   const c = currentInteract; if (!c) return; AUDIO.click();
   if (c.kind === 'npc') openNpcDialog(c.n);
   else if (c.kind === 'cat') catInteract();
   else if (c.kind === 'fox') foxInteract();
+  else if (c.kind === 'veh') enterVehicle(c.v);
   else c.it.act();
 };
 
@@ -348,7 +351,7 @@ GAME.bottle = () => { BEACH.bottle.visible = false; S().flags.bottle = true; AUD
 const FORTUNES = ['大吉：今天遇见的人，会成为重要的人。', '中吉：把想说的话写下来，就已经成功了一半。', '小吉：迷路的时候，跟着花瓣走。', '吉：好事会像潮水一样，慢慢地来。', '末吉：先吃饱，再烦恼。', '大吉：今晚抬头，会看见流星。'];
 GAME.wish = () => { if (S().coins < 1) { UI.toast('口袋里没有贝壳币了。'); return; } GAME.coins(-1); AUDIO.bellRing(); sparkle(WELL.x, WELL.y, WELL.z); const f = pick(FORTUNES); UI.toast('扑通——' + f); GAME.diary('在星愿井许了个愿。' + f.split('：')[0] + '。'); GAME.stamp('wish'); };
 GAME.pray = () => { AUDIO.bellRing(); UI.toast('铃——铃——你双手合十。抽到的签上写着：' + pick(FORTUNES)); };
-GAME.honk = () => { if (!AUDIO.ok) return; const t = AUDIO.ctx.currentTime; tone(420, t, 0.25, 0.05, 'square'); tone(520, t, 0.25, 0.04, 'square'); };
+
 
 /* 闪光粒子 */
 const SPARKS = [];
@@ -450,8 +453,6 @@ function homeInteractables() {
 const _fw = new THREE.Vector3();
 function updatePlayer(dt, t) {
   const P = PLAYER;
-  // 视角
-  P.camYaw -= INPUT.lookX; P.camPitch = clamp(P.camPitch + INPUT.lookY * (store.get('invertY', false) ? -1 : 1), -1.2, 1.25); INPUT.lookX = INPUT.lookY = 0;
   // 移动输入
   let mx = 0, mz = 0;
   if (KEYS.has('w') || KEYS.has('arrowup')) mz += 1; if (KEYS.has('s') || KEYS.has('arrowdown')) mz -= 1;
@@ -489,7 +490,7 @@ function updatePlayer(dt, t) {
     if (!ok(P.pos.x, P.pos.z) && terrainH(P.pos.x, P.pos.z) < -0.35 && !groundAt.floor) { P.pos.x = ox; P.pos.z = oz; }
     // 列车 / 汽车
     if (TRAIN.box) { const b = TRAIN.box; if (P.pos.x > b.x0 && P.pos.x < b.x1 && P.pos.z > b.z0 && P.pos.z < b.z1 && P.pos.y < RAIL_Y + 3.8) { const zc = (b.z0 + b.z1) / 2; P.pos.z = P.pos.z < zc ? b.z0 - 0.05 : b.z1 + 0.05; if (TRAIN.v > 1) UI.toast('危险！请离铁轨远一点。'); } }
-    for (const c of CARS) { if (!c.box) continue; const dx = P.pos.x - c.box.x, dz = P.pos.z - c.box.z; const lx = dx * c.box.c - dz * c.box.s, lz = dx * c.box.s + dz * c.box.c; if (Math.abs(lx) < c.box.hw + 0.3 && Math.abs(lz) < c.box.hl + 0.3 && P.pos.y < c.g.position.y + 2) { const px = c.box.hw + 0.3 - Math.abs(lx), pz = c.box.hl + 0.3 - Math.abs(lz); if (px < pz) { const s = Math.sign(lx) || 1; P.pos.x += c.box.c * s * px; P.pos.z += -c.box.s * s * px; } else { const s = Math.sign(lz) || 1; P.pos.x += c.box.s * s * pz; P.pos.z += c.box.c * s * pz; } } }
+    for (const c of VEHICLES) { const dx = P.pos.x - c.x, dz = P.pos.z - c.z; const cs = Math.cos(c.yaw), sn = Math.sin(c.yaw); const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs; const hw = c.M.halfW + 0.3, hl = c.M.L / 2 + 0.3; if (Math.abs(lx) < hw && Math.abs(lz) < hl && P.pos.y < c.y + c.M.H) { const px = hw - Math.abs(lx), pz = hl - Math.abs(lz); if (px < pz) { const s = Math.sign(lx) || 1; P.pos.x += cs * s * px; P.pos.z += -sn * s * px; } else { const s = Math.sign(lz) || 1; P.pos.x += sn * s * pz; P.pos.z += cs * s * pz; } if (c.ai && c.v > 4) UI.toast('小心车辆！'); } }
     // 垂直
     const g = groundAt(P.pos.x, P.pos.z, P.pos.y);
     if (P.onGround) { if (g < P.pos.y - 0.6) P.onGround = false; else { P.pos.y = g; P.vy = 0; } }
@@ -505,22 +506,34 @@ function updatePlayer(dt, t) {
   if (!P.onGround && !P.fly) { for (const l of playerChar.legs) { l.hip.rotation.x = -0.6 * (l.s > 0 ? 1 : 0.2); l.kn.rotation.x = 0.9; } }
 }
 const _camT = new THREE.Vector3(), _camP = new THREE.Vector3();
+/* GTA 式第三人称相机：鼠标自由环绕，停手后自动回到身后；驾驶时追尾并随车速拉远 */
+const CAM = { lastLook: -10, fov: 58, T: 0 };
+const _side = new THREE.Vector3();
 function updateCamera(dt) {
-  const P = PLAYER; const first = GAME.cam === 'first';
+  const P = PLAYER; const v = DRIVE.v; CAM.T += dt;
+  if (INPUT.lookX || INPUT.lookY) { CAM.lastLook = CAM.T; P.camYaw -= INPUT.lookX; P.camPitch = clamp(P.camPitch + INPUT.lookY * (store.get('invertY', false) ? -1 : 1), -0.9, 1.2); INPUT.lookX = INPUT.lookY = 0; }
+  const idle = CAM.T - CAM.lastLook > (v ? 1.2 : 2.2);
+  const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  if (v) {
+    if (idle && Math.abs(v.v) > 1.5) { const want = v.v >= 0 ? v.yaw : v.yaw + Math.PI; P.camYaw += wrap(want - P.camYaw) * Math.min(1, dt * 2.6); P.camPitch += (0.2 - P.camPitch) * Math.min(1, dt * 1.5); }
+  } else if (idle && P.speed > 0.5) { P.camYaw += wrap(P.yaw - P.camYaw) * Math.min(1, dt * 0.9); P.camPitch += (0.16 - P.camPitch) * Math.min(1, dt * 0.8); }
   const inside = insideHome(P.pos.x, P.pos.z);
-  playerHolder.visible = !first || GAME.sitting;
-  const eyeH = GAME.sitting ? 1.15 : 1.42;
-  _camT.set(P.pos.x, P.pos.y + (first ? eyeH : 1.3), P.pos.z);
+  playerHolder.visible = !v || v.T.bike;
+  let dist, th;
+  if (v) { const sp = Math.abs(v.v); dist = v.M.L * 1.05 + 3.2 + sp * 0.06; th = v.M.H * 0.85 + 0.5; }
+  else { dist = inside ? Math.min(P.camDist, 2.4) : P.camDist; if (GAME.sitting) dist = Math.max(dist, 3.4); th = GAME.sitting ? 1.15 : 1.5; }
+  _camT.set(P.pos.x, P.pos.y + th, P.pos.z);
   const cy = Math.cos(P.camPitch);
   const dir = new THREE.Vector3(Math.sin(P.camYaw) * cy, -Math.sin(P.camPitch), Math.cos(P.camYaw) * cy);
-  if (first && !GAME.sitting) { camera.position.copy(_camT); camera.lookAt(_camT.clone().add(dir)); return; }
-  let dist = inside ? Math.min(P.camDist, 2.4) : P.camDist; if (GAME.sitting) dist = Math.max(dist, 3.2);
-  // 相机避让
+  // 越肩偏移（步行时）
+  if (!v && !inside) { _side.set(-Math.cos(P.camYaw), 0, Math.sin(P.camYaw)).multiplyScalar(0.38); _camT.add(_side); }
   let d = 0.4; const step = 0.25;
   while (d < dist) { const x = _camT.x - dir.x * d, y = _camT.y - dir.y * d + 0.15, z = _camT.z - dir.z * d; if (blockedAt(x, y, z)) break; d += step; }
-  d = Math.max(0.6, d - 0.2);
+  d = Math.max(0.8, d - 0.25);
   _camP.set(_camT.x - dir.x * d, _camT.y - dir.y * d + 0.15, _camT.z - dir.z * d);
   const tg = terrainH(_camP.x, _camP.z) + 0.4; if (_camP.y < tg) _camP.y = tg;
-  camera.position.lerp(_camP, Math.min(1, dt * 14));
+  camera.position.lerp(_camP, Math.min(1, dt * (v ? 10 : 14)));
+  if (CAMSHAKE.t > 0) { CAMSHAKE.t -= dt; camera.position.x += R(-1, 1) * CAMSHAKE.t * 0.4; camera.position.y += R(-1, 1) * CAMSHAKE.t * 0.4; }
   camera.lookAt(_camT);
+  const fov = v ? 58 + clamp(Math.abs(v.v) * 0.45, 0, 16) : 58; if (Math.abs(fov - camera.fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
 }
