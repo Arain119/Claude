@@ -16,7 +16,7 @@ function loadModels(onProgress) {
   if (!THREE.GLTFLoader) return Promise.resolve();
   const loader = new THREE.GLTFLoader(); const names = Object.keys(VEH_TYPES); let n = 0;
   return Promise.all(names.map(name => new Promise((res) => {
-    loader.load(ASSET_BASE + 'models/' + name + '.glb', (gltf) => { try { MODELS[name] = prepareModel(name, gltf.scene); } catch (e) { console.warn('model', name, e); } onProgress && onProgress(++n / names.length); res(); },
+    loader.load(ASSET_BASE + 'models/' + name + MODEL_EXT, (gltf) => { try { MODELS[name] = prepareModel(name, gltf.scene); } catch (e) { console.warn('model', name, e); } onProgress && onProgress(++n / names.length); res(); },
       undefined, (e) => { console.warn('无法加载模型', name, e); onProgress && onProgress(++n / names.length); res(); });
   })));
 }

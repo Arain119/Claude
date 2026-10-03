@@ -381,7 +381,7 @@ function loadCharModels(onProgress) {
   if (!THREE.GLTFLoader) return Promise.resolve();
   const loader = new THREE.GLTFLoader(); const names = Object.keys(CHAR_TYPES); let n = 0;
   return Promise.all(names.map(name => new Promise((res) => {
-    loader.load(ASSET_BASE + 'chars/' + name + '.glb', (g) => { try { CHAR_MODELS[name] = rigModel(name, g.scene); } catch (e) { console.warn('rig', name, e); } onProgress && onProgress(++n / names.length); res(); },
+    loader.load(ASSET_BASE + 'chars/' + name + MODEL_EXT, (g) => { try { CHAR_MODELS[name] = rigModel(name, g.scene); } catch (e) { console.warn('rig', name, e); } onProgress && onProgress(++n / names.length); res(); },
       undefined, () => { onProgress && onProgress(++n / names.length); res(); });
   })));
 }

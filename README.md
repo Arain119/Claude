@@ -46,7 +46,8 @@ python3 -m http.server 8000
 源码按模块放在 `src/`，用 Node 打包成单文件：
 
 ```bash
-node build.mjs   # 生成 index.html（独立网页）和 dist/hoshimi-island.html（Artifact 版本）
+node build.mjs            # 生成 index.html（独立网页）和 dist/hoshimi-island.html（Artifact 版本）
+python3 tools/glb2json.py # Artifact 不托管 .glb，把模型转成内嵌 glTF JSON 放到 dist/assets/
 ```
 
 | 文件 | 内容 |

@@ -9,5 +9,7 @@ const full = `<!doctype html>\n<html lang="zh-CN">\n<head>\n<meta charset="utf-8
 fs.writeFileSync('index.html', full);
 // 2) Artifact 版本（发布时外层会自动包上文档骨架）
 fs.mkdirSync('dist', { recursive: true });
-fs.writeFileSync('dist/hoshimi-island.html', head.trim() + '\n' + body.trim() + '\n');
+// Artifact 不托管 .glb，改用内嵌 glTF JSON（由 tools/glb2json.py 生成到 dist/assets）
+const art = (head.trim() + '\n' + body.trim() + '\n').replace("window.HOSHIMI_MODEL_EXT || '.glb'", "'.gltf.json'");
+fs.writeFileSync('dist/hoshimi-island.html', art);
 console.log('built', files.length, 'modules,', (full.length / 1024).toFixed(1), 'KB');

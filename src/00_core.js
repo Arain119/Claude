@@ -56,6 +56,7 @@ const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerH
 /* sRGB 十六进制颜色 → 线性颜色（r128 不会自动转换） */
 const lin = (c) => new THREE.Color(c).convertSRGBToLinear();
 const ASSET_BASE = (window.HOSHIMI_ASSETS || 'assets/');
+const MODEL_EXT = window.HOSHIMI_MODEL_EXT || '.glb'; // Artifact 版本用内嵌 glTF（.gltf.json）
 
 /* ---------- Canvas 纹理 ---------- */
 function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }

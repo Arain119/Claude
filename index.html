@@ -307,6 +307,7 @@ const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerH
 /* sRGB 十六进制颜色 → 线性颜色（r128 不会自动转换） */
 const lin = (c) => new THREE.Color(c).convertSRGBToLinear();
 const ASSET_BASE = (window.HOSHIMI_ASSETS || 'assets/');
+const MODEL_EXT = window.HOSHIMI_MODEL_EXT || '.glb'; // Artifact 版本用内嵌 glTF（.gltf.json）
 
 /* ---------- Canvas 纹理 ---------- */
 function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -3617,7 +3618,7 @@ function loadCharModels(onProgress) {
   if (!THREE.GLTFLoader) return Promise.resolve();
   const loader = new THREE.GLTFLoader(); const names = Object.keys(CHAR_TYPES); let n = 0;
   return Promise.all(names.map(name => new Promise((res) => {
-    loader.load(ASSET_BASE + 'chars/' + name + '.glb', (g) => { try { CHAR_MODELS[name] = rigModel(name, g.scene); } catch (e) { console.warn('rig', name, e); } onProgress && onProgress(++n / names.length); res(); },
+    loader.load(ASSET_BASE + 'chars/' + name + MODEL_EXT, (g) => { try { CHAR_MODELS[name] = rigModel(name, g.scene); } catch (e) { console.warn('rig', name, e); } onProgress && onProgress(++n / names.length); res(); },
       undefined, () => { onProgress && onProgress(++n / names.length); res(); });
   })));
 }
@@ -4034,7 +4035,7 @@ function loadModels(onProgress) {
   if (!THREE.GLTFLoader) return Promise.resolve();
   const loader = new THREE.GLTFLoader(); const names = Object.keys(VEH_TYPES); let n = 0;
   return Promise.all(names.map(name => new Promise((res) => {
-    loader.load(ASSET_BASE + 'models/' + name + '.glb', (gltf) => { try { MODELS[name] = prepareModel(name, gltf.scene); } catch (e) { console.warn('model', name, e); } onProgress && onProgress(++n / names.length); res(); },
+    loader.load(ASSET_BASE + 'models/' + name + MODEL_EXT, (gltf) => { try { MODELS[name] = prepareModel(name, gltf.scene); } catch (e) { console.warn('model', name, e); } onProgress && onProgress(++n / names.length); res(); },
       undefined, (e) => { console.warn('无法加载模型', name, e); onProgress && onProgress(++n / names.length); res(); });
   })));
 }
