@@ -39,8 +39,13 @@ regMat('bark', pm(TEX.bark, { roughness: 0.95, ns: 1.2 }), { tint: 0.55 });
 function foliageMat(map, opts = {}) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, map, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8, metalness: 0, emissive: opts.emissive || 0x000000, envMapIntensity: 0.6 });
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uTime = WIND.uTime; sh.uniforms.uWind = WIND.uWind;
-    sh.vertexShader = 'attribute float sway;\nuniform float uTime; uniform float uWind;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    sh.uniforms.uTime = WIND.uTime; sh.uniforms.uWind = WIND.uWind; sh.uniforms.folSun = { value: FOGX.sun }; sh.uniforms.folCol = { value: FOGX.leafCol };
+    sh.vertexShader = 'attribute float sway;\nuniform float uTime; uniform float uWind; varying vec3 vFolW;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+      { vec4 fw = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+        fw = instanceMatrix * fw;
+        #endif
+        vFolW = (modelMatrix * fw).xyz; }`).replace('#include <begin_vertex>', `#include <begin_vertex>
       #ifdef USE_INSTANCING
       float ph = instanceMatrix[3].x*0.35 + instanceMatrix[3].z*0.27 + position.y*0.2;
       #else
@@ -50,7 +55,19 @@ function foliageMat(map, opts = {}) {
       transformed.x += (sin(uTime*1.7+ph)*0.06 + sin(uTime*0.6+ph*0.31)*0.12)*sw;
       transformed.z += (cos(uTime*1.3+ph*1.1)*0.05 + cos(uTime*0.5+ph*0.2)*0.08)*sw;
       transformed.y += sin(uTime*2.3+ph*1.7)*0.025*sw;`);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', 'float faceDirection = gl_FrontFacing ? 1.0 : -1.0;\nvec3 normal = normalize( vNormal );\nvec3 geometryNormal = normal;');
+    sh.fragmentShader = 'uniform vec3 folSun; uniform vec3 folCol; varying vec3 vFolW;\n' + sh.fragmentShader.replace('#include <normal_fragment_begin>', 'float faceDirection = gl_FrontFacing ? 1.0 : -1.0;\nvec3 normal = normalize( vNormal );\nvec3 geometryNormal = normal;')
+      .replace('#include <output_fragment>', `
+      // 新海诚式树冠：暗部偏冷蓝绿、亮部偏暖黄绿，逆光时叶片透亮，外缘有轮廓光
+      { vec3 sunV = normalize((viewMatrix * vec4(folSun, 0.0)).xyz);
+        float ndl = dot(normal, sunV) * (gl_FrontFacing ? 1.0 : -1.0);
+        float lit = smoothstep(-0.25, 0.3, ndl) * smoothstep(-0.05, 0.1, folSun.y);
+        vec3 cool = outgoingLight * vec3(0.5, 0.68, 0.98), warm = outgoingLight * vec3(1.18, 1.08, 0.74);
+        outgoingLight = mix(cool, warm, lit);
+        vec3 V = normalize(vFolW - cameraPosition);
+        float back = pow(max(dot(V, normalize(folSun)), 0.0), 3.0);
+        float rim = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.5);
+        outgoingLight += diffuseColor.rgb * folCol * (back * 1.6 + rim * 0.35); }
+      #include <output_fragment>`);
   };
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.45 });
   return { m, depth };

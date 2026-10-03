@@ -273,6 +273,47 @@ function vnoise(x, y) {
 }
 function fbm(x, y, o = 4) { let s = 0, a = 0.5, f = 1; for (let i = 0; i < o; i++) { s += a * vnoise(x * f + i * 17.3, y * f - i * 9.1); f *= 2.03; a *= 0.5; } return s / (1 - Math.pow(0.5, o)); }
 
+/* ---------- 空气透视雾：替换 three 的雾计算（远处偏蓝、朝阳偏暖、低处薄雾、云影） ---------- */
+// 用 Float32Array 作为 uniform 值：three 克隆 uniform 时不会复制它，所有材质共享同一份数据
+const FOGX = { sun: new Float32Array([0.3, 0.6, 0.4]), sunCol: new Float32Array([0.3, 0.25, 0.2]), leafCol: new Float32Array([1, 0.95, 0.85]), p: new Float32Array([0, 0, 2, 0]) }; // p: 时间, 夜, 雾底高度, 云影强度
+(function patchFog() {
+  const add = (u) => { u.fogSunDir = { value: FOGX.sun }; u.fogSunCol = { value: FOGX.sunCol }; u.fogP = { value: FOGX.p }; };
+  add(THREE.UniformsLib.fog);
+  for (const k in THREE.ShaderLib) { const u = THREE.ShaderLib[k].uniforms; if (u && u.fogColor) add(u); }
+  const C = THREE.ShaderChunk;
+  C.fog_pars_vertex = '#ifdef USE_FOG\n varying float fogDepth; varying vec3 vFogV;\n#endif';
+  C.fog_vertex = '#ifdef USE_FOG\n fogDepth = - mvPosition.z; vFogV = mvPosition.xyz;\n#endif';
+  C.fog_pars_fragment = `#ifdef USE_FOG
+  uniform vec3 fogColor; uniform vec3 fogSunDir; uniform vec3 fogSunCol; uniform vec4 fogP; varying float fogDepth; varying vec3 vFogV;
+  #ifdef FOG_EXP2
+    uniform float fogDensity;
+  #else
+    uniform float fogNear; uniform float fogFar;
+  #endif
+  float fogHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float fogNoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(fogHash(i), fogHash(i + vec2(1.0, 0.0)), f.x), mix(fogHash(i + vec2(0.0, 1.0)), fogHash(i + vec2(1.0, 1.0)), f.x), f.y); }
+#endif`;
+  C.fog_fragment = `#ifdef USE_FOG
+  float fogD = max(length(vFogV), 1e-4);
+  vec3 fogW = (vec4(vFogV / fogD, 0.0) * viewMatrix).xyz;
+  vec3 fogPos = cameraPosition + fogW * fogD;
+  #ifdef FOG_EXP2
+    float fogFactor = 1.0 - exp( - fogDensity * fogDensity * fogD * fogD );
+  #else
+    float fogFactor = smoothstep( fogNear, fogFar, fogDepth );
+  #endif
+  float fogH = exp(-max(fogPos.y - fogP.z, 0.0) * 0.02);
+  fogFactor = clamp(fogFactor * mix(0.6, 1.4, fogH), 0.0, 1.0);
+  if (fogP.w > 0.0) {
+    vec2 cp = fogPos.xz * 0.0065 + vec2(fogP.x * 0.006, fogP.x * 0.0025);
+    float cn = fogNoise(cp) * 0.62 + fogNoise(cp * 2.7 + 3.1) * 0.38;
+    gl_FragColor.rgb *= 1.0 - smoothstep(0.5, 0.6, cn) * fogP.w;
+  }
+  float fogSun = pow(max(dot(fogW, fogSunDir), 0.0), 5.0);
+  gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor + fogSunCol * fogSun, fogFactor );
+#endif`;
+})();
+
 /* ---------- 偏好存储（失败时静默） ---------- */
 const store = {
   get(k, d) { try { const v = localStorage.getItem('hoshimi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -880,7 +921,7 @@ function terrainH(x, z) {
 
 /* ---------------- 地形网格（四层照片纹理混合） ---------------- */
 const TERRAIN_U = { tGrass: { value: TEX.grass }, tDirt: { value: TEX.ground }, tRock: { value: TEX.rock }, tSand: { value: TEX.sand } };
-let terrainMesh;
+let terrainMesh, TERRAIN_GRID = null;
 function buildTerrain() {
   const sx = WORLD.x1 - WORLD.x0, sz = WORLD.z1 - WORLD.z0, step = 2.5;
   const nx = Math.round(sx / step), nz = Math.round(sz / step);
@@ -911,6 +952,10 @@ function buildTerrain() {
     col.set([tmp.r, tmp.g, tmp.b], i * 3);
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('splat', new THREE.BufferAttribute(spl, 4));
+  // 供草地着色器采样的高度 / 草量网格
+  { const F = new Float32Array(p.count * 4); for (let i = 0; i < p.count; i++) { F[i * 4] = H[i]; F[i * 4 + 1] = spl[i * 4]; F[i * 4 + 2] = col[i * 3 + 1]; F[i * 4 + 3] = 1; }
+    const x0 = p.getX(0), z0 = p.getZ(0);
+    TERRAIN_GRID = { nx: nx + 1, nz: nz + 1, x0, z0, dx: (p.getX(nx) - x0) / nx, dz: (p.getZ(row * nz) - z0) / nz, data: F }; }
   g.computeVertexNormals();
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
   m.onBeforeCompile = (sh) => {
@@ -1119,7 +1164,7 @@ function buildFarLand() {
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, farMat); mesh.position.set(Math.cos(s[0]) * s[1], s[2] / 2 - 22, Math.sin(s[0]) * s[1]); mesh.scale.set(1.6, 1, 1); mesh.rotation.y = s[0]; group.add(mesh);
   }
-  scene.add(group);
+  group.name = 'farland'; scene.add(group);
 }
 
 // ---- 02b_roads.js ----
@@ -1308,8 +1353,13 @@ regMat('bark', pm(TEX.bark, { roughness: 0.95, ns: 1.2 }), { tint: 0.55 });
 function foliageMat(map, opts = {}) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, map, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8, metalness: 0, emissive: opts.emissive || 0x000000, envMapIntensity: 0.6 });
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uTime = WIND.uTime; sh.uniforms.uWind = WIND.uWind;
-    sh.vertexShader = 'attribute float sway;\nuniform float uTime; uniform float uWind;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    sh.uniforms.uTime = WIND.uTime; sh.uniforms.uWind = WIND.uWind; sh.uniforms.folSun = { value: FOGX.sun }; sh.uniforms.folCol = { value: FOGX.leafCol };
+    sh.vertexShader = 'attribute float sway;\nuniform float uTime; uniform float uWind; varying vec3 vFolW;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+      { vec4 fw = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+        fw = instanceMatrix * fw;
+        #endif
+        vFolW = (modelMatrix * fw).xyz; }`).replace('#include <begin_vertex>', `#include <begin_vertex>
       #ifdef USE_INSTANCING
       float ph = instanceMatrix[3].x*0.35 + instanceMatrix[3].z*0.27 + position.y*0.2;
       #else
@@ -1319,7 +1369,19 @@ function foliageMat(map, opts = {}) {
       transformed.x += (sin(uTime*1.7+ph)*0.06 + sin(uTime*0.6+ph*0.31)*0.12)*sw;
       transformed.z += (cos(uTime*1.3+ph*1.1)*0.05 + cos(uTime*0.5+ph*0.2)*0.08)*sw;
       transformed.y += sin(uTime*2.3+ph*1.7)*0.025*sw;`);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', 'float faceDirection = gl_FrontFacing ? 1.0 : -1.0;\nvec3 normal = normalize( vNormal );\nvec3 geometryNormal = normal;');
+    sh.fragmentShader = 'uniform vec3 folSun; uniform vec3 folCol; varying vec3 vFolW;\n' + sh.fragmentShader.replace('#include <normal_fragment_begin>', 'float faceDirection = gl_FrontFacing ? 1.0 : -1.0;\nvec3 normal = normalize( vNormal );\nvec3 geometryNormal = normal;')
+      .replace('#include <output_fragment>', `
+      // 新海诚式树冠：暗部偏冷蓝绿、亮部偏暖黄绿，逆光时叶片透亮，外缘有轮廓光
+      { vec3 sunV = normalize((viewMatrix * vec4(folSun, 0.0)).xyz);
+        float ndl = dot(normal, sunV) * (gl_FrontFacing ? 1.0 : -1.0);
+        float lit = smoothstep(-0.25, 0.3, ndl) * smoothstep(-0.05, 0.1, folSun.y);
+        vec3 cool = outgoingLight * vec3(0.5, 0.68, 0.98), warm = outgoingLight * vec3(1.18, 1.08, 0.74);
+        outgoingLight = mix(cool, warm, lit);
+        vec3 V = normalize(vFolW - cameraPosition);
+        float back = pow(max(dot(V, normalize(folSun)), 0.0), 3.0);
+        float rim = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.5);
+        outgoingLight += diffuseColor.rgb * folCol * (back * 1.6 + rim * 0.35); }
+      #include <output_fragment>`);
   };
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.45 });
   return { m, depth };
@@ -1635,6 +1697,124 @@ function buildForest() {
   applyForestQuality();
 }
 function applyForestQuality() { for (const m of FOREST.meshes) { m.count = Math.max(1, Math.floor(m.userData.total * Q.forest)); m.castShadow = Q.shadow >= 4096; } }
+
+// ---- 03b_grass.js ----
+/* ---------------- 草地：玩家周围的 GPU 草叶（新海诚式的草浪） ----------------
+   一大片草叶在着色器里绕镜头"循环平铺"，高度与草量取自地形网格，
+   被道路、人行道、建筑覆盖的地方（俯视渲染得到的覆盖高度图）不长草。 */
+const GRASS = { mesh: null, U: null, size: 56 };
+
+// 俯视渲染：记录每个位置最高的"非地形"表面高度（R）与是否有覆盖（G）
+function renderGrassCover(N) {
+  const W = WORLD, sx = W.x1 - W.x0, sz = W.z1 - W.z0;
+  const rt = new THREE.WebGLRenderTarget(N, Math.round(N * sz / sx), { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
+  const cam = new THREE.OrthographicCamera(-sx / 2, sx / 2, sz / 2, -sz / 2, 1, 1500);
+  cam.position.set((W.x0 + W.x1) / 2, 700, (W.z0 + W.z1) / 2); cam.rotation.set(-Math.PI / 2, 0, 0); cam.updateMatrixWorld(true);
+  const mat = new THREE.ShaderMaterial({ side: THREE.DoubleSide,
+    vertexShader: 'varying float vY; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vY = w.y; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: 'varying float vY; void main(){ gl_FragColor = vec4(vY, 1.0, 0.0, 1.0); }' });
+  const skip = new Set([terrainMesh, GRASS.mesh, ...CARD_MESHES, ...FOREST.meshes]);
+  const hidden = [];
+  const hide = (o) => { if (o && o.visible) { o.visible = false; hidden.push(o); } };
+  for (const v of VEHICLES) hide(v.g); for (const c of CHARS) hide(c.root);
+  scene.traverse(o => {
+    if (o === scene) return;
+    if (skip.has(o) || o.name === 'sea' || o.name === 'river' || o.name === 'farland' || o.isSprite || o.isPoints || o.isLine || o.isInstancedMesh || o.isSkinnedMesh) { hide(o); return; }
+    if (o.isMesh) { const m = o.material; if (!m || m.transparent || (Array.isArray(m) && m.some(x => x.transparent))) hide(o); }
+  });
+  hide(SKY.sky); hide(SKY.overlay);
+  const prevFog = scene.fog, prevC = new THREE.Color(); renderer.getClearColor(prevC); const prevA = renderer.getClearAlpha();
+  scene.fog = null; scene.overrideMaterial = mat;
+  renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, cam);
+  renderer.setRenderTarget(null); scene.overrideMaterial = null; scene.fog = prevFog; renderer.setClearColor(prevC, prevA);
+  for (const o of hidden) o.visible = true; mat.dispose();
+  return rt.texture;
+}
+
+function buildGrass() {
+  if (!TERRAIN_GRID || !renderer.capabilities.isWebGL2 || Q.grass < 0.3) return;
+  const G = TERRAIN_GRID;
+  const field = new THREE.DataTexture(G.data, G.nx, G.nz, THREE.RGBAFormat, THREE.FloatType);
+  field.minFilter = field.magFilter = THREE.NearestFilter; field.generateMipmaps = false; field.needsUpdate = true;
+  const cover = renderGrassCover(Q.grass >= 1 ? 2048 : 1024);
+  const S = GRASS.size = Q.grass >= 1 ? 56 : 42, n = Math.round((Q.grass >= 1 ? 190000 : 80000));
+  // 草叶模板：两节 + 尖（5 顶点 3 三角形）
+  const TV = [[-1, 0], [1, 0], [-0.75, 0.45], [0.75, 0.45], [0, 1]], TI = [0, 1, 2, 2, 1, 3, 2, 3, 4];
+  const pos = new Float32Array(n * 15), bl = new Float32Array(n * 20), idx = new Uint32Array(n * 9);
+  const r = mulberry32(777);
+  for (let b = 0; b < n; b++) {
+    const ox = r() * S, oz = r() * S, r1 = r(), r2 = r();
+    for (let v = 0; v < 5; v++) { const k = b * 5 + v; pos[k * 3] = TV[v][0]; pos[k * 3 + 1] = TV[v][1]; bl.set([ox, oz, r1, r2], k * 4); }
+    for (let i = 0; i < 9; i++) idx[b * 9 + i] = b * 5 + TI[i];
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aBlade', new THREE.BufferAttribute(bl, 4)); geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5);
+  const U = GRASS.U = {
+    gCam: { value: new THREE.Vector2() }, gSize: { value: S }, gField: { value: field }, gFieldBox: { value: new THREE.Vector4(G.x0, G.z0, G.dx, G.dz) }, gFieldN: { value: new THREE.Vector2(G.nx, G.nz) },
+    gCover: { value: cover }, gCoverBox: { value: new THREE.Vector4(WORLD.x0, WORLD.z0, WORLD.x1 - WORLD.x0, WORLD.z1 - WORLD.z0) },
+    gH: { value: 0.36 }, gW: { value: 0.028 }, uTime: WIND.uTime, uWind: WIND.uWind, gTex: TERRAIN_U.tGrass
+  };
+  const m = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = `attribute vec4 aBlade;
+      uniform vec2 gCam; uniform float gSize, gH, gW, uTime, uWind; uniform sampler2D gField, gCover; uniform vec4 gFieldBox, gCoverBox; uniform vec2 gFieldN;
+      varying float vGT, vGust, vGRand, vGMacro, vFlower; varying vec2 vGXZ;
+      vec4 gTexel(vec2 i){ return texture2D(gField, (clamp(i, vec2(0.0), gFieldN - 1.0) + 0.5) / gFieldN); }
+      vec4 fieldAt(vec2 p){ vec2 u = (p - gFieldBox.xy) / gFieldBox.zw; vec2 i = floor(u), f = u - i;
+        return mix(mix(gTexel(i), gTexel(i + vec2(1.0, 0.0)), f.x), mix(gTexel(i + vec2(0.0, 1.0)), gTexel(i + vec2(1.0, 1.0)), f.x), f.y); }
+      float gHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float gNoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), f.x), mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), f.x), f.y); }
+      ` + sh.vertexShader
+      .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);')
+      .replace('#include <begin_vertex>', `
+        vec2 gwp = gCam + mod(aBlade.xy - gCam + gSize * 0.5, gSize) - gSize * 0.5;
+        vec4 gf = fieldAt(gwp);
+        vec4 cv = texture2D(gCover, vec2((gwp.x - gCoverBox.x) / gCoverBox.z, (gCoverBox.y + gCoverBox.w - gwp.y) / gCoverBox.w));
+        float covered = cv.g > 0.5 && cv.r > gf.x - 0.5 ? 1.0 : 0.0;
+        float gd = length(gwp - gCam);
+        float macro = gNoise(gwp * 0.07) * 0.7 + gNoise(gwp * 0.31) * 0.3;
+        float dens = smoothstep(0.4, 0.8, gf.y) * (1.0 - covered) * (1.0 - smoothstep(gSize * 0.3, gSize * 0.5, gd));
+        float keep = step(aBlade.z, dens * mix(0.45, 1.0, macro));
+        float meadow = smoothstep(0.45, 0.75, gNoise(gwp * 0.018 + 7.0));
+        float hgt = gH * mix(0.55, 1.35, aBlade.w) * mix(0.65, 1.3, macro) * mix(1.0, 2.1, meadow) * keep;
+        vFlower = step(0.985, fract(aBlade.w * 91.7)) * step(0.3, macro);
+        float t = position.y;
+        float ang = aBlade.w * 6.2831 + aBlade.z * 3.0;
+        vec3 sideV = vec3(cos(ang), 0.0, sin(ang));
+        float w = gW * mix(0.75, 1.3, fract(aBlade.z * 7.31)) * (1.0 + smoothstep(10.0, gSize * 0.5, gd) * 1.5);
+        // 草浪：沿风向推进的阵风带 + 低频噪声
+        float wave = sin(dot(gwp, vec2(0.13, 0.08)) - uTime * 1.7) * 0.5 + 0.5;
+        float wn = gNoise(gwp * 0.045 - vec2(uTime * 0.35, uTime * 0.22));
+        float gust = clamp(wave * 0.55 + wn * 0.75 - 0.3, 0.0, 1.0) * uWind;
+        vec2 wdir = vec2(0.85, 0.53);
+        float flutter = sin(uTime * 4.3 + aBlade.z * 40.0) * 0.06;
+        vec2 lean = (wdir * (0.12 + gust * 0.8) + vec2(cos(ang * 1.7), sin(ang * 1.7)) * 0.2 + flutter) * t * t * hgt;
+        vec3 transformed = vec3(gwp.x, gf.x - 0.03, gwp.y) + sideV * position.x * w * mix(1.0 - t * 0.9, 1.0 + t * 2.2, vFlower) + vec3(lean.x, t * hgt * (1.0 - 0.3 * gust * t), lean.y);
+        vGT = t; vGust = gust; vGRand = aBlade.w; vGMacro = macro; vGXZ = gwp;`);
+    sh.fragmentShader = `uniform sampler2D gTex; varying float vGT, vGust, vGRand, vGMacro, vFlower; varying vec2 vGXZ;
+      ` + sh.fragmentShader.replace('#include <color_fragment>', `
+        // 根部取地面草色，向上提亮并偏黄绿；阵风经过的草叶翻出亮面
+        vec3 gb = pow(mix(texture2D(gTex, vGXZ / 4.5).rgb, texture2D(gTex, vGXZ / 13.0).rgb, 0.35), vec3(2.2));
+        vec3 gc = gb * mix(0.38, 1.28, smoothstep(0.0, 0.9, vGT)) * mix(0.82, 1.15, vGRand) * mix(0.85, 1.12, vGMacro);
+        gc = mix(gc, gc * vec3(1.22, 1.12, 0.62), vGT * vGT * 0.55);
+        gc = mix(gc, gc * vec3(1.3, 1.25, 0.9), vGust * vGT * 0.7);
+        // 零星野花：白、黄、淡紫
+        vec3 fc = vGRand < 0.33 ? vec3(0.95, 0.95, 0.9) : vGRand < 0.66 ? vec3(1.0, 0.82, 0.2) : vec3(0.75, 0.6, 0.95);
+        gc = mix(gc, fc, vFlower * smoothstep(0.5, 0.7, vGT));
+        diffuseColor.rgb *= gc;`);
+  };
+  const mesh = GRASS.mesh = new THREE.Mesh(geo, m); mesh.frustumCulled = false; mesh.castShadow = false; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.name = 'grass';
+  scene.add(mesh);
+}
+const _gFwd = new THREE.Vector3();
+function updateGrass() {
+  if (!GRASS.mesh) return;
+  camera.getWorldDirection(_gFwd); const k = Math.hypot(_gFwd.x, _gFwd.z) || 1; const a = GRASS.size * 0.22;
+  GRASS.U.gCam.value.set(camera.position.x + _gFwd.x / k * a, camera.position.z + _gFwd.z / k * a);
+  GRASS.mesh.visible = camera.position.y - groundAt(camera.position.x, camera.position.z) < 60;
+}
 
 // ---- 04_town.js ----
 /* ==========================================================================
@@ -4360,8 +4540,8 @@ const KEYS_T = [
   [0, 0x9fb4e0, 0.5, 0x405890, 0x161620, 0.55, 0x101a2c, 0.0015, 0x2a3450, 0x10141f, 1, 1.0, 4],
   [4.6, 0x9fb4e0, 0.48, 0x405890, 0x161620, 0.55, 0x141e32, 0.0015, 0x323c5a, 0x141826, 1, 0.8, 4],
   [5.8, 0xffb080, 0.9, 0x8a90b0, 0x4a3c3c, 0.35, 0xd8b0a0, 0.0014, 0xffc8b0, 0x7a6a88, 0.3, 0.85, 7],
-  [7.5, 0xfff0dc, 2.4, 0xbcd4f0, 0x6a6458, 0.38, 0xa9c2d8, 0.0011, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
-  [15, 0xfff4e6, 2.7, 0xbcd4f0, 0x6a6458, 0.38, 0xaec6dc, 0.0009, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
+  [7.5, 0xfff0dc, 2.4, 0xbcd4f0, 0x6a6458, 0.38, 0xa4c4e6, 0.0013, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
+  [15, 0xfff4e6, 2.7, 0xbcd4f0, 0x6a6458, 0.38, 0xa8c8ea, 0.0012, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
   [17.2, 0xffcf98, 2.3, 0xc0b8e0, 0x6a5a50, 0.36, 0xe6ceba, 0.0012, 0xfff0d8, 0xa894b8, 0, 0.88, 6],
   [18.3, 0xff8a50, 1.3, 0xa890c8, 0x504048, 0.34, 0xd89a84, 0.0013, 0xffb078, 0x6e5488, 0.2, 0.95, 9],
   [19.2, 0xb0a0d0, 0.5, 0x5a5a90, 0x2a2438, 0.45, 0x4a4a72, 0.0014, 0x9888b0, 0x3a3a60, 0.7, 0.95, 6],
@@ -4393,6 +4573,12 @@ function applyTimeOfDay(h) {
   SEA_U.sunCol.value.copy(LT.sun).multiplyScalar(isDay ? 1 : 0.3); SEA_U.light.value = lerp(1.0, 0.18, night);
   SEA_U.fogColor.value.copy(LT.fog); SEA_U.fogDensity.value = scene.fog.density;
   PETAL_U.light.value = lerp(1, 0.3, night);
+  // 空气透视 / 云影 / 叶片透光
+  const dayK = isDay ? smooth(0, 0.12, sd.y) : 0;
+  FOGX.sun[0] = sd.x; FOGX.sun[1] = sd.y; FOGX.sun[2] = sd.z;
+  FOGX.sunCol[0] = LT.sun.r * 0.55 * dayK; FOGX.sunCol[1] = LT.sun.g * 0.45 * dayK; FOGX.sunCol[2] = LT.sun.b * 0.3 * dayK;
+  FOGX.leafCol[0] = LT.sun.r * sunI * 0.22 * dayK; FOGX.leafCol[1] = LT.sun.g * sunI * 0.22 * dayK; FOGX.leafCol[2] = LT.sun.b * sunI * 0.16 * dayK;
+  FOGX.p[1] = night; FOGX.p[2] = 2; FOGX.p[3] = 0.4 * dayK * (1 - night);
   if (farMat) farMat.color.copy(LT.fog).multiplyScalar(0.75);
   renderer.toneMappingExposure = expo;
   // 夜灯
@@ -5138,6 +5324,7 @@ async function build() {
   TEX_SIGN.needsUpdate = true;
   progress(0.9, '居民和车流正在醒来……'); await tick();
   seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic();
+  scene.updateMatrixWorld(true); buildGrass();
   mailboxInteractables(); shopInteractables(); homeInteractables();
   const ORDER = ['home', 'post', 'station', 'plaza', 'shrine', 'river', 'harbor', 'cape', 'beach', 'platform', 'park', 'school', 'farm', 'gas', 'view'];
   PLACES.sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
@@ -5207,7 +5394,7 @@ function frame(now) {
   }
   const hour = st.min / 60;
   applyTimeOfDay(hour);
-  SKY_U.time.value = T; animeUpdate(NIGHT.v);
+  SKY_U.time.value = T; FOGX.p[0] = T; animeUpdate(NIGHT.v);
   if (GAME.started) {
     if (DRIVE.v) { if (!UI.modalOpen()) updateDriving(dt, T); }
     else if (!UI.modalOpen() && !UI.dialogOpen()) updatePlayer(dt, T);
@@ -5221,7 +5408,7 @@ function frame(now) {
   updateAnimals(dt, T, hour); updateDate(dt, T, hour); updateFishing(dt, T); updateSparks(dt);
   for (const f of UPDATERS) f(dt, T);
   SEA_U.time.value = T; WIND.uTime.value = T; WIND.uWind.value = 0.8 + Math.sin(T * 0.23) * 0.35 + Math.sin(T * 0.071) * 0.25;
-  PETAL_U.camPos.value.copy(camera.position);
+  PETAL_U.camPos.value.copy(camera.position); updateGrass();
   // 阴影相机跟随（按纹素对齐，避免闪烁）
   const tp = PLAYER.pos; const snap = 0.5; sun.target.position.set(Math.round(tp.x / snap) * snap, Math.round(tp.y), Math.round(tp.z / snap) * snap); sun.position.copy(sun.target.position).addScaledVector(LIGHT_DIR, 200); sun.target.updateMatrixWorld();
   if (SKY.sky) { SKY.sky.position.copy(camera.position); SKY.overlay.position.copy(camera.position); }

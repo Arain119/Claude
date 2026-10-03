@@ -113,7 +113,7 @@ function terrainH(x, z) {
 
 /* ---------------- 地形网格（四层照片纹理混合） ---------------- */
 const TERRAIN_U = { tGrass: { value: TEX.grass }, tDirt: { value: TEX.ground }, tRock: { value: TEX.rock }, tSand: { value: TEX.sand } };
-let terrainMesh;
+let terrainMesh, TERRAIN_GRID = null;
 function buildTerrain() {
   const sx = WORLD.x1 - WORLD.x0, sz = WORLD.z1 - WORLD.z0, step = 2.5;
   const nx = Math.round(sx / step), nz = Math.round(sz / step);
@@ -144,6 +144,10 @@ function buildTerrain() {
     col.set([tmp.r, tmp.g, tmp.b], i * 3);
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('splat', new THREE.BufferAttribute(spl, 4));
+  // 供草地着色器采样的高度 / 草量网格
+  { const F = new Float32Array(p.count * 4); for (let i = 0; i < p.count; i++) { F[i * 4] = H[i]; F[i * 4 + 1] = spl[i * 4]; F[i * 4 + 2] = col[i * 3 + 1]; F[i * 4 + 3] = 1; }
+    const x0 = p.getX(0), z0 = p.getZ(0);
+    TERRAIN_GRID = { nx: nx + 1, nz: nz + 1, x0, z0, dx: (p.getX(nx) - x0) / nx, dz: (p.getZ(row * nz) - z0) / nz, data: F }; }
   g.computeVertexNormals();
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
   m.onBeforeCompile = (sh) => {
@@ -352,5 +356,5 @@ function buildFarLand() {
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, farMat); mesh.position.set(Math.cos(s[0]) * s[1], s[2] / 2 - 22, Math.sin(s[0]) * s[1]); mesh.scale.set(1.6, 1, 1); mesh.rotation.y = s[0]; group.add(mesh);
   }
-  scene.add(group);
+  group.name = 'farland'; scene.add(group);
 }

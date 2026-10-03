@@ -40,8 +40,8 @@ const KEYS_T = [
   [0, 0x9fb4e0, 0.5, 0x405890, 0x161620, 0.55, 0x101a2c, 0.0015, 0x2a3450, 0x10141f, 1, 1.0, 4],
   [4.6, 0x9fb4e0, 0.48, 0x405890, 0x161620, 0.55, 0x141e32, 0.0015, 0x323c5a, 0x141826, 1, 0.8, 4],
   [5.8, 0xffb080, 0.9, 0x8a90b0, 0x4a3c3c, 0.35, 0xd8b0a0, 0.0014, 0xffc8b0, 0x7a6a88, 0.3, 0.85, 7],
-  [7.5, 0xfff0dc, 2.4, 0xbcd4f0, 0x6a6458, 0.38, 0xa9c2d8, 0.0011, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
-  [15, 0xfff4e6, 2.7, 0xbcd4f0, 0x6a6458, 0.38, 0xaec6dc, 0.0009, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
+  [7.5, 0xfff0dc, 2.4, 0xbcd4f0, 0x6a6458, 0.38, 0xa4c4e6, 0.0013, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
+  [15, 0xfff4e6, 2.7, 0xbcd4f0, 0x6a6458, 0.38, 0xa8c8ea, 0.0012, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
   [17.2, 0xffcf98, 2.3, 0xc0b8e0, 0x6a5a50, 0.36, 0xe6ceba, 0.0012, 0xfff0d8, 0xa894b8, 0, 0.88, 6],
   [18.3, 0xff8a50, 1.3, 0xa890c8, 0x504048, 0.34, 0xd89a84, 0.0013, 0xffb078, 0x6e5488, 0.2, 0.95, 9],
   [19.2, 0xb0a0d0, 0.5, 0x5a5a90, 0x2a2438, 0.45, 0x4a4a72, 0.0014, 0x9888b0, 0x3a3a60, 0.7, 0.95, 6],
@@ -73,6 +73,12 @@ function applyTimeOfDay(h) {
   SEA_U.sunCol.value.copy(LT.sun).multiplyScalar(isDay ? 1 : 0.3); SEA_U.light.value = lerp(1.0, 0.18, night);
   SEA_U.fogColor.value.copy(LT.fog); SEA_U.fogDensity.value = scene.fog.density;
   PETAL_U.light.value = lerp(1, 0.3, night);
+  // 空气透视 / 云影 / 叶片透光
+  const dayK = isDay ? smooth(0, 0.12, sd.y) : 0;
+  FOGX.sun[0] = sd.x; FOGX.sun[1] = sd.y; FOGX.sun[2] = sd.z;
+  FOGX.sunCol[0] = LT.sun.r * 0.55 * dayK; FOGX.sunCol[1] = LT.sun.g * 0.45 * dayK; FOGX.sunCol[2] = LT.sun.b * 0.3 * dayK;
+  FOGX.leafCol[0] = LT.sun.r * sunI * 0.22 * dayK; FOGX.leafCol[1] = LT.sun.g * sunI * 0.22 * dayK; FOGX.leafCol[2] = LT.sun.b * sunI * 0.16 * dayK;
+  FOGX.p[1] = night; FOGX.p[2] = 2; FOGX.p[3] = 0.4 * dayK * (1 - night);
   if (farMat) farMat.color.copy(LT.fog).multiplyScalar(0.75);
   renderer.toneMappingExposure = expo;
   // 夜灯

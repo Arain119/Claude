@@ -54,6 +54,7 @@ async function build() {
   TEX_SIGN.needsUpdate = true;
   progress(0.9, '居民和车流正在醒来……'); await tick();
   seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic();
+  scene.updateMatrixWorld(true); buildGrass();
   mailboxInteractables(); shopInteractables(); homeInteractables();
   const ORDER = ['home', 'post', 'station', 'plaza', 'shrine', 'river', 'harbor', 'cape', 'beach', 'platform', 'park', 'school', 'farm', 'gas', 'view'];
   PLACES.sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
@@ -123,7 +124,7 @@ function frame(now) {
   }
   const hour = st.min / 60;
   applyTimeOfDay(hour);
-  SKY_U.time.value = T; animeUpdate(NIGHT.v);
+  SKY_U.time.value = T; FOGX.p[0] = T; animeUpdate(NIGHT.v);
   if (GAME.started) {
     if (DRIVE.v) { if (!UI.modalOpen()) updateDriving(dt, T); }
     else if (!UI.modalOpen() && !UI.dialogOpen()) updatePlayer(dt, T);
@@ -137,7 +138,7 @@ function frame(now) {
   updateAnimals(dt, T, hour); updateDate(dt, T, hour); updateFishing(dt, T); updateSparks(dt);
   for (const f of UPDATERS) f(dt, T);
   SEA_U.time.value = T; WIND.uTime.value = T; WIND.uWind.value = 0.8 + Math.sin(T * 0.23) * 0.35 + Math.sin(T * 0.071) * 0.25;
-  PETAL_U.camPos.value.copy(camera.position);
+  PETAL_U.camPos.value.copy(camera.position); updateGrass();
   // 阴影相机跟随（按纹素对齐，避免闪烁）
   const tp = PLAYER.pos; const snap = 0.5; sun.target.position.set(Math.round(tp.x / snap) * snap, Math.round(tp.y), Math.round(tp.z / snap) * snap); sun.position.copy(sun.target.position).addScaledVector(LIGHT_DIR, 200); sun.target.updateMatrixWorld();
   if (SKY.sky) { SKY.sky.position.copy(camera.position); SKY.overlay.position.copy(camera.position); }

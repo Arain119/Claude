@@ -22,6 +22,47 @@ function vnoise(x, y) {
 }
 function fbm(x, y, o = 4) { let s = 0, a = 0.5, f = 1; for (let i = 0; i < o; i++) { s += a * vnoise(x * f + i * 17.3, y * f - i * 9.1); f *= 2.03; a *= 0.5; } return s / (1 - Math.pow(0.5, o)); }
 
+/* ---------- 空气透视雾：替换 three 的雾计算（远处偏蓝、朝阳偏暖、低处薄雾、云影） ---------- */
+// 用 Float32Array 作为 uniform 值：three 克隆 uniform 时不会复制它，所有材质共享同一份数据
+const FOGX = { sun: new Float32Array([0.3, 0.6, 0.4]), sunCol: new Float32Array([0.3, 0.25, 0.2]), leafCol: new Float32Array([1, 0.95, 0.85]), p: new Float32Array([0, 0, 2, 0]) }; // p: 时间, 夜, 雾底高度, 云影强度
+(function patchFog() {
+  const add = (u) => { u.fogSunDir = { value: FOGX.sun }; u.fogSunCol = { value: FOGX.sunCol }; u.fogP = { value: FOGX.p }; };
+  add(THREE.UniformsLib.fog);
+  for (const k in THREE.ShaderLib) { const u = THREE.ShaderLib[k].uniforms; if (u && u.fogColor) add(u); }
+  const C = THREE.ShaderChunk;
+  C.fog_pars_vertex = '#ifdef USE_FOG\n varying float fogDepth; varying vec3 vFogV;\n#endif';
+  C.fog_vertex = '#ifdef USE_FOG\n fogDepth = - mvPosition.z; vFogV = mvPosition.xyz;\n#endif';
+  C.fog_pars_fragment = `#ifdef USE_FOG
+  uniform vec3 fogColor; uniform vec3 fogSunDir; uniform vec3 fogSunCol; uniform vec4 fogP; varying float fogDepth; varying vec3 vFogV;
+  #ifdef FOG_EXP2
+    uniform float fogDensity;
+  #else
+    uniform float fogNear; uniform float fogFar;
+  #endif
+  float fogHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float fogNoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(fogHash(i), fogHash(i + vec2(1.0, 0.0)), f.x), mix(fogHash(i + vec2(0.0, 1.0)), fogHash(i + vec2(1.0, 1.0)), f.x), f.y); }
+#endif`;
+  C.fog_fragment = `#ifdef USE_FOG
+  float fogD = max(length(vFogV), 1e-4);
+  vec3 fogW = (vec4(vFogV / fogD, 0.0) * viewMatrix).xyz;
+  vec3 fogPos = cameraPosition + fogW * fogD;
+  #ifdef FOG_EXP2
+    float fogFactor = 1.0 - exp( - fogDensity * fogDensity * fogD * fogD );
+  #else
+    float fogFactor = smoothstep( fogNear, fogFar, fogDepth );
+  #endif
+  float fogH = exp(-max(fogPos.y - fogP.z, 0.0) * 0.02);
+  fogFactor = clamp(fogFactor * mix(0.6, 1.4, fogH), 0.0, 1.0);
+  if (fogP.w > 0.0) {
+    vec2 cp = fogPos.xz * 0.0065 + vec2(fogP.x * 0.006, fogP.x * 0.0025);
+    float cn = fogNoise(cp) * 0.62 + fogNoise(cp * 2.7 + 3.1) * 0.38;
+    gl_FragColor.rgb *= 1.0 - smoothstep(0.5, 0.6, cn) * fogP.w;
+  }
+  float fogSun = pow(max(dot(fogW, fogSunDir), 0.0), 5.0);
+  gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor + fogSunCol * fogSun, fogFactor );
+#endif`;
+})();
+
 /* ---------- 偏好存储（失败时静默） ---------- */
 const store = {
   get(k, d) { try { const v = localStorage.getItem('hoshimi.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
