@@ -1,0 +1,235 @@
+<title>星见岛 · 小信使的春天</title>
+<meta name="description" content="一座可以自由行走的动漫风樱花小岛：做小信使，送信、逛商店街、看夜樱、等一场樱花树下的约定。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500;700;900&family=Noto+Serif+SC:wght@600;900&family=ZCOOL+KuaiLe&family=ZCOOL+XiaoWei&display=swap">
+<style>
+/* 版式：全屏 3D 画布之上漂浮的「信纸卡片」HUD；左上时间与任务、右上小地图、底部交互与对话 */
+:root {
+  --paper: #fbf7ef; --paper-2: #f3ece0; --ink: #22304a; --ink-soft: #5b6478; --line: rgba(34, 48, 74, 0.14);
+  --sakura: #de7f9c; --sakura-soft: #f6d3dd; --sea: #2b8a96; --gold: #c9973a; --night: #141c33;
+  --f-display: "ZCOOL XiaoWei", "Noto Serif SC", "Songti SC", serif;
+  --f-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --f-hand: "Ma Shan Zheng", "KaiTi", "STKaiti", serif;
+  --r: 14px; --shadow: 0 6px 22px rgba(20, 28, 51, 0.16), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--night); color: var(--ink); font-family: var(--f-body); overflow: hidden; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--sakura); outline-offset: 2px; }
+.card { background: rgba(251, 247, 239, 0.93); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.num { font-variant-numeric: tabular-nums; }
+/* --- 加载 / 标题 --- */
+#title { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: radial-gradient(120% 80% at 70% 10%, #ffe9ef 0%, #f6cfda 30%, #9fc9e6 72%, #5d8fc4 100%); overflow: hidden; }
+#title::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(circle at 20% 30%, rgba(255,255,255,.7) 0 2px, transparent 3px), radial-gradient(circle at 80% 60%, rgba(255,255,255,.6) 0 1.5px, transparent 2.5px); background-size: 140px 140px, 90px 90px; opacity: .55; }
+.title-box { position: relative; text-align: center; max-width: 560px; width: 100%; display: grid; gap: 14px; justify-items: center; }
+.title-kicker { font-size: 13px; letter-spacing: .5em; color: #fff; text-shadow: 0 1px 6px rgba(70, 40, 80, .35); padding-left: .5em; }
+.title-name { font-family: var(--f-display); font-size: clamp(64px, 16vw, 128px); line-height: 1; color: #fff; letter-spacing: .08em; text-shadow: 0 4px 24px rgba(160, 60, 100, .35), 0 2px 0 rgba(222, 127, 156, .6); margin: 0; }
+.title-sub { font-family: var(--f-hand); font-size: clamp(22px, 5vw, 32px); color: #fff; text-shadow: 0 2px 10px rgba(60, 40, 80, .35); }
+.title-card { margin-top: 14px; padding: 18px 20px; width: min(440px, 100%); display: grid; gap: 12px; text-align: left; }
+.title-card p { margin: 0; font-size: 14px; line-height: 1.75; color: var(--ink-soft); }
+.bar { height: 6px; border-radius: 6px; background: var(--paper-2); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--sakura), #f4b07a); transition: width .25s; }
+#loadText { font-size: 12px; color: var(--ink-soft); }
+.btn-main { justify-self: stretch; border: 0; border-radius: 999px; padding: 13px 22px; background: var(--ink); color: var(--paper); font-family: var(--f-display); font-size: 22px; letter-spacing: .2em; box-shadow: 0 6px 18px rgba(34, 48, 74, .3); transition: transform .15s, background .15s; }
+.btn-main:hover { transform: translateY(-1px); background: #2c3d5e; }
+.btn-main:disabled { opacity: .45; cursor: wait; transform: none; }
+.keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; font-size: 12.5px; color: var(--ink-soft); }
+kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); border-bottom-width: 2px; background: #fff; font: 600 11.5px/1.5 var(--f-body); color: var(--ink); text-align: center; }
+/* --- HUD --- */
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+#hud.hidden > *:not(#toasts) { opacity: 0; }
+#hud > * { transition: opacity .3s; }
+.tl { position: absolute; left: 16px; top: calc(14px + env(safe-area-inset-top, 0px)); display: grid; gap: 10px; width: min(250px, 46vw); }
+.clock { padding: 10px 14px 12px; display: grid; gap: 2px; }
+.clock .d { font-size: 12px; color: var(--ink-soft); letter-spacing: .08em; }
+.clock .t { display: flex; align-items: baseline; gap: 10px; }
+.clock .t b { font-family: var(--f-display); font-weight: 400; font-size: 34px; line-height: 1.05; }
+.clock .t span { font-size: 13px; color: var(--sakura); font-weight: 700; }
+.coins { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); margin-top: 4px; }
+.shell { width: 16px; height: 13px; border-radius: 50% 50% 40% 40%; background: radial-gradient(circle at 50% 100%, #f9d9c6 0 30%, #f0b9a0 31% 100%); position: relative; flex: none; }
+.shell::after { content: ""; position: absolute; inset: 2px 3px 0; background: repeating-linear-gradient(90deg, transparent 0 2px, rgba(160, 90, 70, .35) 2px 3px); border-radius: inherit; }
+.tasks { padding: 10px 14px 12px; display: grid; gap: 6px; }
+.tasks h3 { margin: 0; font: 400 16px var(--f-display); display: flex; justify-content: space-between; align-items: baseline; }
+.tasks h3 small { font: 500 11px var(--f-body); color: var(--ink-soft); }
+.tasks ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.tasks li { font-size: 12.5px; line-height: 1.45; display: grid; grid-template-columns: 10px 1fr; gap: 6px; align-items: start; min-width: 0; }
+.tasks li::before { content: ""; width: 8px; height: 8px; border-radius: 2px; margin-top: 5px; background: var(--sakura); transform: rotate(45deg); }
+.tasks li.story::before { background: var(--sea); }
+.tasks li em { font-style: normal; color: var(--ink-soft); }
+.tr { position: absolute; right: 16px; top: calc(14px + env(safe-area-inset-top, 0px)); display: grid; gap: 8px; justify-items: end; }
+#minimap { width: 156px; height: 156px; border-radius: 50%; border: 3px solid rgba(251, 247, 239, .95); box-shadow: var(--shadow); background: #9cc6d8; display: block; }
+.mm-wrap { position: relative; }
+.mm-n { position: absolute; top: -4px; left: 50%; transform: translateX(-50%); font: 700 11px var(--f-body); background: var(--ink); color: var(--paper); border-radius: 8px; padding: 0 6px; }
+.place-chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(251, 247, 239, .9); border: 1px solid var(--line); color: var(--ink); max-width: 200px; text-align: center; }
+.tbtns { display: flex; gap: 6px; pointer-events: auto; flex-wrap: wrap; justify-content: flex-end; max-width: 210px; }
+.tbtn { border: 1px solid var(--line); background: rgba(251, 247, 239, .93); border-radius: 12px; padding: 6px 9px; font-size: 12px; display: grid; justify-items: center; gap: 1px; box-shadow: var(--shadow); min-width: 46px; }
+.tbtn kbd { font-size: 10px; padding: 0 4px; }
+#prompt { position: absolute; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 9px 16px; border-radius: 999px; font-size: 14px; display: flex; gap: 10px; align-items: center; white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; pointer-events: auto; }
+#prompt[hidden] { display: none !important; }
+#prompt kbd { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+#bite { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); font: 400 64px var(--f-display); color: #fff; text-shadow: 0 3px 16px rgba(200, 40, 60, .7); animation: pop .3s ease-out; }
+@keyframes pop { from { transform: translate(-50%, -50%) scale(.3); } to { transform: translate(-50%, -50%) scale(1); } }
+#toasts { position: absolute; left: 50%; top: calc(16px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: grid; gap: 8px; justify-items: center; width: min(560px, calc(100vw - 32px)); }
+.toast { padding: 9px 16px; font-size: 13.5px; line-height: 1.6; text-align: center; animation: tin .35s ease-out; }
+@keyframes tin { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+/* 印章弹出 */
+#stampPop { position: fixed; z-index: 30; left: 50%; top: 42%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 10px; pointer-events: none; }
+#stampPop canvas { width: 120px; height: 150px; filter: drop-shadow(0 8px 18px rgba(20, 28, 51, .35)); animation: stampIn .7s cubic-bezier(.2, 1.4, .4, 1); }
+#stampPop div { padding: 8px 16px; font-size: 14px; text-align: center; }
+#stampPop b { font: 400 20px var(--f-display); display: block; }
+@keyframes stampIn { from { transform: scale(1.8) rotate(-12deg); opacity: 0; } to { transform: scale(1) rotate(-4deg); opacity: 1; } }
+/* 对话 */
+#dialog { position: fixed; z-index: 20; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(720px, calc(100vw - 32px)); padding: 16px 18px; display: grid; grid-template-columns: 76px 1fr; gap: 14px; pointer-events: auto; }
+#portrait { width: 76px; height: 76px; border-radius: 50%; background: var(--sakura-soft); border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .12); }
+.dl-body { min-width: 0; display: grid; gap: 8px; }
+.dl-name { display: flex; gap: 8px; align-items: baseline; }
+.dl-name b { font: 400 21px var(--f-display); }
+.dl-name small { font-size: 12px; color: var(--ink-soft); }
+.dl-name .hearts { margin-left: auto; color: var(--sakura); font-size: 12px; letter-spacing: 1px; }
+#dlText { font-size: 15px; line-height: 1.8; white-space: pre-line; min-height: 2.2em; }
+#dlChoices { display: flex; flex-wrap: wrap; gap: 8px; }
+.choice { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 14px; font-size: 13.5px; transition: background .15s, border-color .15s; }
+.choice:hover { background: var(--sakura-soft); border-color: var(--sakura); }
+.choice.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+/* 面板 */
+#panel { position: fixed; z-index: 25; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(20, 28, 51, .35); pointer-events: auto; }
+.pn { width: min(780px, 100%); max-height: min(86vh, 760px); display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+.pn-head { display: flex; align-items: center; gap: 6px; padding: 12px 14px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.pn-tab { border: 0; background: none; padding: 8px 12px 10px; font: 400 18px var(--f-display); color: var(--ink-soft); border-bottom: 3px solid transparent; }
+.pn-tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--sakura); }
+.pn-close { margin-left: auto; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 12px; font-size: 13px; }
+.pn-body { overflow: auto; padding: 16px 18px 20px; min-height: 0; }
+.pn-body h4 { margin: 0 0 10px; font: 400 18px var(--f-display); }
+.grid-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.item { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; display: grid; gap: 4px; min-width: 0; }
+.item b { font-weight: 700; font-size: 14px; }
+.item small { color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
+.item .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.item button { border: 0; border-radius: 999px; background: var(--ink); color: var(--paper); padding: 5px 12px; font-size: 12.5px; }
+.price { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; }
+.empty { color: var(--ink-soft); font-size: 14px; line-height: 1.8; padding: 12px 0; }
+.stamps { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }
+.stamp { display: grid; justify-items: center; gap: 4px; text-align: center; font-size: 12px; color: var(--ink-soft); }
+.stamp canvas { width: 72px; height: 90px; }
+.stamp b { color: var(--ink); font-size: 13px; }
+.stamp.locked canvas { opacity: .3; filter: grayscale(1); }
+.people { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.person { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: #fff; }
+.person canvas { width: 44px; height: 44px; border-radius: 50%; background: var(--sakura-soft); }
+.person b { font-size: 14px; } .person small { display: block; font-size: 11.5px; color: var(--ink-soft); }
+.person .h { color: var(--sakura); font-size: 11px; letter-spacing: 1px; }
+.diary { display: grid; gap: 10px; }
+.diary p { margin: 0; font-size: 14px; line-height: 1.8; padding-left: 12px; border-left: 2px solid var(--sakura-soft); }
+.diary time { display: block; font-size: 11.5px; color: var(--ink-soft); }
+#bigmap { width: min(100%, 62vh); aspect-ratio: 1; border-radius: 12px; display: block; margin: 0 auto; cursor: pointer; }
+.map-hint { font-size: 12.5px; color: var(--ink-soft); text-align: center; margin: 8px 0 0; }
+.set { display: grid; gap: 14px; }
+.set-row { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: center; }
+.set-row > span { font-size: 14px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+input[type=range] { width: 100%; accent-color: var(--sakura); }
+/* 触屏 */
+#mobile { position: fixed; inset: 0; pointer-events: none; z-index: 12; }
+#joy { position: absolute; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .7); background: rgba(255, 255, 255, .15); }
+#joy i { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(251, 247, 239, .9); box-shadow: var(--shadow); }
+.mbtns { position: absolute; right: 16px; bottom: calc(86px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(2, 64px); gap: 10px; pointer-events: auto; }
+.mbtn { width: 64px; height: 64px; border-radius: 50%; border: 1px solid var(--line); background: rgba(251, 247, 239, .9); box-shadow: var(--shadow); font-size: 13px; font-weight: 700; touch-action: manipulation; }
+.mbtn.big { background: var(--ink); color: var(--paper); }
+#fade { position: fixed; inset: 0; z-index: 40; background: #0c1226; opacity: 0; pointer-events: none; transition: opacity .8s; display: grid; place-items: center; color: #fff; font: 400 28px var(--f-display); letter-spacing: .3em; }
+#fade.on { opacity: 1; pointer-events: auto; }
+@media (max-width: 640px) {
+  .tl { width: min(210px, 52vw); }
+  .clock .t b { font-size: 28px; }
+  #minimap { width: 112px; height: 112px; }
+  .tasks li em { display: none; }
+  #dialog { grid-template-columns: 52px 1fr; padding: 12px 14px; }
+  #portrait { width: 52px; height: 52px; }
+  .set-row { grid-template-columns: 1fr; gap: 6px; }
+  .tbtn { min-width: 40px; padding: 5px 7px; } .tbtn kbd { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+</style>
+<!--HEAD-END-->
+<canvas id="game" tabindex="0" aria-label="星见岛 3D 场景"></canvas>
+
+<div id="title">
+  <div class="title-box">
+    <div class="title-kicker">HOSHIMI ISLAND · SPRING</div>
+    <h1 class="title-name">星见岛</h1>
+    <div class="title-sub">小信使的春天</div>
+    <div class="title-card card">
+      <p>四月的星见岛，樱花开满了整条海风通。你是邮局新来的小信使：去方姐那里领信，穿过商店街、河堤和神社，把每一封信送到收信人手里。</p>
+      <div class="bar" aria-hidden="true"><i id="loadBar"></i></div>
+      <div id="loadText">正在准备小岛……</div>
+      <button class="btn-main" id="startBtn" disabled>开始旅程</button>
+      <div class="keys" id="keysHelp"></div>
+    </div>
+  </div>
+</div>
+
+<div id="hud" hidden>
+  <div class="tl">
+    <div class="card clock">
+      <div class="d" id="hudDay">第 1 天 · 周六 · 晴</div>
+      <div class="t"><b class="num" id="hudTime">09:00</b><span id="hudPhase">上午</span></div>
+      <div class="coins"><span class="shell" aria-hidden="true"></span><span class="num" id="hudCoins">20</span> 贝壳币</div>
+    </div>
+    <div class="card tasks" id="tasks">
+      <h3>今日邮件 <small id="taskCount">0 封</small></h3>
+      <ul id="taskList"></ul>
+    </div>
+  </div>
+  <div class="tr">
+    <div class="mm-wrap"><canvas id="minimap" width="312" height="312" aria-label="小地图"></canvas><span class="mm-n">北</span></div>
+    <div class="place-chip" id="placeChip">樱丘町</div>
+    <div class="tbtns">
+      <button class="tbtn" data-panel="map">地图<kbd>Tab</kbd></button>
+      <button class="tbtn" data-panel="bag">背包<kbd>B</kbd></button>
+      <button class="tbtn" data-panel="journal">手账<kbd>J</kbd></button>
+      <button class="tbtn" data-panel="settings">设置<kbd>Esc</kbd></button>
+    </div>
+  </div>
+  <button id="prompt" class="card" hidden><kbd>E</kbd><span id="promptText"></span></button>
+  <div id="bite" hidden>！</div>
+  <div id="toasts" aria-live="polite"></div>
+</div>
+
+<div id="mobile" hidden>
+  <div id="joy" hidden><i></i></div>
+  <div class="mbtns">
+    <button class="mbtn" id="mCam">视角</button>
+    <button class="mbtn" id="mJump">跳跃</button>
+    <button class="mbtn" id="mRun">快跑</button>
+    <button class="mbtn big" id="mAct">互动</button>
+  </div>
+</div>
+
+<div id="dialog" class="card" hidden>
+  <canvas id="portrait" width="152" height="152"></canvas>
+  <div class="dl-body">
+    <div class="dl-name"><b id="dlName"></b><small id="dlTitle"></small><span class="hearts" id="dlHearts"></span></div>
+    <div id="dlText"></div>
+    <div id="dlChoices"></div>
+  </div>
+</div>
+
+<div id="panel" hidden>
+  <div class="pn card" role="dialog" aria-modal="true">
+    <div class="pn-head" id="pnHead"></div>
+    <div class="pn-body" id="pnBody"></div>
+  </div>
+</div>
+
+<div id="stampPop" hidden></div>
+<div id="fade"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/*__SCRIPT__*/
+</script>
