@@ -184,7 +184,11 @@ const SKY_U = {
   cloudLit: { value: new THREE.Color(1, 1, 1) }, cloudShade: { value: new THREE.Color(0.6, 0.65, 0.75) }, cover: { value: 0.5 }
 };
 function buildSky() {
-  if (!THREE.Sky.SkyShader.fragmentShader.includes('skyGain')) { const S = THREE.Sky.SkyShader; S.uniforms.skyGain = { value: 0.5 }; S.fragmentShader = 'uniform float skyGain;\n' + S.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( retColor * skyGain, 1.0 );'); }
+  if (!THREE.Sky.SkyShader.fragmentShader.includes('skyGain')) { const S = THREE.Sky.SkyShader; S.uniforms.skyGain = { value: 0.5 }; S.fragmentShader = 'uniform float skyGain;\n' + S.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', `
+      // 动漫天空：提高饱和度，天顶更深的钴蓝，地平线偏青白
+      float sl = dot(retColor, vec3(0.299, 0.587, 0.114)); vec3 sc = mix(vec3(sl), retColor, 1.45);
+      float up = clamp(direction.y, 0.0, 1.0); sc *= mix(vec3(1.0), vec3(0.78, 0.92, 1.18), smoothstep(0.05, 0.7, up));
+      gl_FragColor = vec4( max(sc, 0.0) * skyGain, 1.0 );`); }
   const mk = () => { const s = new THREE.Sky(); s.scale.setScalar(9000); const u = s.material.uniforms; u.turbidity.value = 3.5; u.rayleigh.value = 1.2; u.mieCoefficient.value = 0.003; u.mieDirectionalG.value = 0.8; s.frustumCulled = false; s.renderOrder = -10; return s; };
   SKY.sky = mk(); scene.add(SKY.sky); SKY.skyB = mk(); SKY.skyB.material = SKY.sky.material; SKY.scene.add(SKY.skyB);
   const om = new THREE.ShaderMaterial({
@@ -208,11 +212,15 @@ function buildSky() {
           vec2 uv = d.xz / (y + 0.12) * 1.3 + vec2(time * 0.004, time * 0.0015);
           vec2 w = vec2(fbm(uv * 0.7), fbm(uv * 0.7 + 5.2));
           float c = fbm(uv * 1.2 + w * 1.1); float c2 = fbm(uv * 1.2 + w * 1.1 + normalize(sunDir.xz + 0.0001) * 0.06);
-          float dens = smoothstep(cover, cover + 0.22, c) * smoothstep(0.0, 0.15, y);
-          float lit = clamp((c - c2) * 5.0 + 0.6, 0.0, 1.0);
+          // 动漫积云：边缘清晰、受光面亮白、背光面偏蓝紫，靠近太阳处有亮边
+          float puff = c + (fbm(uv * 3.1 + w * 0.6) - 0.5) * 0.12;
+          float dens = smoothstep(cover, cover + 0.07, puff) * smoothstep(0.0, 0.15, y);
+          float lit = smoothstep(0.3, 0.6, (c - c2) * 5.0 + 0.5 + (puff - cover) * 0.5);
           float sd = max(dot(d, normalize(sunDir)), 0.0);
-          vec3 cc = mix(cloudShade, cloudLit, lit) + cloudLit * pow(sd, 8.0) * 0.6 * (1.0 - night);
-          col = mix(col, cc, dens); a = max(a, dens * 0.95);
+          float rim = (1.0 - smoothstep(cover + 0.02, cover + 0.12, puff)) * pow(sd, 3.0);
+          vec3 shade = mix(cloudShade, cloudShade * vec3(0.86, 0.9, 1.12), 1.0 - night);
+          vec3 cc = mix(shade, cloudLit * 1.08, lit) + cloudLit * (pow(sd, 8.0) * 0.5 + rim * 1.4) * (1.0 - night);
+          col = mix(col, cc, dens); a = max(a, dens);
         }
         gl_FragColor = vec4(col, a);
         #include <tonemapping_fragment>

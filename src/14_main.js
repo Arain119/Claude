@@ -79,8 +79,13 @@ const GradeShader = {
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `uniform sampler2D tDiffuse; uniform float night, vig; varying vec2 vUv;
     void main(){ vec4 c = texture2D(tDiffuse, vUv); vec3 col = c.rgb;
-      float l = dot(col, vec3(0.299, 0.587, 0.114)); col = mix(vec3(l), col, 1.06);
-      col = mix(col, col * vec3(0.92, 0.97, 1.08), night * 0.5);
+      float l = dot(col, vec3(0.299, 0.587, 0.114));
+      // 动漫调色：更鲜艳；暗部偏蓝紫、亮部偏暖，整体略提亮暗部（赛璐璐动画的通透感）
+      col = mix(vec3(l), col, 1.28 - night * 0.12);
+      float sh = 1.0 - smoothstep(0.0, 0.45, l), hi = smoothstep(0.55, 1.0, l);
+      col += vec3(0.010, 0.016, 0.045) * sh * (1.0 - night * 0.5);
+      col *= mix(vec3(1.0), vec3(1.04, 1.01, 0.95), hi * (1.0 - night));
+      col = mix(col, col * vec3(0.9, 0.97, 1.1), night * 0.5);
       vec2 d = vUv - 0.5; col *= 1.0 - dot(d, d) * vig * 1.6;
       gl_FragColor = vec4(col, 1.0);
       #include <encodings_fragment>
@@ -99,7 +104,7 @@ function initPost() {
 }
 function renderFrame() {
   if (composer && Q.bloom) {
-    bloomPass.strength = lerp(0.22, 0.9, NIGHT.v); bloomPass.threshold = lerp(0.92, 0.72, NIGHT.v); composer.grade.uniforms.night.value = NIGHT.v;
+    bloomPass.strength = lerp(0.34, 0.95, NIGHT.v); bloomPass.threshold = lerp(0.86, 0.7, NIGHT.v); composer.grade.uniforms.night.value = NIGHT.v;
     composer.render();
   } else renderer.render(scene, camera);
 }
@@ -118,7 +123,7 @@ function frame(now) {
   }
   const hour = st.min / 60;
   applyTimeOfDay(hour);
-  SKY_U.time.value = T;
+  SKY_U.time.value = T; animeUpdate(NIGHT.v);
   if (GAME.started) {
     if (DRIVE.v) { if (!UI.modalOpen()) updateDriving(dt, T); }
     else if (!UI.modalOpen() && !UI.dialogOpen()) updatePlayer(dt, T);

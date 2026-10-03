@@ -944,7 +944,11 @@ const SKY_U = {
   cloudLit: { value: new THREE.Color(1, 1, 1) }, cloudShade: { value: new THREE.Color(0.6, 0.65, 0.75) }, cover: { value: 0.5 }
 };
 function buildSky() {
-  if (!THREE.Sky.SkyShader.fragmentShader.includes('skyGain')) { const S = THREE.Sky.SkyShader; S.uniforms.skyGain = { value: 0.5 }; S.fragmentShader = 'uniform float skyGain;\n' + S.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( retColor * skyGain, 1.0 );'); }
+  if (!THREE.Sky.SkyShader.fragmentShader.includes('skyGain')) { const S = THREE.Sky.SkyShader; S.uniforms.skyGain = { value: 0.5 }; S.fragmentShader = 'uniform float skyGain;\n' + S.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', `
+      // 动漫天空：提高饱和度，天顶更深的钴蓝，地平线偏青白
+      float sl = dot(retColor, vec3(0.299, 0.587, 0.114)); vec3 sc = mix(vec3(sl), retColor, 1.45);
+      float up = clamp(direction.y, 0.0, 1.0); sc *= mix(vec3(1.0), vec3(0.78, 0.92, 1.18), smoothstep(0.05, 0.7, up));
+      gl_FragColor = vec4( max(sc, 0.0) * skyGain, 1.0 );`); }
   const mk = () => { const s = new THREE.Sky(); s.scale.setScalar(9000); const u = s.material.uniforms; u.turbidity.value = 3.5; u.rayleigh.value = 1.2; u.mieCoefficient.value = 0.003; u.mieDirectionalG.value = 0.8; s.frustumCulled = false; s.renderOrder = -10; return s; };
   SKY.sky = mk(); scene.add(SKY.sky); SKY.skyB = mk(); SKY.skyB.material = SKY.sky.material; SKY.scene.add(SKY.skyB);
   const om = new THREE.ShaderMaterial({
@@ -968,11 +972,15 @@ function buildSky() {
           vec2 uv = d.xz / (y + 0.12) * 1.3 + vec2(time * 0.004, time * 0.0015);
           vec2 w = vec2(fbm(uv * 0.7), fbm(uv * 0.7 + 5.2));
           float c = fbm(uv * 1.2 + w * 1.1); float c2 = fbm(uv * 1.2 + w * 1.1 + normalize(sunDir.xz + 0.0001) * 0.06);
-          float dens = smoothstep(cover, cover + 0.22, c) * smoothstep(0.0, 0.15, y);
-          float lit = clamp((c - c2) * 5.0 + 0.6, 0.0, 1.0);
+          // 动漫积云：边缘清晰、受光面亮白、背光面偏蓝紫，靠近太阳处有亮边
+          float puff = c + (fbm(uv * 3.1 + w * 0.6) - 0.5) * 0.12;
+          float dens = smoothstep(cover, cover + 0.07, puff) * smoothstep(0.0, 0.15, y);
+          float lit = smoothstep(0.3, 0.6, (c - c2) * 5.0 + 0.5 + (puff - cover) * 0.5);
           float sd = max(dot(d, normalize(sunDir)), 0.0);
-          vec3 cc = mix(cloudShade, cloudLit, lit) + cloudLit * pow(sd, 8.0) * 0.6 * (1.0 - night);
-          col = mix(col, cc, dens); a = max(a, dens * 0.95);
+          float rim = (1.0 - smoothstep(cover + 0.02, cover + 0.12, puff)) * pow(sd, 3.0);
+          vec3 shade = mix(cloudShade, cloudShade * vec3(0.86, 0.9, 1.12), 1.0 - night);
+          vec3 cc = mix(shade, cloudLit * 1.08, lit) + cloudLit * (pow(sd, 8.0) * 0.5 + rim * 1.4) * (1.0 - night);
+          col = mix(col, cc, dens); a = max(a, dens);
         }
         gl_FragColor = vec4(col, a);
         #include <tonemapping_fragment>
@@ -2978,7 +2986,7 @@ function warehouse(x, z, col, label) {
   K.plane('sign', 0, 5.8, 0.06, 5, 0.9, 0xffffff, { uvr: uv });
 }
 function fishingBoat(x, z, ry) {
-  if (MODELS.boat) { const M = MODELS.boat; const g = new THREE.Mesh(M.geo, M.mat); g.castShadow = true; g.receiveShadow = true; g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g); return { g, x, z, ry, ph: R(0, TAU), sink: 0.75 }; }
+  if (MODELS.boat) { const M = MODELS.boat; if (!M.toon) M.toon = animeToon(M.mat, false); const g = new THREE.Mesh(M.geo, M.toon); addOutline(g, 0.02); g.castShadow = true; g.receiveShadow = true; g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g); return { g, x, z, ry, ph: R(0, TAU), sink: 0.75 }; }
   const g = buildLocal(() => {
     const K = new Kit(0, 0, 0, 0);
     const hull = new THREE.Shape(); hull.moveTo(-4, 1.4); hull.lineTo(4.6, 1.6); hull.quadraticCurveTo(4.2, 0.2, 2.5, -0.4); hull.lineTo(-3.6, -0.4); hull.lineTo(-4, 1.4);
@@ -3630,10 +3638,22 @@ function rigModel(name, root) {
   for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < H * 0.035) { toe += P.getZ(i); tn++; } else if (y > H * 0.12 && y < H * 0.22) { shin += P.getZ(i); sn++; } }
   if (tn && sn && toe / tn < shin / sn) geo.rotateY(Math.PI);
   // 关键高度
-  const hipY = H * 0.52, kneeY = H * 0.28, neckY = H * 0.845;
+  const hipY = H * 0.52, kneeY = H * 0.28; let neckY = H * 0.845;
   let shoulderX = 0, handX = 0, armYs = 0, armN = 0, legX = 0, legN = 0;
-  for (let i = 0; i < P.count; i++) { const x = Math.abs(P.getX(i)), y = P.getY(i); if (y > H * 0.6 && y < H * 0.7) shoulderX = Math.max(shoulderX, x); if (y > H * 0.55) handX = Math.max(handX, x); }
-  shoulderX = Math.max(shoulderX * 1.02, H * 0.11);
+  for (let i = 0; i < P.count; i++) { const x = Math.abs(P.getX(i)), y = P.getY(i); if (y > H * 0.53 && y < H * 0.63) shoulderX = Math.max(shoulderX, x); if (y > H * 0.55) handX = Math.max(handX, x); }
+  shoulderX = clamp(shoulderX * 1.05, H * 0.1, H * 0.14);
+  // 腋下：从躯干向外扫描，手臂区域的最低点明显高于胸腰
+  { const NB = 48, x0 = H * 0.04, x1 = Math.max(handX, x0 + 0.1), mn = new Float32Array(NB).fill(9);
+    let hy = 0, hn = 0; for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (Math.abs(P.getX(i)) > handX * 0.8 && y > H * 0.55) { hy += y; hn++; } }
+    const yLo = Math.max(H * 0.5, (hn ? hy / hn : H * 0.8) - H * 0.15);
+    for (let i = 0; i < P.count; i++) { const y = P.getY(i), x = Math.abs(P.getX(i)); if (y < yLo || y > H * 0.95 || x < x0 || x >= x1) continue; const b = Math.floor((x - x0) / (x1 - x0) * NB); if (y < mn[b]) mn[b] = y; }
+    const ref = mn[Math.floor(NB * 0.66)], thr = (yLo + ref) / 2;
+    if (ref < 9 && ref > yLo + H * 0.03) for (let b = 0; b < NB; b++) if (mn[b] < 9 && mn[b] > thr) { const ax = x0 + b / NB * (x1 - x0); if (ax > H * 0.08 && ax < Math.min(handX * 0.7, H * 0.15)) shoulderX = ax; break; } }
+  // 脖子：肩宽以内轮廓最窄处（动漫角色头身比各不相同）
+  { const NB = 40, y0 = H * (H < 1.4 ? 0.74 : 0.79), y1 = H * 0.93, w = new Float32Array(NB);
+    for (let i = 0; i < P.count; i++) { const y = P.getY(i), x = Math.abs(P.getX(i)); if (y < y0 || y >= y1 || x > shoulderX) continue; const b = Math.floor((y - y0) / (y1 - y0) * NB); if (x > w[b]) w[b] = x; }
+    let bi = -1, bw = 1e9; for (let b = 2; b < NB - 2; b++) if (w[b] > 0 && w[b] < bw) { bw = w[b]; bi = b; }
+    if (bi >= 0) neckY = clamp(y0 + (bi + 0.5) / NB * (y1 - y0), y0 + H * 0.02, H * 0.9); }
   for (let i = 0; i < P.count; i++) { const x = Math.abs(P.getX(i)), y = P.getY(i); if (x > shoulderX * 1.3 && y > H * 0.6) { armYs += y; armN++; } if (y > kneeY && y < hipY - 0.05 * H) { legX += x; legN++; } }
   const armY = armN ? armYs / armN : H * 0.8; legX = legN ? legX / legN : H * 0.06;
   const armLen = Math.max(0.2, handX - shoulderX); const elbowX = shoulderX + armLen * 0.47;
@@ -3680,22 +3700,21 @@ function lookToType(o) {
   return o.gender === 'm' ? 'casualM' : 'casualF';
 }
 function makeModelCharacter(M) {
-  const root = new THREE.Group(); const meshes = [];
-  const add = (geo, parent, pos) => { const m = new THREE.Mesh(geo, M.mat); m.castShadow = true; m.receiveShadow = true; parent.add(m); meshes.push(m); if (pos) m.position.set(...pos); return m; };
-  const grp = (parent, pos) => { const g = new THREE.Group(); g.position.set(...pos); parent.add(g); return g; };
-  const hips = grp(root, [0, M.hipY, 0]); add(M.g.hips, hips);
-  const spine = grp(hips, [0, 0, 0]); add(M.g.torso, spine);
-  const head = grp(spine, [0, M.neckY - M.hipY, 0]); add(M.g.head, head);
-  const arms = [], legs = [];
-  for (const [s, sg] of [['L', 1], ['R', -1]]) {
-    const sh = grp(spine, [sg * M.shoulderX, M.armY - M.hipY, 0]); sh.rotation.z = sg * 0.1; add(M.g['ua' + s], sh);
-    const el = grp(sh, [0, -(M.elbowX - M.shoulderX), 0]); add(M.g['fa' + s], el);
-    arms.push({ sh, el, s: sg });
-    const hip = grp(hips, [sg * M.legX, 0, 0]); add(M.g['th' + s], hip);
-    const kn = grp(hip, [0, M.kneeY - M.hipY, 0]); add(M.g['sh' + s], kn);
-    legs.push({ hip, kn, s: sg });
+  if (!M.skinGeo) { M.skinGeo = buildSkinGeo(M); M.toon = animeToon(M.mat, true); M.toonStatic = animeToon(M.mat, false); M.line = animeOutline(0.0075, true); }
+  const root = new THREE.Group();
+  const bone = (parent, pos) => { const b = new THREE.Bone(); b.position.set(...pos); if (parent) parent.add(b); return b; };
+  const hips = bone(null, [0, M.hipY, 0]); const spine = bone(hips, [0, 0, 0]); const head = bone(spine, [0, M.neckY - M.hipY, 0]);
+  const bones = [hips, spine, head]; const arms = [], legs = [];
+  for (const sg of [1, -1]) {
+    const sh = bone(spine, [sg * M.shoulderX, M.armY - M.hipY, 0]); const el = bone(sh, [0, -(M.elbowX - M.shoulderX), 0]);
+    const hip = bone(hips, [sg * M.legX, 0, 0]); const kn = bone(hip, [0, M.kneeY - M.hipY, 0]);
+    bones.push(sh, el, hip, kn); arms.push({ sh, el, s: sg }); legs.push({ hip, kn, s: sg });
   }
-  const c = { root, hips, spine, head, arms, legs, tails: [], face: null, ftex: { offset: { x: 0 } }, meshes, S: 1, phase: R(0, TAU), blinkT: 3, blink: 0, hipY: M.hipY, legL: M.hipY / 2, look: 0, lookT: R(2, 6), headYaw: 0, o: {}, bike: null, model: M.name };
+  const mesh = new THREE.SkinnedMesh(M.skinGeo, M.toon); mesh.castShadow = true; mesh.receiveShadow = true; mesh.add(hips); root.add(mesh);
+  root.updateMatrixWorld(true); const skel = new THREE.Skeleton(bones); mesh.bind(skel);
+  const line = new THREE.SkinnedMesh(M.skinGeo, M.line); line.bind(skel, mesh.bindMatrix); line.castShadow = false; root.add(line);
+  for (const a of arms) a.sh.rotation.z = a.s * 0.1;
+  const c = { root, hips, spine, head, arms, legs, tails: [], face: null, ftex: { offset: { x: 0 } }, meshes: [mesh], S: 1, phase: R(0, TAU), blinkT: 3, blink: 0, hipY: M.hipY, legL: M.hipY / 2, look: 0, lookT: R(2, 6), headYaw: 0, o: {}, bike: null, model: M.name };
   CHARS.push(c); return c;
 }
 // 头像：用主渲染器把模型头肩渲染到画布（按模型缓存）
@@ -3704,7 +3723,7 @@ function charPortrait(c) {
   if (!c.model) return { img: c.ftex.image, sx: 30, sy: 60, sw: 196, sh: 196, proc: true };
   const M = CHAR_MODELS[c.model]; if (M.portrait) return M.portrait;
   const S = 256, sc = new THREE.Scene();
-  const add = (g, y) => { const m = new THREE.Mesh(g, M.mat); m.position.y = y; sc.add(m); };
+  const add = (g, y) => { const m = new THREE.Mesh(g, M.toonStatic || M.mat); m.position.y = y; sc.add(m); const o = new THREE.Mesh(g, animeOutline(0.004, false)); o.position.y = y; sc.add(o); };
   add(M.g.head, M.neckY); add(M.g.torso, M.hipY);
   sc.add(new THREE.HemisphereLight(0xfff4e8, 0x6a5a50, 1.3)); const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(0.6, 1.2, 1.5); sc.add(dl);
   const headTop = M.H, cy = (M.neckY + headTop) / 2 - 0.02;
@@ -3718,6 +3737,72 @@ function charPortrait(c) {
   for (let y = 0; y < S; y++) id.data.set(px.subarray((S - 1 - y) * S * 4, (S - y) * S * 4), y * S * 4);
   g.putImageData(id, 0, 0);
   return (M.portrait = { img: cv, sx: 0, sy: 0, sw: S, sh: S });
+}
+
+// ---- 08b_anime.js ----
+/* ---------------- 动漫渲染：赛璐璐着色 + 描边 ---------------- */
+// 两阶色：受光面 / 阴影面（阴影由天空半球光补成偏蓝紫的冷色，接近新海诚、京阿尼的上色方式）
+const ANIME_GRAD = (() => { const d = new Uint8Array([150, 150, 150, 255, 150, 150, 150, 255, 236, 236, 236, 255, 255, 255, 255, 255]); const t = new THREE.DataTexture(d, 4, 1, THREE.RGBAFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t; })();
+const ANIME_LINE = lin(0x2b2236);
+const ANIME_MATS = [];
+// 平涂底色补光：白天较强，夜里减弱（避免角色在夜里自发光）
+function animeUpdate(night) { const k = lerp(0.3, 0.05, night); for (const m of ANIME_MATS) m.emissive.setScalar(k); }
+function animeToon(src, skinning) {
+  const m = new THREE.MeshToonMaterial({ map: src && src.map || null, color: src && src.color ? src.color.clone() : new THREE.Color(1, 1, 1), gradientMap: ANIME_GRAD, skinning: !!skinning });
+  if (m.map) { m.map.anisotropy = Math.max(m.map.anisotropy || 1, 4); m.emissiveMap = m.map; }
+  m.emissive.setScalar(0.3); ANIME_MATS.push(m);
+  return m;
+}
+// 背面外扩描边（width 以米计，随距离略加粗，保证远处仍可见）
+function animeOutline(width, skinning) {
+  const m = new THREE.MeshBasicMaterial({ color: ANIME_LINE, side: THREE.BackSide, skinning: !!skinning });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.outlineW = { value: width };
+    sh.vertexShader = 'uniform float outlineW;\n' + sh.vertexShader
+      .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position);')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        { vec4 c0 = modelViewMatrix * vec4(transformed, 1.0); float k = outlineW * clamp(-c0.z * 0.12, 1.0, 3.0);
+          vec3 on = normal;
+          #ifdef USE_SKINNING
+            mat4 sm = bindMatrixInverse * (skinWeight.x * boneMatX + skinWeight.y * boneMatY + skinWeight.z * boneMatZ + skinWeight.w * boneMatW) * bindMatrix; on = (sm * vec4(normal, 0.0)).xyz;
+          #endif
+          vec3 n = normalize(normalMatrix * on); mvPosition = c0 + vec4(n * k, 0.0); gl_Position = projectionMatrix * mvPosition; }`);
+  };
+  return m;
+}
+// 给普通模型加描边（与原网格共享几何）
+function addOutline(mesh, width) {
+  const o = new THREE.Mesh(mesh.geometry, animeOutline(width, false)); o.castShadow = false; o.receiveShadow = false; o.matrixAutoUpdate = false; mesh.add(o); return o;
+}
+
+/* 把切好的身体部件合成一个蒙皮网格：部件 → 骨骼一一对应，动画仍沿用 poseCharacter */
+const SKIN_PARTS = ['hips', 'torso', 'head', 'uaL', 'faL', 'thL', 'shL', 'uaR', 'faR', 'thR', 'shR'];
+function buildSkinGeo(M) {
+  const off = (p) => {
+    const sg = p.endsWith('L') ? 1 : -1, k = p.slice(0, 2);
+    if (p === 'hips' || p === 'torso') return [0, M.hipY, 0]; if (p === 'head') return [0, M.neckY, 0];
+    if (k === 'ua') return [sg * M.shoulderX, M.armY, 0]; if (k === 'fa') return [sg * M.shoulderX, M.armY - (M.elbowX - M.shoulderX), 0];
+    if (k === 'th') return [sg * M.legX, M.hipY, 0]; return [sg * M.legX, M.kneeY, 0];
+  };
+  let n = 0; for (const p of SKIN_PARTS) n += M.g[p].attributes.position.count;
+  const hasUV = !!M.g.torso.attributes.uv;
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = hasUV ? new Float32Array(n * 2) : null, si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
+  let o = 0;
+  SKIN_PARTS.forEach((p, bi) => {
+    const g = M.g[p], P = g.attributes.position, Nn = g.attributes.normal, U = g.attributes.uv, d = off(p);
+    for (let i = 0; i < P.count; i++, o++) {
+      pos[o * 3] = P.getX(i) + d[0]; pos[o * 3 + 1] = P.getY(i) + d[1]; pos[o * 3 + 2] = P.getZ(i) + d[2];
+      if (Nn) { nor[o * 3] = Nn.getX(i); nor[o * 3 + 1] = Nn.getY(i); nor[o * 3 + 2] = Nn.getZ(i); }
+      if (uv && U) { uv[o * 2] = U.getX(i); uv[o * 2 + 1] = U.getY(i); }
+      si[o * 4] = bi; sw[o * 4] = 1;
+    }
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  if (uv) geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  geo.computeBoundingSphere(); geo.boundingSphere.radius += 0.6;
+  return geo;
 }
 
 // ---- 09_npcs.js ----
@@ -4096,8 +4181,9 @@ const _hl = new THREE.SpriteMaterial({ map: TEX_HALO, color: 0xfff2d8, transpare
 const _tl = new THREE.SpriteMaterial({ map: TEX_HALO, color: 0xff3020, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
 function spawnVehicle(type, x, z, yaw, o = {}) {
   const M = MODELS[type]; if (!M) return null; const T = VEH_TYPES[type];
-  const g = new THREE.Group(); const body = new THREE.Mesh(M.geo, M.mat); body.castShadow = true; body.receiveShadow = true; g.add(body);
-  const wheels = M.wheels.map(w => { const m = new THREE.Mesh(w.geo, M.mat); m.position.set(...w.pos); m.castShadow = true; const piv = new THREE.Group(); piv.position.copy(m.position); m.position.set(0, 0, 0); piv.add(m); g.add(piv); return { piv, m, front: w.front }; });
+  if (!M.toon) M.toon = animeToon(M.mat, false);
+  const g = new THREE.Group(); const body = new THREE.Mesh(M.geo, M.toon); body.castShadow = true; body.receiveShadow = true; g.add(body); addOutline(body, 0.014);
+  const wheels = M.wheels.map(w => { const m = new THREE.Mesh(w.geo, M.toon); addOutline(m, 0.01); m.position.set(...w.pos); m.castShadow = true; const piv = new THREE.Group(); piv.position.copy(m.position); m.position.set(0, 0, 0); piv.add(m); g.add(piv); return { piv, m, front: w.front }; });
   const lights = [];
   if (!T.bike && type !== 'boat') for (const s of [-1, 1]) {
     const h = new THREE.Sprite(_hl); h.scale.setScalar(1.4); h.position.set(s * M.halfW * 0.7, M.H * 0.42, M.L / 2 + 0.05); g.add(h);
@@ -4269,8 +4355,8 @@ const KEYS_T = [
   [5.8, 0xffb080, 0.9, 0x8a90b0, 0x4a3c3c, 0.35, 0xd8b0a0, 0.0014, 0xffc8b0, 0x7a6a88, 0.3, 0.85, 7],
   [7.5, 0xfff0dc, 2.4, 0xbcd4f0, 0x6a6458, 0.38, 0xa9c2d8, 0.0011, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
   [15, 0xfff4e6, 2.7, 0xbcd4f0, 0x6a6458, 0.38, 0xaec6dc, 0.0009, 0xffffff, 0x9aa4b8, 0, 0.85, 5],
-  [17.2, 0xffcf98, 2.3, 0xc0b8e0, 0x6a5a50, 0.36, 0xe6ceba, 0.0012, 0xfff0d8, 0xb8a0b0, 0, 0.88, 6],
-  [18.3, 0xff8a50, 1.3, 0xa890c8, 0x504048, 0.34, 0xd89a84, 0.0013, 0xffb080, 0x806078, 0.2, 0.95, 9],
+  [17.2, 0xffcf98, 2.3, 0xc0b8e0, 0x6a5a50, 0.36, 0xe6ceba, 0.0012, 0xfff0d8, 0xa894b8, 0, 0.88, 6],
+  [18.3, 0xff8a50, 1.3, 0xa890c8, 0x504048, 0.34, 0xd89a84, 0.0013, 0xffb078, 0x6e5488, 0.2, 0.95, 9],
   [19.2, 0xb0a0d0, 0.5, 0x5a5a90, 0x2a2438, 0.45, 0x4a4a72, 0.0014, 0x9888b0, 0x3a3a60, 0.7, 0.95, 6],
   [20.5, 0x9fb4e0, 0.5, 0x405890, 0x161620, 0.55, 0x141e32, 0.0015, 0x323c5a, 0x141826, 1, 1.0, 4],
   [24, 0x9fb4e0, 0.5, 0x405890, 0x161620, 0.55, 0x101a2c, 0.0015, 0x2a3450, 0x10141f, 1, 1.0, 4],
@@ -5070,8 +5156,13 @@ const GradeShader = {
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `uniform sampler2D tDiffuse; uniform float night, vig; varying vec2 vUv;
     void main(){ vec4 c = texture2D(tDiffuse, vUv); vec3 col = c.rgb;
-      float l = dot(col, vec3(0.299, 0.587, 0.114)); col = mix(vec3(l), col, 1.06);
-      col = mix(col, col * vec3(0.92, 0.97, 1.08), night * 0.5);
+      float l = dot(col, vec3(0.299, 0.587, 0.114));
+      // 动漫调色：更鲜艳；暗部偏蓝紫、亮部偏暖，整体略提亮暗部（赛璐璐动画的通透感）
+      col = mix(vec3(l), col, 1.28 - night * 0.12);
+      float sh = 1.0 - smoothstep(0.0, 0.45, l), hi = smoothstep(0.55, 1.0, l);
+      col += vec3(0.010, 0.016, 0.045) * sh * (1.0 - night * 0.5);
+      col *= mix(vec3(1.0), vec3(1.04, 1.01, 0.95), hi * (1.0 - night));
+      col = mix(col, col * vec3(0.9, 0.97, 1.1), night * 0.5);
       vec2 d = vUv - 0.5; col *= 1.0 - dot(d, d) * vig * 1.6;
       gl_FragColor = vec4(col, 1.0);
       #include <encodings_fragment>
@@ -5090,7 +5181,7 @@ function initPost() {
 }
 function renderFrame() {
   if (composer && Q.bloom) {
-    bloomPass.strength = lerp(0.22, 0.9, NIGHT.v); bloomPass.threshold = lerp(0.92, 0.72, NIGHT.v); composer.grade.uniforms.night.value = NIGHT.v;
+    bloomPass.strength = lerp(0.34, 0.95, NIGHT.v); bloomPass.threshold = lerp(0.86, 0.7, NIGHT.v); composer.grade.uniforms.night.value = NIGHT.v;
     composer.render();
   } else renderer.render(scene, camera);
 }
@@ -5109,7 +5200,7 @@ function frame(now) {
   }
   const hour = st.min / 60;
   applyTimeOfDay(hour);
-  SKY_U.time.value = T;
+  SKY_U.time.value = T; animeUpdate(NIGHT.v);
   if (GAME.started) {
     if (DRIVE.v) { if (!UI.modalOpen()) updateDriving(dt, T); }
     else if (!UI.modalOpen() && !UI.dialogOpen()) updatePlayer(dt, T);

@@ -400,10 +400,22 @@ function rigModel(name, root) {
   for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < H * 0.035) { toe += P.getZ(i); tn++; } else if (y > H * 0.12 && y < H * 0.22) { shin += P.getZ(i); sn++; } }
   if (tn && sn && toe / tn < shin / sn) geo.rotateY(Math.PI);
   // 关键高度
-  const hipY = H * 0.52, kneeY = H * 0.28, neckY = H * 0.845;
+  const hipY = H * 0.52, kneeY = H * 0.28; let neckY = H * 0.845;
   let shoulderX = 0, handX = 0, armYs = 0, armN = 0, legX = 0, legN = 0;
-  for (let i = 0; i < P.count; i++) { const x = Math.abs(P.getX(i)), y = P.getY(i); if (y > H * 0.6 && y < H * 0.7) shoulderX = Math.max(shoulderX, x); if (y > H * 0.55) handX = Math.max(handX, x); }
-  shoulderX = Math.max(shoulderX * 1.02, H * 0.11);
+  for (let i = 0; i < P.count; i++) { const x = Math.abs(P.getX(i)), y = P.getY(i); if (y > H * 0.53 && y < H * 0.63) shoulderX = Math.max(shoulderX, x); if (y > H * 0.55) handX = Math.max(handX, x); }
+  shoulderX = clamp(shoulderX * 1.05, H * 0.1, H * 0.14);
+  // 腋下：从躯干向外扫描，手臂区域的最低点明显高于胸腰
+  { const NB = 48, x0 = H * 0.04, x1 = Math.max(handX, x0 + 0.1), mn = new Float32Array(NB).fill(9);
+    let hy = 0, hn = 0; for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (Math.abs(P.getX(i)) > handX * 0.8 && y > H * 0.55) { hy += y; hn++; } }
+    const yLo = Math.max(H * 0.5, (hn ? hy / hn : H * 0.8) - H * 0.15);
+    for (let i = 0; i < P.count; i++) { const y = P.getY(i), x = Math.abs(P.getX(i)); if (y < yLo || y > H * 0.95 || x < x0 || x >= x1) continue; const b = Math.floor((x - x0) / (x1 - x0) * NB); if (y < mn[b]) mn[b] = y; }
+    const ref = mn[Math.floor(NB * 0.66)], thr = (yLo + ref) / 2;
+    if (ref < 9 && ref > yLo + H * 0.03) for (let b = 0; b < NB; b++) if (mn[b] < 9 && mn[b] > thr) { const ax = x0 + b / NB * (x1 - x0); if (ax > H * 0.08 && ax < Math.min(handX * 0.7, H * 0.15)) shoulderX = ax; break; } }
+  // 脖子：肩宽以内轮廓最窄处（动漫角色头身比各不相同）
+  { const NB = 40, y0 = H * (H < 1.4 ? 0.74 : 0.79), y1 = H * 0.93, w = new Float32Array(NB);
+    for (let i = 0; i < P.count; i++) { const y = P.getY(i), x = Math.abs(P.getX(i)); if (y < y0 || y >= y1 || x > shoulderX) continue; const b = Math.floor((y - y0) / (y1 - y0) * NB); if (x > w[b]) w[b] = x; }
+    let bi = -1, bw = 1e9; for (let b = 2; b < NB - 2; b++) if (w[b] > 0 && w[b] < bw) { bw = w[b]; bi = b; }
+    if (bi >= 0) neckY = clamp(y0 + (bi + 0.5) / NB * (y1 - y0), y0 + H * 0.02, H * 0.9); }
   for (let i = 0; i < P.count; i++) { const x = Math.abs(P.getX(i)), y = P.getY(i); if (x > shoulderX * 1.3 && y > H * 0.6) { armYs += y; armN++; } if (y > kneeY && y < hipY - 0.05 * H) { legX += x; legN++; } }
   const armY = armN ? armYs / armN : H * 0.8; legX = legN ? legX / legN : H * 0.06;
   const armLen = Math.max(0.2, handX - shoulderX); const elbowX = shoulderX + armLen * 0.47;
@@ -450,22 +462,21 @@ function lookToType(o) {
   return o.gender === 'm' ? 'casualM' : 'casualF';
 }
 function makeModelCharacter(M) {
-  const root = new THREE.Group(); const meshes = [];
-  const add = (geo, parent, pos) => { const m = new THREE.Mesh(geo, M.mat); m.castShadow = true; m.receiveShadow = true; parent.add(m); meshes.push(m); if (pos) m.position.set(...pos); return m; };
-  const grp = (parent, pos) => { const g = new THREE.Group(); g.position.set(...pos); parent.add(g); return g; };
-  const hips = grp(root, [0, M.hipY, 0]); add(M.g.hips, hips);
-  const spine = grp(hips, [0, 0, 0]); add(M.g.torso, spine);
-  const head = grp(spine, [0, M.neckY - M.hipY, 0]); add(M.g.head, head);
-  const arms = [], legs = [];
-  for (const [s, sg] of [['L', 1], ['R', -1]]) {
-    const sh = grp(spine, [sg * M.shoulderX, M.armY - M.hipY, 0]); sh.rotation.z = sg * 0.1; add(M.g['ua' + s], sh);
-    const el = grp(sh, [0, -(M.elbowX - M.shoulderX), 0]); add(M.g['fa' + s], el);
-    arms.push({ sh, el, s: sg });
-    const hip = grp(hips, [sg * M.legX, 0, 0]); add(M.g['th' + s], hip);
-    const kn = grp(hip, [0, M.kneeY - M.hipY, 0]); add(M.g['sh' + s], kn);
-    legs.push({ hip, kn, s: sg });
+  if (!M.skinGeo) { M.skinGeo = buildSkinGeo(M); M.toon = animeToon(M.mat, true); M.toonStatic = animeToon(M.mat, false); M.line = animeOutline(0.0075, true); }
+  const root = new THREE.Group();
+  const bone = (parent, pos) => { const b = new THREE.Bone(); b.position.set(...pos); if (parent) parent.add(b); return b; };
+  const hips = bone(null, [0, M.hipY, 0]); const spine = bone(hips, [0, 0, 0]); const head = bone(spine, [0, M.neckY - M.hipY, 0]);
+  const bones = [hips, spine, head]; const arms = [], legs = [];
+  for (const sg of [1, -1]) {
+    const sh = bone(spine, [sg * M.shoulderX, M.armY - M.hipY, 0]); const el = bone(sh, [0, -(M.elbowX - M.shoulderX), 0]);
+    const hip = bone(hips, [sg * M.legX, 0, 0]); const kn = bone(hip, [0, M.kneeY - M.hipY, 0]);
+    bones.push(sh, el, hip, kn); arms.push({ sh, el, s: sg }); legs.push({ hip, kn, s: sg });
   }
-  const c = { root, hips, spine, head, arms, legs, tails: [], face: null, ftex: { offset: { x: 0 } }, meshes, S: 1, phase: R(0, TAU), blinkT: 3, blink: 0, hipY: M.hipY, legL: M.hipY / 2, look: 0, lookT: R(2, 6), headYaw: 0, o: {}, bike: null, model: M.name };
+  const mesh = new THREE.SkinnedMesh(M.skinGeo, M.toon); mesh.castShadow = true; mesh.receiveShadow = true; mesh.add(hips); root.add(mesh);
+  root.updateMatrixWorld(true); const skel = new THREE.Skeleton(bones); mesh.bind(skel);
+  const line = new THREE.SkinnedMesh(M.skinGeo, M.line); line.bind(skel, mesh.bindMatrix); line.castShadow = false; root.add(line);
+  for (const a of arms) a.sh.rotation.z = a.s * 0.1;
+  const c = { root, hips, spine, head, arms, legs, tails: [], face: null, ftex: { offset: { x: 0 } }, meshes: [mesh], S: 1, phase: R(0, TAU), blinkT: 3, blink: 0, hipY: M.hipY, legL: M.hipY / 2, look: 0, lookT: R(2, 6), headYaw: 0, o: {}, bike: null, model: M.name };
   CHARS.push(c); return c;
 }
 // 头像：用主渲染器把模型头肩渲染到画布（按模型缓存）
@@ -474,7 +485,7 @@ function charPortrait(c) {
   if (!c.model) return { img: c.ftex.image, sx: 30, sy: 60, sw: 196, sh: 196, proc: true };
   const M = CHAR_MODELS[c.model]; if (M.portrait) return M.portrait;
   const S = 256, sc = new THREE.Scene();
-  const add = (g, y) => { const m = new THREE.Mesh(g, M.mat); m.position.y = y; sc.add(m); };
+  const add = (g, y) => { const m = new THREE.Mesh(g, M.toonStatic || M.mat); m.position.y = y; sc.add(m); const o = new THREE.Mesh(g, animeOutline(0.004, false)); o.position.y = y; sc.add(o); };
   add(M.g.head, M.neckY); add(M.g.torso, M.hipY);
   sc.add(new THREE.HemisphereLight(0xfff4e8, 0x6a5a50, 1.3)); const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(0.6, 1.2, 1.5); sc.add(dl);
   const headTop = M.H, cy = (M.neckY + headTop) / 2 - 0.02;

@@ -294,7 +294,7 @@ function warehouse(x, z, col, label) {
   K.plane('sign', 0, 5.8, 0.06, 5, 0.9, 0xffffff, { uvr: uv });
 }
 function fishingBoat(x, z, ry) {
-  if (MODELS.boat) { const M = MODELS.boat; const g = new THREE.Mesh(M.geo, M.mat); g.castShadow = true; g.receiveShadow = true; g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g); return { g, x, z, ry, ph: R(0, TAU), sink: 0.75 }; }
+  if (MODELS.boat) { const M = MODELS.boat; if (!M.toon) M.toon = animeToon(M.mat, false); const g = new THREE.Mesh(M.geo, M.toon); addOutline(g, 0.02); g.castShadow = true; g.receiveShadow = true; g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g); return { g, x, z, ry, ph: R(0, TAU), sink: 0.75 }; }
   const g = buildLocal(() => {
     const K = new Kit(0, 0, 0, 0);
     const hull = new THREE.Shape(); hull.moveTo(-4, 1.4); hull.lineTo(4.6, 1.6); hull.quadraticCurveTo(4.2, 0.2, 2.5, -0.4); hull.lineTo(-3.6, -0.4); hull.lineTo(-4, 1.4);

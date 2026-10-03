@@ -84,8 +84,9 @@ const _hl = new THREE.SpriteMaterial({ map: TEX_HALO, color: 0xfff2d8, transpare
 const _tl = new THREE.SpriteMaterial({ map: TEX_HALO, color: 0xff3020, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
 function spawnVehicle(type, x, z, yaw, o = {}) {
   const M = MODELS[type]; if (!M) return null; const T = VEH_TYPES[type];
-  const g = new THREE.Group(); const body = new THREE.Mesh(M.geo, M.mat); body.castShadow = true; body.receiveShadow = true; g.add(body);
-  const wheels = M.wheels.map(w => { const m = new THREE.Mesh(w.geo, M.mat); m.position.set(...w.pos); m.castShadow = true; const piv = new THREE.Group(); piv.position.copy(m.position); m.position.set(0, 0, 0); piv.add(m); g.add(piv); return { piv, m, front: w.front }; });
+  if (!M.toon) M.toon = animeToon(M.mat, false);
+  const g = new THREE.Group(); const body = new THREE.Mesh(M.geo, M.toon); body.castShadow = true; body.receiveShadow = true; g.add(body); addOutline(body, 0.014);
+  const wheels = M.wheels.map(w => { const m = new THREE.Mesh(w.geo, M.toon); addOutline(m, 0.01); m.position.set(...w.pos); m.castShadow = true; const piv = new THREE.Group(); piv.position.copy(m.position); m.position.set(0, 0, 0); piv.add(m); g.add(piv); return { piv, m, front: w.front }; });
   const lights = [];
   if (!T.bike && type !== 'boat') for (const s of [-1, 1]) {
     const h = new THREE.Sprite(_hl); h.scale.setScalar(1.4); h.position.set(s * M.halfW * 0.7, M.H * 0.42, M.L / 2 + 0.05); g.add(h);
