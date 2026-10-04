@@ -218,7 +218,7 @@ function buildShop(d) {
       const x = -w / 2 + (i + 0.5) * (w / nWin);
       if (d.vsign && Math.abs(x - (hw - 0.5)) < 1.0) continue;
       windowAt(K, x, y, 0.0, 1.45, 1.45);
-      if (!hasBal && chance(0.35)) acUnit(K, x + 0.3, y - 1.15, 0.2);
+      if (!hasBal && f > 1 && chance(0.35)) acUnit(K, x + 0.3, y - 1.15, 0.2); // f=1 层空调会压到招牌带，只许上层放
     }
     if (hasBal) { balcony(K, 0, F0 + (f - 1) * FU + 0.2, 0, w - 0.6); acUnit(K, -w / 2 + 0.8, F0 + (f - 1) * FU + 0.62, 0.45); if (chance(0.8)) laundry(K, 0.4, F0 + (f - 1) * FU + 2.1, 0.55, w - 2.2); }
   }

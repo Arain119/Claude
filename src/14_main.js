@@ -6,7 +6,10 @@ function progress(p, text) { $('loadBar').style.width = Math.round(p * 100) + '%
 async function loadFonts() {
   if (!document.fonts || !document.fonts.load) return;
   const fams = ['400 32px "ZCOOL XiaoWei"', '900 32px "Noto Sans SC"', '700 32px "Noto Sans SC"', '900 32px "Noto Serif SC"', '400 32px "Ma Shan Zheng"', '400 32px "ZCOOL KuaiLe"'];
-  const sample = '星见岛樱丘町潮汐拉面小满面包房灯塔便利店邮局书店花店咖啡和菓子乌冬唱片洗衣五金钟表照相理发单车药局蔬果文具居酒屋渔火止まれ狐守社站学园桥川石油观景台';
+  // 预热样本：扫描全部脚本文本里的中日字符，任何 canvas 文案都能拿到字形（防止生僻字烧成豆腐块）
+  let sample = '';
+  for (const s of document.scripts) { const t = s.textContent || ''; for (const m of t.match(/[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]+/g) || []) sample += m; }
+  sample = [...new Set(sample)].join('') || '星见岛樱丘町潮汐拉面小满面包房灯塔便利店邮局书店花店咖啡和菓子乌冬唱片洗衣五金钟表照相理发单车药局蔬果文具居酒屋渔火止まれ狐守社站学园桥川石油观景台';
   await Promise.race([Promise.all(fams.map(f => document.fonts.load(f, sample).catch(() => { }))), new Promise(r => setTimeout(r, 3500))]);
 }
 function scatterNature() {
