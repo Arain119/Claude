@@ -267,7 +267,7 @@ function buildGroundShadows() {
       sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nvec2 gshOff = transformed.xz - aC; transformed.xz += uDir * (uLen - 1.0) * (dot(gshOff, uDir) + 0.45) * aS;`);
   };
   const m = new THREE.Mesh(g, mat);
-  m.renderOrder = 2; m.frustumCulled = false; scene.add(m);
+  m.renderOrder = 2; m.frustumCulled = false; scene.add(m); GSH.mat = mat;
 }
 /* --- 墙面过渡贴片（潮气带/檐口阴带/窗下水痕） ---
    贴到墙面上的竖向渐变脏贴，消除「盒子直接对接」的拼接感。
