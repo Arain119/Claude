@@ -123,6 +123,7 @@ const TEX_PINE_MASS = paintMass('#4c6658', (g, draw) => { g.lineCap = 'round'; f
 const BODY_S = foliageMat(TEX_SAK_MASS, { body: true }), BODY_L = foliageMat(TEX_LEAF_MASS, { body: true }), BODY_P = foliageMat(TEX_PINE_MASS, { body: true });
 regMat('leafBodyS', BODY_S.m); regMat('leafBodyL', BODY_L.m); regMat('leafBodyP', BODY_P.m);
 regMat('petalGround', new THREE.MeshStandardMaterial({ map: TEX_PETALS_GROUND, transparent: true, alphaTest: 0.35, depthWrite: false, roughness: 1, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), { cast: false });
+regMat('litter', new THREE.MeshStandardMaterial({ map: TEX.litter, transparent: true, alphaTest: 0.35, depthWrite: false, roughness: 1, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), { cast: false });
 
 /* --- 卡片累加器（带 sway 属性与乱序索引，便于按画质截断） --- */
 const CARD_BUCKETS = new Map();
@@ -283,12 +284,13 @@ function sakuraTree(x, z, s = 1, o = {}) {
   const tint = R(-0.02, 0.02); const base = SAK_BASE.clone().offsetHSL(tint, 0, 0);
   const C = canopy(kit, x, y, z, clumps, { kind: 'sakura', base, lite: SAK_LITE, shade: SAK_SHADE, card: 0.4 * Math.sqrt(s) * (o.cardK || 1), dens: 2.1 * (o.cards || 1400) / 1400, crop: true, body: 0.74, bodyMin: 0.7, inner: 0.3, local: 0.4, sway: 0.7 });
   let crown = C.ext;
-  // 落花地毯
+  // 落花地毯：树冠下密、向外渐稀
   const rr = crown + 1.2 * s;
-  for (let i = 0; i < Math.round(10 + rr * rr * 0.25); i++) {
-    const a = R(0, TAU), d = Math.sqrt(R()) * rr; const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
+  for (let i = 0; i < Math.round(18 + rr * rr * 0.5); i++) {
+    const a = R(0, TAU), d = Math.pow(R(), 0.62) * rr; const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
     const gy = o.flatY != null ? o.flatY : groundAt(px, pz, y + 2);
-    WK.plane('petalGround', px, gy + 0.035, pz, R(1.4, 2.4), R(1.4, 2.4), 0xffffff, { rx: -Math.PI / 2, ry: R(0, TAU), uvr: [R(0, 0.5), R(0, 0.5), R(0.5, 1), R(0.5, 1)] });
+    const sz = R(0.9, 2.2);
+    WK.plane('petalGround', px, gy + 0.035, pz, sz, sz, 0xffffff, { rx: -Math.PI / 2, ry: R(0, TAU), uvr: [R(0, 0.5), R(0, 0.5), R(0.5, 1), R(0.5, 1)] });
   }
   TREES.push({ x, z, r: crown + 0.8 * s, kind: 'sakura', y });
   return { crown, cc: [x + C.cx, y + C.cy, z + C.cz] };
@@ -443,6 +445,14 @@ function buildForest() {
     const kind = coast ? 'pine' : (h > 16 ? (chance(0.6) ? 'sugi' : 'broad') : (chance(0.25) ? 'sugi' : 'broad'));
     const sc = R(0.8, 1.2) * (coast ? R(0.85, 1.1) : 1); const arr = lists[kind]; arr[RI(0, arr.length - 1)].push([x, h - 0.2, z, R(0, TAU), sc]);
     addCollider(x, z, (kind === 'sugi' ? 0.3 : 0.24) * sc, (kind === 'sugi' ? 0.3 : 0.24) * sc, 0, h - 0.5, h + 4, { round: true, noFloor: true });
+    // 林下落叶层：每棵树脚下一两片枯叶碎屑
+    if (!coast && chance(0.8)) {
+      const la = R(0, TAU), ld = R(0.6, 2.6) * sc;
+      const lx = x + Math.cos(la) * ld, lz = z + Math.sin(la) * ld;
+      _cB.setHSL(R(0.07, 0.12), R(0.35, 0.55), R(0.5, 0.7));
+      const lsz = R(1.6, 3.4);
+      WK.plane('litter', lx, terrainH(lx, lz) + 0.035, lz, lsz, lsz, _cB, { rx: -Math.PI / 2, ry: R(0, TAU) });
+    }
     placed++;
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);

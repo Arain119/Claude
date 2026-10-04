@@ -46,10 +46,31 @@ const TEX = {
 };
 const N = (t) => t._entry && t._entry.normal;
 TEX.tactile = canvasTex(128, 128, (g, w, h) => {
-  g.fillStyle = '#e9b800'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#d9a716'; g.fillRect(0, 0, w, h);
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 0, w, 2); g.fillRect(0, 0, 2, h);
-  for (let i = 0; i < 4; i++) { g.fillStyle = '#ffd21f'; g.fillRect(i * 32 + 12, 8, 8, h - 16); g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(i * 32 + 20, 8, 2, h - 16); }
+  for (let i = 0; i < 4; i++) { g.fillStyle = '#efc53c'; g.fillRect(i * 32 + 12, 8, 8, h - 16); g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(i * 32 + 20, 8, 2, h - 16); }
 }, { repeat: true });
+/* 车牌图集：8 张小车号「星見 NN-NN」 */
+TEX.plate = canvasTex(512, 64, (g, w, h) => {
+  for (let i = 0; i < 8; i++) {
+    const x = i * 64;
+    g.fillStyle = '#f2f2ea'; g.fillRect(x + 2, 4, 60, 56);
+    g.fillStyle = '#2f7d3f'; g.fillRect(x + 2, 4, 60, 12);
+    g.fillStyle = '#1a3a1f'; g.font = '700 11px sans-serif'; g.textAlign = 'center'; g.fillText('星見', x + 32, 15);
+    g.font = '900 28px sans-serif'; g.fillStyle = '#222'; g.fillText(String(RI(10, 99)) + '-' + String(RI(10, 99)), x + 32, 48);
+    g.strokeStyle = '#4a7a4f'; g.lineWidth = 2; g.strokeRect(x + 3, 5, 58, 54);
+  }
+});
+/* 林下落叶层：枯叶碎屑图集 */
+TEX.litter = canvasTex(256, 256, (g, w, h) => {
+  g.clearRect(0, 0, w, h);
+  const cols = ['#7a5a30', '#8a6a38', '#6a4a28', '#a07840', '#5d6b35', '#8f7a45'];
+  for (let i = 0; i < 130; i++) {
+    g.fillStyle = pick(cols); const x = R(0, w), y = R(0, h), a = R(0, TAU);
+    g.save(); g.translate(x, y); g.rotate(a);
+    g.beginPath(); g.ellipse(0, 0, R(3, 9), R(1.5, 3.5), 0, 0, TAU); g.fill(); g.restore();
+  }
+});
 const pm = (map, o = {}) => { const { ns = 0.8, ...rest } = o; const m = stdMat(Object.assign({ map, normalScale: new THREE.Vector2(ns, ns) }, rest)); if (N(map)) m.normalMap = N(map); return m; };
 
 regMat('vc', stdMat({ roughness: 0.85 }));

@@ -332,7 +332,7 @@ function buildSea() {
       void main(){
         vec2 duv = (vW.xz - depthO) / depthS + 0.5; float depth = texture2D(depthTex, duv).r * 10.0;
         if (duv.x < 0.0 || duv.x > 1.0 || duv.y < 0.0 || duv.y > 1.0) depth = 10.0;
-        vec3 n = wnorm(vW.xz, time); n = normalize(mix(n, vec3(0.0, 1.0, 0.0), smoothstep(25.0, 350.0, vDist) * 0.93));
+        vec3 n = wnorm(vW.xz, time); n = normalize(mix(n, vec3(0.0, 1.0, 0.0), smoothstep(20.0, 240.0, vDist)));
         vec3 v = normalize(cameraPosition - vW);
         float fr = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
         vec3 r = reflect(-v, n); r.y = abs(r.y);
@@ -403,6 +403,15 @@ function buildFarLand() {
     for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); const a = Math.atan2(z, x); const k = 1 + (fbm(a * 2 + s[0] * 10, y * 0.02, 3) - 0.5) * 0.6; p.setX(i, x * k); p.setZ(i, z * k * 0.7); }
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, farMat); mesh.position.set(Math.cos(s[0]) * s[1], s[2] / 2 - 22, Math.sin(s[0]) * s[1]); mesh.scale.set(1.6, 1, 1); mesh.rotation.y = s[0]; group.add(mesh);
+  }
+  // 第二圈更远更淡的山影：大气透视的层次
+  const farMat2 = new THREE.MeshStandardMaterial({ color: lin(0x74889e), roughness: 1, fog: true });
+  const spots2 = [[0.6, 2600, 150, 520], [1.7, 2400, 110, 430], [2.7, 2750, 190, 560], [3.9, 2500, 130, 480], [5.0, 2650, 160, 500], [6.0, 2350, 100, 380]];
+  for (const s of spots2) {
+    const geo = new THREE.ConeGeometry(s[3], s[2], 32, 6, true); const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); const a = Math.atan2(z, x); const k = 1 + (fbm(a * 2 + s[0] * 7, y * 0.02, 3) - 0.5) * 0.5; p.setX(i, x * k); p.setZ(i, z * k * 0.7); }
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, farMat2); mesh.position.set(Math.cos(s[0]) * s[1], s[2] / 2 - 30, Math.sin(s[0]) * s[1]); mesh.scale.set(1.7, 1, 1); mesh.rotation.y = s[0]; group.add(mesh);
   }
   group.name = 'farland'; scene.add(group);
 }

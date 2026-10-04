@@ -202,6 +202,9 @@ function buildTracks() {
     K.box('concrete', 0, 0.1, 0, 12.5, 0.2, railSep(c.s) + 7, 0xb9b5ad, { wuv: 0.6, solid: { walk: true } });
     for (const sd of [-1, 1]) for (const r of [-0.62, 0.62]) K.box('vcNoShadow', 0, 0.205, sd * railSep(c.s) / 2 + r * 0.9, 12.5, 0.01, 0.12, 0x3a3a3a);
     buildCrossingAt('W', c.x, c.y, c.z, Math.atan2(-p.tz, p.tx), railSep(c.s) / 2 + 4.2, 4.6, c.s);
+    // 公路侧停止线（与 AI 车停靠位一致，靠左车道）
+    { const rp = c.road, tx = rp[3], tz = rp[4], lx = tz, lz = -tx, dd = railSep(c.s) / 2 + 5, cry = Math.atan2(-tz, tx);
+      for (const [sx, sz] of [[c.x - tx * dd + lx * 1.85, c.z - tz * dd + lz * 1.85], [c.x + tx * dd - lx * 1.85, c.z + tz * dd - lz * 1.85]]) WK.box('vcNoShadow', sx, rp[1] + 0.045, sz, 0.5, 0.012, 3.2, 0xf4f4f0, { ry: cry }); }
   }
   // 人行道口：铺板 + 警报器 + 栏杆
   for (const c of RAIL.xings) {

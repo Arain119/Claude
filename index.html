@@ -661,10 +661,31 @@ const TEX = {
 };
 const N = (t) => t._entry && t._entry.normal;
 TEX.tactile = canvasTex(128, 128, (g, w, h) => {
-  g.fillStyle = '#e9b800'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#d9a716'; g.fillRect(0, 0, w, h);
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 0, w, 2); g.fillRect(0, 0, 2, h);
-  for (let i = 0; i < 4; i++) { g.fillStyle = '#ffd21f'; g.fillRect(i * 32 + 12, 8, 8, h - 16); g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(i * 32 + 20, 8, 2, h - 16); }
+  for (let i = 0; i < 4; i++) { g.fillStyle = '#efc53c'; g.fillRect(i * 32 + 12, 8, 8, h - 16); g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(i * 32 + 20, 8, 2, h - 16); }
 }, { repeat: true });
+/* 车牌图集：8 张小车号「星見 NN-NN」 */
+TEX.plate = canvasTex(512, 64, (g, w, h) => {
+  for (let i = 0; i < 8; i++) {
+    const x = i * 64;
+    g.fillStyle = '#f2f2ea'; g.fillRect(x + 2, 4, 60, 56);
+    g.fillStyle = '#2f7d3f'; g.fillRect(x + 2, 4, 60, 12);
+    g.fillStyle = '#1a3a1f'; g.font = '700 11px sans-serif'; g.textAlign = 'center'; g.fillText('星見', x + 32, 15);
+    g.font = '900 28px sans-serif'; g.fillStyle = '#222'; g.fillText(String(RI(10, 99)) + '-' + String(RI(10, 99)), x + 32, 48);
+    g.strokeStyle = '#4a7a4f'; g.lineWidth = 2; g.strokeRect(x + 3, 5, 58, 54);
+  }
+});
+/* 林下落叶层：枯叶碎屑图集 */
+TEX.litter = canvasTex(256, 256, (g, w, h) => {
+  g.clearRect(0, 0, w, h);
+  const cols = ['#7a5a30', '#8a6a38', '#6a4a28', '#a07840', '#5d6b35', '#8f7a45'];
+  for (let i = 0; i < 130; i++) {
+    g.fillStyle = pick(cols); const x = R(0, w), y = R(0, h), a = R(0, TAU);
+    g.save(); g.translate(x, y); g.rotate(a);
+    g.beginPath(); g.ellipse(0, 0, R(3, 9), R(1.5, 3.5), 0, 0, TAU); g.fill(); g.restore();
+  }
+});
 const pm = (map, o = {}) => { const { ns = 0.8, ...rest } = o; const m = stdMat(Object.assign({ map, normalScale: new THREE.Vector2(ns, ns) }, rest)); if (N(map)) m.normalMap = N(map); return m; };
 
 regMat('vc', stdMat({ roughness: 0.85 }));
@@ -1280,7 +1301,7 @@ function buildSea() {
       void main(){
         vec2 duv = (vW.xz - depthO) / depthS + 0.5; float depth = texture2D(depthTex, duv).r * 10.0;
         if (duv.x < 0.0 || duv.x > 1.0 || duv.y < 0.0 || duv.y > 1.0) depth = 10.0;
-        vec3 n = wnorm(vW.xz, time); n = normalize(mix(n, vec3(0.0, 1.0, 0.0), smoothstep(25.0, 350.0, vDist) * 0.93));
+        vec3 n = wnorm(vW.xz, time); n = normalize(mix(n, vec3(0.0, 1.0, 0.0), smoothstep(20.0, 240.0, vDist)));
         vec3 v = normalize(cameraPosition - vW);
         float fr = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
         vec3 r = reflect(-v, n); r.y = abs(r.y);
@@ -1351,6 +1372,15 @@ function buildFarLand() {
     for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); const a = Math.atan2(z, x); const k = 1 + (fbm(a * 2 + s[0] * 10, y * 0.02, 3) - 0.5) * 0.6; p.setX(i, x * k); p.setZ(i, z * k * 0.7); }
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, farMat); mesh.position.set(Math.cos(s[0]) * s[1], s[2] / 2 - 22, Math.sin(s[0]) * s[1]); mesh.scale.set(1.6, 1, 1); mesh.rotation.y = s[0]; group.add(mesh);
+  }
+  // 第二圈更远更淡的山影：大气透视的层次
+  const farMat2 = new THREE.MeshStandardMaterial({ color: lin(0x74889e), roughness: 1, fog: true });
+  const spots2 = [[0.6, 2600, 150, 520], [1.7, 2400, 110, 430], [2.7, 2750, 190, 560], [3.9, 2500, 130, 480], [5.0, 2650, 160, 500], [6.0, 2350, 100, 380]];
+  for (const s of spots2) {
+    const geo = new THREE.ConeGeometry(s[3], s[2], 32, 6, true); const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); const a = Math.atan2(z, x); const k = 1 + (fbm(a * 2 + s[0] * 7, y * 0.02, 3) - 0.5) * 0.5; p.setX(i, x * k); p.setZ(i, z * k * 0.7); }
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, farMat2); mesh.position.set(Math.cos(s[0]) * s[1], s[2] / 2 - 30, Math.sin(s[0]) * s[1]); mesh.scale.set(1.7, 1, 1); mesh.rotation.y = s[0]; group.add(mesh);
   }
   group.name = 'farland'; scene.add(group);
 }
@@ -1720,6 +1750,7 @@ const TEX_PINE_MASS = paintMass('#4c6658', (g, draw) => { g.lineCap = 'round'; f
 const BODY_S = foliageMat(TEX_SAK_MASS, { body: true }), BODY_L = foliageMat(TEX_LEAF_MASS, { body: true }), BODY_P = foliageMat(TEX_PINE_MASS, { body: true });
 regMat('leafBodyS', BODY_S.m); regMat('leafBodyL', BODY_L.m); regMat('leafBodyP', BODY_P.m);
 regMat('petalGround', new THREE.MeshStandardMaterial({ map: TEX_PETALS_GROUND, transparent: true, alphaTest: 0.35, depthWrite: false, roughness: 1, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), { cast: false });
+regMat('litter', new THREE.MeshStandardMaterial({ map: TEX.litter, transparent: true, alphaTest: 0.35, depthWrite: false, roughness: 1, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), { cast: false });
 
 /* --- 卡片累加器（带 sway 属性与乱序索引，便于按画质截断） --- */
 const CARD_BUCKETS = new Map();
@@ -1880,12 +1911,13 @@ function sakuraTree(x, z, s = 1, o = {}) {
   const tint = R(-0.02, 0.02); const base = SAK_BASE.clone().offsetHSL(tint, 0, 0);
   const C = canopy(kit, x, y, z, clumps, { kind: 'sakura', base, lite: SAK_LITE, shade: SAK_SHADE, card: 0.4 * Math.sqrt(s) * (o.cardK || 1), dens: 2.1 * (o.cards || 1400) / 1400, crop: true, body: 0.74, bodyMin: 0.7, inner: 0.3, local: 0.4, sway: 0.7 });
   let crown = C.ext;
-  // 落花地毯
+  // 落花地毯：树冠下密、向外渐稀
   const rr = crown + 1.2 * s;
-  for (let i = 0; i < Math.round(10 + rr * rr * 0.25); i++) {
-    const a = R(0, TAU), d = Math.sqrt(R()) * rr; const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
+  for (let i = 0; i < Math.round(18 + rr * rr * 0.5); i++) {
+    const a = R(0, TAU), d = Math.pow(R(), 0.62) * rr; const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
     const gy = o.flatY != null ? o.flatY : groundAt(px, pz, y + 2);
-    WK.plane('petalGround', px, gy + 0.035, pz, R(1.4, 2.4), R(1.4, 2.4), 0xffffff, { rx: -Math.PI / 2, ry: R(0, TAU), uvr: [R(0, 0.5), R(0, 0.5), R(0.5, 1), R(0.5, 1)] });
+    const sz = R(0.9, 2.2);
+    WK.plane('petalGround', px, gy + 0.035, pz, sz, sz, 0xffffff, { rx: -Math.PI / 2, ry: R(0, TAU), uvr: [R(0, 0.5), R(0, 0.5), R(0.5, 1), R(0.5, 1)] });
   }
   TREES.push({ x, z, r: crown + 0.8 * s, kind: 'sakura', y });
   return { crown, cc: [x + C.cx, y + C.cy, z + C.cz] };
@@ -2040,6 +2072,14 @@ function buildForest() {
     const kind = coast ? 'pine' : (h > 16 ? (chance(0.6) ? 'sugi' : 'broad') : (chance(0.25) ? 'sugi' : 'broad'));
     const sc = R(0.8, 1.2) * (coast ? R(0.85, 1.1) : 1); const arr = lists[kind]; arr[RI(0, arr.length - 1)].push([x, h - 0.2, z, R(0, TAU), sc]);
     addCollider(x, z, (kind === 'sugi' ? 0.3 : 0.24) * sc, (kind === 'sugi' ? 0.3 : 0.24) * sc, 0, h - 0.5, h + 4, { round: true, noFloor: true });
+    // 林下落叶层：每棵树脚下一两片枯叶碎屑
+    if (!coast && chance(0.8)) {
+      const la = R(0, TAU), ld = R(0.6, 2.6) * sc;
+      const lx = x + Math.cos(la) * ld, lz = z + Math.sin(la) * ld;
+      _cB.setHSL(R(0.07, 0.12), R(0.35, 0.55), R(0.5, 0.7));
+      const lsz = R(1.6, 3.4);
+      WK.plane('litter', lx, terrainH(lx, lz) + 0.035, lz, lsz, lsz, _cB, { rx: -Math.PI / 2, ry: R(0, TAU) });
+    }
     placed++;
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
@@ -2776,12 +2816,12 @@ function buildHouse(x, z, ry, o = {}) {
   // 窗
   const nw = Math.max(1, Math.floor(w / 2.6));
   for (let f = 0; f < 2; f++) for (let i = 0; i < nw; i++) {
-    const wx = -w / 2 + (i + 0.5) * w / nw; if (f === 0 && Math.abs(wx - dx) < 1.2) continue;
-    windowAt(K, wx, f * F + 1.5, 0, 1.3, 1.2);
+    const wx = -w / 2 + (i + 0.5) * w / nw + R(-0.25, 0.25); if (f === 0 && Math.abs(wx - dx) < 1.2) continue;
+    windowAt(K, wx, f * F + 1.5 + R(-0.1, 0.1), 0, R(1.05, 1.45), R(1.05, 1.3));
     if (f === 1 && chance(0.3)) acUnit(K, wx + 0.4, F + 0.55, 0.2);
   }
-  for (let f = 0; f < 2; f++) { windowAt(K, -w / 2 - 0.0, f * F + 1.5, -d / 2, 1.0, 1.0, 0xe6e3dc, { ry: -Math.PI / 2 }); windowAt(K, w / 2, f * F + 1.5, -d / 2 + R(-1, 1), 1.0, 1.0, 0xe6e3dc, { ry: Math.PI / 2 }); }
-  for (let i = 0; i < nw; i++) windowAt(K, -w / 2 + (i + 0.5) * w / nw, F + 1.5, -d, 1.2, 1.1, 0xe6e3dc, { ry: Math.PI });
+  for (let f = 0; f < 2; f++) { windowAt(K, -w / 2 - 0.0, f * F + 1.5, -d / 2 + R(-0.8, 0.8), 1.0, 1.0, 0xe6e3dc, { ry: -Math.PI / 2 }); windowAt(K, w / 2, f * F + 1.5, -d / 2 + R(-1, 1), 1.0, 1.0, 0xe6e3dc, { ry: Math.PI / 2 }); }
+  for (let i = 0; i < nw; i++) windowAt(K, -w / 2 + (i + 0.5) * w / nw + R(-0.3, 0.3), F + 1.5 + R(-0.08, 0.08), -d, R(1.0, 1.4), R(1.0, 1.2), 0xe6e3dc, { ry: Math.PI });
   // 二楼阳台
   if (o.balcony !== false && chance(0.6)) { balcony(K, -dx * 0.6, F + 0.05, 0, Math.min(3.4, w - 2.5)); if (chance(0.75)) laundry(K, -dx * 0.6, F + 1.95, 0.5, Math.min(3.0, w - 2.8)); }
   // 院墙与绿篱
@@ -3217,6 +3257,9 @@ function buildTracks() {
     K.box('concrete', 0, 0.1, 0, 12.5, 0.2, railSep(c.s) + 7, 0xb9b5ad, { wuv: 0.6, solid: { walk: true } });
     for (const sd of [-1, 1]) for (const r of [-0.62, 0.62]) K.box('vcNoShadow', 0, 0.205, sd * railSep(c.s) / 2 + r * 0.9, 12.5, 0.01, 0.12, 0x3a3a3a);
     buildCrossingAt('W', c.x, c.y, c.z, Math.atan2(-p.tz, p.tx), railSep(c.s) / 2 + 4.2, 4.6, c.s);
+    // 公路侧停止线（与 AI 车停靠位一致，靠左车道）
+    { const rp = c.road, tx = rp[3], tz = rp[4], lx = tz, lz = -tx, dd = railSep(c.s) / 2 + 5, cry = Math.atan2(-tz, tx);
+      for (const [sx, sz] of [[c.x - tx * dd + lx * 1.85, c.z - tz * dd + lz * 1.85], [c.x + tx * dd - lx * 1.85, c.z + tz * dd - lz * 1.85]]) WK.box('vcNoShadow', sx, rp[1] + 0.045, sz, 0.5, 0.012, 3.2, 0xf4f4f0, { ry: cry }); }
   }
   // 人行道口：铺板 + 警报器 + 栏杆
   for (const c of RAIL.xings) {
@@ -3916,6 +3959,15 @@ function buildHarbor() {
   addHalo(171, TOWN_Y + 7.0, -25.5, 6, 0xff8870); addCollider(171, -25.5, 1, 1, 0, TOWN_Y, TOWN_Y + 7, 'wall');
   // 渔船
   for (const [x, z, ry] of [[134, 22, 0], [138, 8, Math.PI], [145, 30, 0.2], [156, 4, Math.PI - 0.1], [142, 44, 0.1], [160, 26, -0.15]]) BOATS.push(fishingBoat(x, z, ry));
+  // 外海锚泊船与航道浮标
+  for (const [bx, bz, bry] of [[64, 168, 0.7], [-48, 172, 2.5], [208, 58, -0.8], [98, 185, 1.9]]) BOATS.push(fishingBoat(bx, bz, bry));
+  for (const [bx, bz] of [[156, 60], [170, 76], [190, 42], [74, 148], [-28, 152], [198, 26], [120, 152]]) {
+    const K2 = new Kit(bx, -0.15, bz, R(0, TAU));
+    K2.cyl('paint', 0, 0.5, 0, 0.55, 1.0, pick([0xd8432f, 0x2f7d5b, 0xe8c33a]), { rt: 0.72, seg: 10 });
+    K2.cyl('paint', 0, 1.12, 0, 0.4, 0.3, 0xffffff, { seg: 10 });
+    K2.cyl('vc', 0, 1.55, 0, 0.06, 0.85, 0x555555, { seg: 6 });
+    K2.sph('glow', 0, 1.95, 0, 0.13, 0.13, 0.13, 0xffd8a0, { lo: true });
+  }
   // 渔协市场棚
   const M = new Kit(116, TOWN_Y, 30, Math.PI / 2);
   for (const px of [-7, -2.3, 2.3, 7]) for (const pz of [-3, 3]) M.cyl('paint', px, 2.3, pz, 0.12, 4.6, 0x8a9aa8, { seg: 8 });
@@ -5272,6 +5324,7 @@ function splitWheels(M, r) {
 
 /* ---------------- 载具实例 ---------------- */
 const VEHICLES = [];
+let PLATE_GEO = null, PLATE_MAT = null;
 const _hl = new THREE.SpriteMaterial({ map: TEX_HALO, color: 0xfff2d8, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
 const _tl = new THREE.SpriteMaterial({ map: TEX_HALO, color: 0xff3020, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
 function spawnVehicle(type, x, z, yaw, o = {}) {
@@ -5283,6 +5336,14 @@ function spawnVehicle(type, x, z, yaw, o = {}) {
   if (!T.bike && type !== 'boat') for (const s of [-1, 1]) {
     const h = new THREE.Sprite(_hl); h.scale.setScalar(1.4); h.position.set(s * M.halfW * 0.7, M.H * 0.42, M.L / 2 + 0.05); g.add(h);
     const t = new THREE.Sprite(_tl); t.scale.setScalar(0.8); t.position.set(s * M.halfW * 0.75, M.H * 0.45, -M.L / 2 - 0.05); g.add(t); lights.push(h, t);
+  }
+  // 车牌（前后各一，图集取一张）
+  if (!T.bike && type !== 'boat') {
+    if (!PLATE_MAT) { PLATE_GEO = new THREE.PlaneGeometry(0.34, 0.17); PLATE_MAT = new THREE.MeshStandardMaterial({ map: TEX.plate, roughness: 0.5, metalness: 0 }); }
+    const cell = RI(0, 7), pg = PLATE_GEO.clone(), puv = pg.attributes.uv;
+    for (let i = 0; i < puv.count; i++) puv.setXY(i, (cell + puv.getX(i)) / 8, puv.getY(i));
+    const py = Math.max(0.32, M.H * 0.3);
+    for (const e of [1, -1]) { const pm2 = new THREE.Mesh(pg, PLATE_MAT); pm2.position.set(0, py, e * (M.L / 2 + 0.02)); if (e < 0) pm2.rotation.y = Math.PI; g.add(pm2); }
   }
   scene.add(g);
   const v = { type, T, M, g, body, wheels, lights, x, z, y: groundAt(x, z, TOWN_Y + 3), yaw, v: 0, steer: 0, pitch: 0, roll: 0, ai: o.ai || null, s: o.s || 0, vmax: o.vmax || R(8, 11), parked: !o.ai, brake: 0, honked: false, driver: null };
@@ -5815,7 +5876,41 @@ function foxInteract() {
   if (GAME.has('油豆腐')) { GAME.addItem('油豆腐', -1); S().flags.fox = true; GAME.addItem('#狐火灯笼'); sparkle(FOX.pos.x, FOX.pos.y + 0.6, FOX.pos.z, 0x9fd8ff, 60); AUDIO.bellRing(); UI.toast('白狐叼走了油豆腐。你的灯笼里亮起了一团青色的狐火——夜里它会为你照路。'); GAME.diary('夜里在神社遇见了传说中的白狐。它送了我一团狐火。'); GAME.stamp('fox'); }
   else UI.toast('一只发着微光的白狐，静静地看着你。它似乎在等什么好吃的。');
 }
+/* ---------------- 海鸥：港口/海岸上空的盘旋群 ---------------- */
+const GULLS = [];
+function buildGulls() {
+  const wingL = new THREE.PlaneGeometry(1.15, 0.32); wingL.rotateX(-Math.PI / 2); wingL.translate(0.58, 0, 0);
+  const wingR = wingL.clone(); wingR.scale(-1, 1, 1);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xf4f4f0, roughness: 0.8 });
+  const wmat = new THREE.MeshStandardMaterial({ color: 0xe6e9e2, roughness: 0.85, side: THREE.DoubleSide });
+  const spots = [[150, 32, 24, 24], [64, 138, 30, 22], [-36, 148, 28, 24], [176, -14, 22, 20], [108, -146, 34, 30], [-140, 66, 26, 22], [30, 100, 26, 20]];
+  for (const [cx, cz, r, cy] of spots) {
+    const n = RI(2, 3);
+    for (let i = 0; i < n; i++) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), mat); body.scale.set(0.75, 0.7, 2.1);
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 0.3), wmat); tail.position.set(0, 0.02, -0.42);
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.18, 6), new THREE.MeshStandardMaterial({ color: 0xe8a23a, roughness: 0.6 })); beak.rotation.x = Math.PI / 2; beak.position.set(0, 0.03, 0.42);
+      const wl = new THREE.Mesh(wingL, wmat), wr = new THREE.Mesh(wingR, wmat);
+      g.add(body, tail, beak, wl, wr); scene.add(g);
+      GULLS.push({ g, wl, wr, cx: cx + R(-8, 8), cz: cz + R(-8, 8), r: r * R(0.6, 1.25), cy: cy + R(-3, 3), ph: R(0, TAU), sp: R(0.22, 0.42) * (chance(0.5) ? 1 : -1), fl: R(6, 9) });
+    }
+  }
+}
+function updateGulls(dt, t, day) {
+  for (const u of GULLS) {
+    u.g.visible = day;
+    if (!day) continue;
+    const a = u.ph + t * u.sp;
+    u.g.position.set(u.cx + Math.cos(a) * u.r, u.cy + Math.sin(t * 0.7 + u.ph) * 2.5 + Math.sin(t * 0.23 + u.ph * 2) * 3, u.cz + Math.sin(a) * u.r);
+    const vx = -Math.sin(a) * u.sp, vz = Math.cos(a) * u.sp;
+    u.g.rotation.set(0, Math.atan2(vx, vz), 0.3 * Math.sign(u.sp), 'YXZ');
+    const f = Math.sin(t * u.fl + u.ph) * 0.55;
+    u.wl.rotation.z = f; u.wr.rotation.z = -f;
+  }
+}
 function updateAnimals(dt, t, hour) {
+  updateGulls(dt, t, hour < 19 && hour > 5.5);
   // 猫
   const k = CAT.obj; let moving = false;
   if (CAT.follow && !insideHome(PLAYER.pos.x, PLAYER.pos.z) || CAT.follow && insideHome(CAT.pos.x, CAT.pos.z)) {
@@ -6260,7 +6355,7 @@ async function build() {
   flushBatches(scene); flushCards(); buildWires(); buildHalos(); buildPetals(); buildPools(); buildGroundShadows(); buildWallFades(); buildDecals(); buildPuddles();
   TEX_SIGN.needsUpdate = true;
   progress(0.9, '居民和车流正在醒来……'); await tick();
-  seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic();
+  seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic(); buildGulls();
   scene.updateMatrixWorld(true); buildGrass();
   mailboxInteractables(); shopInteractables(); homeInteractables();
   initLiveWorld(); // 天气 / 乘降 / 巴士 / 通勤

@@ -284,6 +284,15 @@ function buildHarbor() {
   addHalo(171, TOWN_Y + 7.0, -25.5, 6, 0xff8870); addCollider(171, -25.5, 1, 1, 0, TOWN_Y, TOWN_Y + 7, 'wall');
   // 渔船
   for (const [x, z, ry] of [[134, 22, 0], [138, 8, Math.PI], [145, 30, 0.2], [156, 4, Math.PI - 0.1], [142, 44, 0.1], [160, 26, -0.15]]) BOATS.push(fishingBoat(x, z, ry));
+  // 外海锚泊船与航道浮标
+  for (const [bx, bz, bry] of [[64, 168, 0.7], [-48, 172, 2.5], [208, 58, -0.8], [98, 185, 1.9]]) BOATS.push(fishingBoat(bx, bz, bry));
+  for (const [bx, bz] of [[156, 60], [170, 76], [190, 42], [74, 148], [-28, 152], [198, 26], [120, 152]]) {
+    const K2 = new Kit(bx, -0.15, bz, R(0, TAU));
+    K2.cyl('paint', 0, 0.5, 0, 0.55, 1.0, pick([0xd8432f, 0x2f7d5b, 0xe8c33a]), { rt: 0.72, seg: 10 });
+    K2.cyl('paint', 0, 1.12, 0, 0.4, 0.3, 0xffffff, { seg: 10 });
+    K2.cyl('vc', 0, 1.55, 0, 0.06, 0.85, 0x555555, { seg: 6 });
+    K2.sph('glow', 0, 1.95, 0, 0.13, 0.13, 0.13, 0xffd8a0, { lo: true });
+  }
   // 渔协市场棚
   const M = new Kit(116, TOWN_Y, 30, Math.PI / 2);
   for (const px of [-7, -2.3, 2.3, 7]) for (const pz of [-3, 3]) M.cyl('paint', px, 2.3, pz, 0.12, 4.6, 0x8a9aa8, { seg: 8 });

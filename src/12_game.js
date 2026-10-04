@@ -399,7 +399,41 @@ function foxInteract() {
   if (GAME.has('油豆腐')) { GAME.addItem('油豆腐', -1); S().flags.fox = true; GAME.addItem('#狐火灯笼'); sparkle(FOX.pos.x, FOX.pos.y + 0.6, FOX.pos.z, 0x9fd8ff, 60); AUDIO.bellRing(); UI.toast('白狐叼走了油豆腐。你的灯笼里亮起了一团青色的狐火——夜里它会为你照路。'); GAME.diary('夜里在神社遇见了传说中的白狐。它送了我一团狐火。'); GAME.stamp('fox'); }
   else UI.toast('一只发着微光的白狐，静静地看着你。它似乎在等什么好吃的。');
 }
+/* ---------------- 海鸥：港口/海岸上空的盘旋群 ---------------- */
+const GULLS = [];
+function buildGulls() {
+  const wingL = new THREE.PlaneGeometry(1.15, 0.32); wingL.rotateX(-Math.PI / 2); wingL.translate(0.58, 0, 0);
+  const wingR = wingL.clone(); wingR.scale(-1, 1, 1);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xf4f4f0, roughness: 0.8 });
+  const wmat = new THREE.MeshStandardMaterial({ color: 0xe6e9e2, roughness: 0.85, side: THREE.DoubleSide });
+  const spots = [[150, 32, 24, 24], [64, 138, 30, 22], [-36, 148, 28, 24], [176, -14, 22, 20], [108, -146, 34, 30], [-140, 66, 26, 22], [30, 100, 26, 20]];
+  for (const [cx, cz, r, cy] of spots) {
+    const n = RI(2, 3);
+    for (let i = 0; i < n; i++) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), mat); body.scale.set(0.75, 0.7, 2.1);
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 0.3), wmat); tail.position.set(0, 0.02, -0.42);
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.18, 6), new THREE.MeshStandardMaterial({ color: 0xe8a23a, roughness: 0.6 })); beak.rotation.x = Math.PI / 2; beak.position.set(0, 0.03, 0.42);
+      const wl = new THREE.Mesh(wingL, wmat), wr = new THREE.Mesh(wingR, wmat);
+      g.add(body, tail, beak, wl, wr); scene.add(g);
+      GULLS.push({ g, wl, wr, cx: cx + R(-8, 8), cz: cz + R(-8, 8), r: r * R(0.6, 1.25), cy: cy + R(-3, 3), ph: R(0, TAU), sp: R(0.22, 0.42) * (chance(0.5) ? 1 : -1), fl: R(6, 9) });
+    }
+  }
+}
+function updateGulls(dt, t, day) {
+  for (const u of GULLS) {
+    u.g.visible = day;
+    if (!day) continue;
+    const a = u.ph + t * u.sp;
+    u.g.position.set(u.cx + Math.cos(a) * u.r, u.cy + Math.sin(t * 0.7 + u.ph) * 2.5 + Math.sin(t * 0.23 + u.ph * 2) * 3, u.cz + Math.sin(a) * u.r);
+    const vx = -Math.sin(a) * u.sp, vz = Math.cos(a) * u.sp;
+    u.g.rotation.set(0, Math.atan2(vx, vz), 0.3 * Math.sign(u.sp), 'YXZ');
+    const f = Math.sin(t * u.fl + u.ph) * 0.55;
+    u.wl.rotation.z = f; u.wr.rotation.z = -f;
+  }
+}
 function updateAnimals(dt, t, hour) {
+  updateGulls(dt, t, hour < 19 && hour > 5.5);
   // 猫
   const k = CAT.obj; let moving = false;
   if (CAT.follow && !insideHome(PLAYER.pos.x, PLAYER.pos.z) || CAT.follow && insideHome(CAT.pos.x, CAT.pos.z)) {

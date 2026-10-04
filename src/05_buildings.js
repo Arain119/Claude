@@ -60,12 +60,12 @@ function buildHouse(x, z, ry, o = {}) {
   // 窗
   const nw = Math.max(1, Math.floor(w / 2.6));
   for (let f = 0; f < 2; f++) for (let i = 0; i < nw; i++) {
-    const wx = -w / 2 + (i + 0.5) * w / nw; if (f === 0 && Math.abs(wx - dx) < 1.2) continue;
-    windowAt(K, wx, f * F + 1.5, 0, 1.3, 1.2);
+    const wx = -w / 2 + (i + 0.5) * w / nw + R(-0.25, 0.25); if (f === 0 && Math.abs(wx - dx) < 1.2) continue;
+    windowAt(K, wx, f * F + 1.5 + R(-0.1, 0.1), 0, R(1.05, 1.45), R(1.05, 1.3));
     if (f === 1 && chance(0.3)) acUnit(K, wx + 0.4, F + 0.55, 0.2);
   }
-  for (let f = 0; f < 2; f++) { windowAt(K, -w / 2 - 0.0, f * F + 1.5, -d / 2, 1.0, 1.0, 0xe6e3dc, { ry: -Math.PI / 2 }); windowAt(K, w / 2, f * F + 1.5, -d / 2 + R(-1, 1), 1.0, 1.0, 0xe6e3dc, { ry: Math.PI / 2 }); }
-  for (let i = 0; i < nw; i++) windowAt(K, -w / 2 + (i + 0.5) * w / nw, F + 1.5, -d, 1.2, 1.1, 0xe6e3dc, { ry: Math.PI });
+  for (let f = 0; f < 2; f++) { windowAt(K, -w / 2 - 0.0, f * F + 1.5, -d / 2 + R(-0.8, 0.8), 1.0, 1.0, 0xe6e3dc, { ry: -Math.PI / 2 }); windowAt(K, w / 2, f * F + 1.5, -d / 2 + R(-1, 1), 1.0, 1.0, 0xe6e3dc, { ry: Math.PI / 2 }); }
+  for (let i = 0; i < nw; i++) windowAt(K, -w / 2 + (i + 0.5) * w / nw + R(-0.3, 0.3), F + 1.5 + R(-0.08, 0.08), -d, R(1.0, 1.4), R(1.0, 1.2), 0xe6e3dc, { ry: Math.PI });
   // 二楼阳台
   if (o.balcony !== false && chance(0.6)) { balcony(K, -dx * 0.6, F + 0.05, 0, Math.min(3.4, w - 2.5)); if (chance(0.75)) laundry(K, -dx * 0.6, F + 1.95, 0.5, Math.min(3.0, w - 2.8)); }
   // 院墙与绿篱
