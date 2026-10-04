@@ -43,7 +43,7 @@ function convenienceStore(x, z, ry) {
   K.plane('sign', 0, 3.25, 0.09, 7, 1.1, 0xffffff, { uvr: uv });
   for (const sx of [5.2, 6.0]) K.box('paint', sx, 0.5, 0.6, 0.6, 1.0, 0.5, sx < 5.5 ? 0x3a7a4a : 0x2c6ea0);
   vendingMachine(new Kit(...K.w(-6.4, 0, 0.5), K.ry), 0, 0, 0, 0xd9483b);
-  const hp = K.w(0, 3.0, 0.8); addHalo(hp[0], hp[1], hp[2], 5, 0xf4f8ff); addLightPool(hp[0], TOWN_Y, hp[2] + 2, 7, 0xf0f6ff);
+  const hp = K.w(0, 3.0, 0.8); addHalo(hp[0], hp[1], hp[2], 5, 0xf4f8ff); addLightPool(hp[0], TOWN_Y, hp[2] + 2, 5, 0xf0f6ff);
   bicycleStatic(K, -4, 1.4, 0.3, 0xffffff); bicycleStatic(K, -3.2, 1.4, 0.3, 0xd9483b);
 }
 /* 船屋：海边的木结构棚子，里面放着小船与渔具 */

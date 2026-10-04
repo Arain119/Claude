@@ -90,7 +90,7 @@ function buildHouse(x, z, ry, o = {}) {
   const glowP = K.w(dx, 2.2, 0.6); addHalo(glowP[0], glowP[1], glowP[2], 1.5, 0xffe2b0);
   K.box('glow', dx, 2.25, 0.25, 0.25, 0.12, 0.1, 0xfff0cf);
   // 接地阴影：房子 + 院墙范围贴一块软性 AO，消除浮感
-  const sp = K.w(0, 0, (2.8 - d) / 2 - 0.2); addGroundShadow(sp[0], sp[2], w + 3.2, d + 4.4, ry, 0.85);
+  const sp = K.w(0, 0, (2.8 - d) / 2 - 0.2); addGroundShadow(sp[0], sp[2], w + 3.2, d + 4.4, ry, 0.85, 1.15);
   // 墙面过渡：四面墙脚潮气带 + 前后檐口阴带
   for (const [lx, lz, wry, ww] of [[0, 0.03, 0, w], [0, -d - 0.03, 0, w], [-w / 2 - 0.03, -d / 2, Math.PI / 2, d], [w / 2 + 0.03, -d / 2, Math.PI / 2, d]]) {
     const p = K.w(lx, 0.5, lz); addWallFade(p[0], p[1], p[2], ww * 0.98, 1.0, ry + wry, 0.5, 0);
@@ -186,7 +186,7 @@ function buildHome() { // 自宅也用 buildHouse 同款接地阴影（在 build
   HOME.bed = bed; HOME.desk = desk; HOME.inside = inside; HOME.door = door; HOME.doorIn = K.w(dx, 0, -0.9); HOME.ry = ry;
   HOME.box = { K, hw: w / 2 - 0.2, d };
   addPlace('小信使的家', door[0] - 1.2, door[2], Math.PI / 2, 'home');
-  const sp = K.w(0, 0, -d / 2 + 0.4); addGroundShadow(sp[0], sp[2], w + 2.6, d + 3.0, ry, 0.8);
+  const sp = K.w(0, 0, -d / 2 + 0.4); addGroundShadow(sp[0], sp[2], w + 2.6, d + 3.0, ry, 0.8, 1.0);
 }
 function insideHome(x, z) { if (!HOME.K) return false; const K = HOME.K; const dx = x - K.x, dz = z - K.z; const lx = dx * K.c - dz * K.s, lz = dx * K.s + dz * K.c; return Math.abs(lx) < HOME.box.hw && lz < -0.1 && lz > -HOME.box.d; }
 function drawHomeBoard(day, stamps) {
@@ -220,11 +220,11 @@ function buildSchool() {
   K.set(-42, TOWN_Y, -34, 0);
   const w = 24, d = 9, F = 3.4, n = 3;
   K.box('plaster', 0, F * n / 2, -d / 2, w, F * n, d, 0xf3efe6, { solid: true, wuv: 0.4 });
-  for (let f = 0; f < n; f++) { K.box('vc', 0, f * F + 0.05, 0.05, w + 0.1, 0.12, 0.2, 0xe2ddd2); for (let i = 0; i < 8; i++) windowAt(K, -w / 2 + 1.5 + i * 3, f * F + 1.8, 0, 2.2, 1.6, 0xd9dde0, { v: [1, 5, 3, 7][(i + f) % 4] }); }
+  for (let f = 0; f < n; f++) { K.box('vc', 0, f * F + 0.05, 0.05, w + 0.1, 0.12, 0.2, 0xe2ddd2); for (let i = 0; i < 8; i++) windowAt(K, -w / 2 + 1.5 + i * 3, f * F + 1.8, 0, 2.2, 1.6, 0xd9dde0, { v: [13, 11, 5, 14][(i + f) % 4] }); }
   K.box('concrete', 0, F * n + 0.4, -d / 2, w, 0.8, d, 0xdcd8d0, { wuv: 0.5 });
   // 中央钟楼
   K.box('plaster', 0, F * n + 1.6, -1.0, 4, 3.2, 2.4, 0xf3efe6, { wuv: 0.4 });
-  addGroundShadow(-42, -34 - 4.5, w + 3.5, d + 3.5, 0, 0.75);
+  addGroundShadow(-42, -34 - 4.5, w + 3.5, d + 3.5, 0, 0.75, 0.9);
   const cUV = allocSignAlpha(160, 160, (g) => { g.fillStyle = '#fffdf6'; g.beginPath(); g.arc(80, 80, 76, 0, TAU); g.fill(); g.strokeStyle = '#26375e'; g.lineWidth = 8; g.stroke(); g.fillStyle = '#26375e'; for (let i = 0; i < 12; i++) { const a = i * TAU / 12; g.fillRect(80 + Math.cos(a) * 60 - 4, 80 + Math.sin(a) * 60 - 4, 8, 8); } });
   K.plane('signCut', 0, F * n + 1.9, 0.22, 1.8, 1.8, 0xffffff, { uvr: cUV });
   const hands = new THREE.Group(); const hp = K.w(0, F * n + 1.9, 0.26); hands.position.set(hp[0], hp[1], hp[2]);

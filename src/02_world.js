@@ -182,6 +182,8 @@ function buildTerrain() {
     tmp.lerp(new THREE.Color(0.95, 0.86, 0.58), smooth(0.55, 0.78, fbm(x * 0.055 - 4.1, z * 0.055 + 2.6, 2)) * 0.5 * gr);
     // 城镇草坪的割草条纹（~3m 交替明暗带）
     tmp.multiplyScalar(1 + flatW(x, z, -112, 130, -90, 94, 6) * 0.045 * (Math.sin(x * 1.9) + Math.sin(z * 1.6)));
+    // 湿沙带：水线上下 ~1m 的沙滩压暗偏冷（潮间带）
+    tmp.lerp(new THREE.Color(0.55, 0.52, 0.48), smooth(0.95, 0.2, Math.abs(h - 0.15)) * clamp(sa, 0, 1) * 0.5);
     tmp.multiplyScalar(lerp(1, 0.55, smooth(0.3, -2.5, h)));
     // 微色斑块：打破大片匀色的塑料感
     tmp.multiplyScalar(0.9 + 0.15 * fbm(x * 0.11 + 9.7, z * 0.11 - 4.2, 2) + 0.07 * fbm(x * 0.55, z * 0.55, 1));
@@ -221,7 +223,7 @@ let DEPTH_TEX; const DEPTH_S = 640, DEPTH_O = [5, -8];
 function buildDepthTex() {
   const N = 512, S = DEPTH_S; const data = new Uint8Array(N * N * 4);
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const x = DEPTH_O[0] - S / 2 + (i + 0.5) * S / N, z = DEPTH_O[1] - S / 2 + (j + 0.5) * S / N; const h = terrainNatural(x, z) - (smooth(127.6, 129, x) * smooth(-31, -27, z) * (1 - smooth(57, 61, z))) * 6;
+    const x = DEPTH_O[0] - S / 2 + (i + 0.5) * S / N, z = DEPTH_O[1] - S / 2 + (j + 0.5) * S / N; const h = terrainH(x, z);
     const d = clamp(-h / 10, 0, 1); const k = (j * N + i) * 4; data[k] = d * 255; data[k + 1] = h > 0 ? 255 : 0; data[k + 2] = 0; data[k + 3] = 255;
   }
   DEPTH_TEX = new THREE.DataTexture(data, N, N, THREE.RGBAFormat); DEPTH_TEX.magFilter = THREE.LinearFilter; DEPTH_TEX.minFilter = THREE.LinearFilter; DEPTH_TEX.needsUpdate = true;
@@ -340,9 +342,9 @@ function buildSea() {
         vec3 col = mix(body, refl, fr);
         vec3 h = normalize(sunDir + v); float sp = (pow(max(dot(n, h), 0.0), 600.0) * 40.0) * smoothstep(400.0, 60.0, vDist) + pow(max(dot(n, h), 0.0), 120.0) * 0.5;
         col += sunCol * sp * (1.0 - night) * smoothstep(-0.05, 0.1, sunDir.y);
-        float shore = 1.0 - smoothstep(0.0, 0.5, depth);
-        float bands = smoothstep(0.6, 0.85, sin(depth * 24.0 - time * 1.6 + sin(vW.x * 0.13) * 2.0) * 0.5 + 0.5) * smoothstep(1.4, 0.15, depth);
-        float foam = clamp(shore * 0.8 + bands * 0.5, 0.0, 1.0) * (0.7 + 0.3 * sin(time * 2.0 + vW.x * 0.3));
+        float shore = 1.0 - smoothstep(0.0, 0.9, depth);
+        float bands = smoothstep(0.55, 0.85, sin(depth * 14.0 - time * 1.6 + sin(vW.x * 0.13) * 2.0) * 0.5 + 0.5) * smoothstep(3.2, 0.2, depth);
+        float foam = clamp(shore * 0.85 + bands * 0.55, 0.0, 1.0) * (0.7 + 0.3 * sin(time * 2.0 + vW.x * 0.3));
         col = mix(col, foamCol * (0.25 + 0.75 * light), foam * 0.75);
         float fogF = 1.0 - exp(-fogDensity * fogDensity * vDist * vDist);
         col = mix(col, fogColor, fogF);

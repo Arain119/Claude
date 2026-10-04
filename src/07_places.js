@@ -63,7 +63,7 @@ function streetLampPlaza(x, z) {
   const K = new Kit(x, TOWN_Y + 0.12, z, 0);
   K.cyl('paint', 0, 1.9, 0, 0.07, 3.8, 0x2f4a4a, { rt: 0.75, seg: 10 }); K.cyl('paint', 0, 0.2, 0, 0.14, 0.4, 0x2f4a4a, { seg: 10 });
   K.sph('glow', 0, 4.05, 0, 0.3, 0.32, 0.3, 0xfff2d8); K.cyl('paint', 0, 4.42, 0, 0.32, 0.1, 0x2f4a4a, { rt: 0.3, seg: 12 });
-  addHalo(x, TOWN_Y + 4.1, z, 4.5, 0xffe6b8); addLightPool(x, TOWN_Y, z, 7, 0xffdcae);
+  addHalo(x, TOWN_Y + 4.1, z, 4.5, 0xffe6b8); addLightPool(x, TOWN_Y, z, 5, 0xffdcae);
   addCollider(x, z, 0.15, 0.15, 0, TOWN_Y, TOWN_Y + 4, 'wall');
 }
 
@@ -133,7 +133,7 @@ function bankLantern(x, z) {
   K.box('wood', 0, 1.0, 0, 0.1, 2.0, 0.1, 0x5a3a20);
   K.box('wood', 0.25, 2.0, 0, 0.6, 0.06, 0.06, 0x5a3a20);
   K.cyl('glow', 0.45, 1.72, 0, 0.16, 0.42, 0xfff0d8, { seg: 12 }); K.cyl('vc', 0.45, 1.95, 0, 0.12, 0.05, 0x222222, { seg: 12 }); K.cyl('vc', 0.45, 1.49, 0, 0.12, 0.05, 0x222222, { seg: 12 });
-  const p = K.w(0.45, 1.72, 0); addHalo(p[0], p[1], p[2], 2.6, 0xffd8a8); addLightPool(p[0], y, p[2], 3.5, 0xffc890);
+  const p = K.w(0.45, 1.72, 0); addHalo(p[0], p[1], p[2], 2.6, 0xffd8a8); addLightPool(p[0], y, p[2], 2.8, 0xffc890);
 }
 function bridge(z, width) {
   const rx = riverAtZ(z); const span = 19;

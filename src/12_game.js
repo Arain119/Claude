@@ -73,6 +73,8 @@ function applyTimeOfDay(h) {
   if (isDay) { const az = lerp(-0.35, Math.PI + 0.35, dayT), el = Math.sin(dayT * Math.PI) * 1.0 + 0.02; sd.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el) * 0.75 + 0.25).normalize(); }
   else { const nt = (h < 12 ? h + 24 : h) - 18.9; const el = clamp(Math.sin(nt / 10.7 * Math.PI), 0, 1) * 0.15 - 0.12; sd.set(-0.6, el, 0.5).normalize(); }
   SKY_U.sunDir.value.copy(sd); SKY_U.moonDir.value.set(-0.45, 0.42, 0.62).normalize(); SKY_U.night.value = night;
+  // 方向性假影：影子背离太阳，太阳越低拖得越长；夜间回到圆形 AO
+  if (GSH.U) { const el = Math.max(sd.y, 0.05), n2 = Math.hypot(sd.x, sd.z) || 1; GSH.U.uDir.value.set(-sd.x / n2, -sd.z / n2); GSH.U.uLen.value = lerp(clamp(0.55 / el, 1.0, 2.4), 1.0, night); }
   if (SKY.sky) { const u = SKY.sky.material.uniforms; u.sunPosition.value.copy(sd).multiplyScalar(4000); u.turbidity.value = turb * 0.7 + WX.grey * 6; u.rayleigh.value = lerp(1.1, 2.2, smooth(16.5, 18.6, h) * (1 - night)); u.skyGain.value = lerp(0.42, 0.6, smooth(16.5, 18.8, h)) * (1 - WX.grey * 0.4); }
   SKY_U.cloudLit.value.copy(LT.cl).multiplyScalar(lerp(1.4, 0.25, night) * (1 - WX.grey * 0.35)); SKY_U.cloudShade.value.copy(LT.cs).multiplyScalar(lerp(1.0, 0.3, night) * (1 - WX.grey * 0.4)); SKY_U.cover.value = WX.cover;
   sun.color.copy(LT.sun); sun.intensity = sunI * WX.sun; LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);

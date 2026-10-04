@@ -114,7 +114,7 @@ function buildGrass() {
         float covered = cv.g > 0.5 && cv.r > gf.x - 0.5 ? 1.0 : 0.0;
         float gd = length(gwp - gCam);
         float macro = gNoise(gwp * 0.07) * 0.7 + gNoise(gwp * 0.31) * 0.3;
-        float dens = smoothstep(0.4, 0.8, gf.y) * (1.0 - covered) * (1.0 - smoothstep(gSize * 0.3, gSize * 0.5, gd));
+        float dens = smoothstep(0.4, 0.8, gf.y) * (1.0 - covered) * (1.0 - smoothstep(gSize * 0.2, gSize * 0.5, gd));
         // 草丛成簇：再加一层中频噪声，让密度一丛一丛而不是均匀撒点
         float clump = 0.45 + 0.8 * gNoise(gwp * 0.55);
         float keep = step(aBlade.z, dens * mix(0.45, 1.0, macro) * clump);
@@ -130,8 +130,9 @@ function buildGrass() {
         float wn = gNoise(gwp * 0.045 - vec2(uTime * 0.35, uTime * 0.22));
         float gust = clamp(wave * 0.55 + wn * 0.75 - 0.3, 0.0, 1.0) * uWind;
         vec2 wdir = vec2(0.85, 0.53);
+        vec2 bld = vec2(cos(ang * 3.1), sin(ang * 3.1));
         float flutter = sin(uTime * 4.3 + aBlade.z * 40.0) * 0.06;
-        vec2 lean = (wdir * (0.12 + gust * 0.8) + vec2(cos(ang * 1.7), sin(ang * 1.7)) * 0.2 + flutter) * t * t * hgt;
+        vec2 lean = (wdir * (0.05 + gust * 0.8) + bld * (0.13 + aBlade.z * 0.12) + vec2(cos(ang * 1.7), sin(ang * 1.7)) * 0.2 + flutter) * t * t * hgt;
         vec3 transformed = vec3(gwp.x, gf.x - 0.03, gwp.y) + sideV * position.x * w * mix(1.0 - t * 0.9, 1.0 + t * 2.2, vFlower) + vec3(lean.x, t * hgt * (1.0 - 0.3 * gust * t), lean.y);
         // 踩倒：玩家与最近 NPC 脚下的草叶向外压倒
         for (int gi = 0; gi < 2; gi++) {
@@ -146,7 +147,7 @@ function buildGrass() {
       ` + sh.fragmentShader.replace('#include <color_fragment>', `
         // 根部取地面草色，向上提亮并偏黄绿；阵风经过的草叶翻出亮面
         vec3 gb = pow(mix(texture2D(gTex, vGXZ / 4.5).rgb, texture2D(gTex, vGXZ / 13.0).rgb, 0.35), vec3(2.2));
-        vec3 gc = gb * mix(0.38, 1.28, smoothstep(0.0, 0.9, vGT)) * mix(0.82, 1.15, vGRand) * mix(0.85, 1.12, vGMacro);
+        vec3 gc = gb * mix(0.42, 1.18, smoothstep(0.0, 0.9, vGT)) * mix(0.82, 1.15, vGRand) * mix(0.85, 1.12, vGMacro);
         // 每根草的色相微抖（青黄↔草绿↔偏褐），消除同色的塑料感
         gc *= mix(vec3(0.86, 1.0, 0.78), vec3(1.04, 0.93, 0.8), fract(vGRand * 6.7));
         gc = mix(gc, gc * vec3(1.22, 1.12, 0.62), vGT * vGT * 0.55);

@@ -697,8 +697,8 @@ regMat('ballast', pm(TEX.ballast, { roughness: 1 }), { cast: false, tint: 0 });
 regMat('stone', pm(TEX.stone, { roughness: 0.92 }), { tint: 0.3 });
 regMat('sandMat', pm(TEX.sand, { roughness: 1 }), { cast: false, tint: 0.2 });
 regMat('rockMat', pm(TEX.rock, { roughness: 0.95 }), { tint: 0.3 });
-regMat('paddyMat', stdMat({ map: TEX.paddy, roughness: 0.25, envMapIntensity: 1.4 }), { cast: false, tint: 0 });
-regMat('glass', new THREE.MeshStandardMaterial({ color: lin(0xa9c4cf), roughness: 0.03, metalness: 0.1, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.6 }), { cast: false, receive: false });
+regMat('paddyMat', stdMat({ map: TEX.paddy, roughness: 0.15, envMapIntensity: 1.9 }), { cast: false, tint: 0 });
+regMat('glass', new THREE.MeshStandardMaterial({ color: lin(0x9db8c4), roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 0.65 }), { cast: false, receive: false });
 /* 发光体（灯泡、灯笼）：夜里亮度超过 1，交给辉光 */
 const glowMat = regMat('glow', new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xcfcfcf }), { cast: false, receive: false });
 /* 道路标线 */
@@ -711,7 +711,7 @@ const winDay = makeCanvas(1024, 1024), winNight = makeCanvas(1024, 1024);
   const gd = winDay.getContext('2d'), gn = winNight.getContext('2d');
   gn.fillStyle = '#000'; gn.fillRect(0, 0, 1024, 1024);
   for (let i = 0; i < 16; i++) {
-    const cx = (i % 4) * 256, cy = Math.floor(i / 4) * 256; const kind = i % 8; const lit = i < 12;
+    const cx = (i % 4) * 256, cy = Math.floor(i / 4) * 256; const kind = i % 8; const lit = i < 10;
     // 白天：天空反射
     const gr = gd.createLinearGradient(cx, cy, cx + 256, cy + 256);
     gr.addColorStop(0, '#3b4650'); gr.addColorStop(0.5, '#2a333b'); gr.addColorStop(1, '#1d242a');
@@ -818,23 +818,30 @@ function buildPools() {
 /* --- 接地阴影（廉价的接触 AO，让建筑「长」在地里而不是浮在上面） ---
    与 buildPools 同套路：所有调用先攒进 GSH.pos，建完场景后一次性铺成贴地网格。
    顶点色通道复用为「强度」：col 里存 a，材质基色是暗绿黑，vColor 相乘即阴影深浅。 */
-const GSH = { pos: [] };
-function addGroundShadow(x, z, w, d, ry = 0, a = 0.8) { GSH.pos.push([x, z, w, d, ry, a]); }
+const GSH = { pos: [], U: { uDir: { value: new THREE.Vector2(1, 0) }, uLen: { value: 1 } } };
+function addGroundShadow(x, z, w, d, ry = 0, a = 0.8, h = 0.7) { GSH.pos.push([x, z, w, d, ry, a, h]); }
 function buildGroundShadows() {
   if (!GSH.pos.length) return;
   const tex = canvasTex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,0.9)'); gr.addColorStop(0.5, 'rgba(0,0,0,0.42)'); gr.addColorStop(0.8, 'rgba(0,0,0,0.12)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); }, { data: true });
-  const pos = [], uv = [], col = [], idx = []; const N = 5; // 细分成网格，逐顶点贴地
-  for (const [x, z, w, d, ry, a] of GSH.pos) {
+  const pos = [], uv = [], col = [], ac = [], as2 = [], idx = []; const N = 5; // 细分成网格，逐顶点贴地
+  for (const [x, z, w, d, ry, a, hs] of GSH.pos) {
     const b = pos.length / 3, c = Math.cos(ry), s = Math.sin(ry);
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       const lx = (i / N - 0.5) * w, lz = (j / N - 0.5) * d;
       const px = x + lx * c + lz * s, pz = z - lx * s + lz * c;
-      pos.push(px, terrainH(px, pz) + 0.05, pz); uv.push(i / N, j / N); col.push(a, a, a);
+      pos.push(px, terrainH(px, pz) + 0.05, pz); uv.push(i / N, j / N); col.push(a, a, a); ac.push(x, z); as2.push(hs);
     }
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = b + j * (N + 1) + i; idx.push(q, q + N + 1, q + 1, q + 1, q + N + 1, q + N + 2); }
   }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
-  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, color: 0x2a3226, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, fog: true }));
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('aC', new THREE.Float32BufferAttribute(ac, 2)); g.setAttribute('aS', new THREE.Float32BufferAttribute(as2, 1)); g.setIndex(idx);
+  const mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, color: 0x2a3226, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, fog: true });
+  // 方向性假影：顶点沿太阳方位剪切拉伸，uLen=1 时回到圆形（夜晚）
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, GSH.U);
+    sh.vertexShader = 'attribute vec2 aC; attribute float aS; uniform vec2 uDir; uniform float uLen;\n' +
+      sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nvec2 gshOff = transformed.xz - aC; transformed.xz += uDir * (uLen - 1.0) * (dot(gshOff, uDir) + 0.45) * aS;`);
+  };
+  const m = new THREE.Mesh(g, mat);
   m.renderOrder = 2; m.frustumCulled = false; scene.add(m);
 }
 /* --- 墙面过渡贴片（潮气带/檐口阴带/窗下水痕） ---
@@ -1123,6 +1130,8 @@ function buildTerrain() {
     tmp.lerp(new THREE.Color(0.95, 0.86, 0.58), smooth(0.55, 0.78, fbm(x * 0.055 - 4.1, z * 0.055 + 2.6, 2)) * 0.5 * gr);
     // 城镇草坪的割草条纹（~3m 交替明暗带）
     tmp.multiplyScalar(1 + flatW(x, z, -112, 130, -90, 94, 6) * 0.045 * (Math.sin(x * 1.9) + Math.sin(z * 1.6)));
+    // 湿沙带：水线上下 ~1m 的沙滩压暗偏冷（潮间带）
+    tmp.lerp(new THREE.Color(0.55, 0.52, 0.48), smooth(0.95, 0.2, Math.abs(h - 0.15)) * clamp(sa, 0, 1) * 0.5);
     tmp.multiplyScalar(lerp(1, 0.55, smooth(0.3, -2.5, h)));
     // 微色斑块：打破大片匀色的塑料感
     tmp.multiplyScalar(0.9 + 0.15 * fbm(x * 0.11 + 9.7, z * 0.11 - 4.2, 2) + 0.07 * fbm(x * 0.55, z * 0.55, 1));
@@ -1162,7 +1171,7 @@ let DEPTH_TEX; const DEPTH_S = 640, DEPTH_O = [5, -8];
 function buildDepthTex() {
   const N = 512, S = DEPTH_S; const data = new Uint8Array(N * N * 4);
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const x = DEPTH_O[0] - S / 2 + (i + 0.5) * S / N, z = DEPTH_O[1] - S / 2 + (j + 0.5) * S / N; const h = terrainNatural(x, z) - (smooth(127.6, 129, x) * smooth(-31, -27, z) * (1 - smooth(57, 61, z))) * 6;
+    const x = DEPTH_O[0] - S / 2 + (i + 0.5) * S / N, z = DEPTH_O[1] - S / 2 + (j + 0.5) * S / N; const h = terrainH(x, z);
     const d = clamp(-h / 10, 0, 1); const k = (j * N + i) * 4; data[k] = d * 255; data[k + 1] = h > 0 ? 255 : 0; data[k + 2] = 0; data[k + 3] = 255;
   }
   DEPTH_TEX = new THREE.DataTexture(data, N, N, THREE.RGBAFormat); DEPTH_TEX.magFilter = THREE.LinearFilter; DEPTH_TEX.minFilter = THREE.LinearFilter; DEPTH_TEX.needsUpdate = true;
@@ -1281,9 +1290,9 @@ function buildSea() {
         vec3 col = mix(body, refl, fr);
         vec3 h = normalize(sunDir + v); float sp = (pow(max(dot(n, h), 0.0), 600.0) * 40.0) * smoothstep(400.0, 60.0, vDist) + pow(max(dot(n, h), 0.0), 120.0) * 0.5;
         col += sunCol * sp * (1.0 - night) * smoothstep(-0.05, 0.1, sunDir.y);
-        float shore = 1.0 - smoothstep(0.0, 0.5, depth);
-        float bands = smoothstep(0.6, 0.85, sin(depth * 24.0 - time * 1.6 + sin(vW.x * 0.13) * 2.0) * 0.5 + 0.5) * smoothstep(1.4, 0.15, depth);
-        float foam = clamp(shore * 0.8 + bands * 0.5, 0.0, 1.0) * (0.7 + 0.3 * sin(time * 2.0 + vW.x * 0.3));
+        float shore = 1.0 - smoothstep(0.0, 0.9, depth);
+        float bands = smoothstep(0.55, 0.85, sin(depth * 14.0 - time * 1.6 + sin(vW.x * 0.13) * 2.0) * 0.5 + 0.5) * smoothstep(3.2, 0.2, depth);
+        float foam = clamp(shore * 0.85 + bands * 0.55, 0.0, 1.0) * (0.7 + 0.3 * sin(time * 2.0 + vW.x * 0.3));
         col = mix(col, foamCol * (0.25 + 0.75 * light), foam * 0.75);
         float fogF = 1.0 - exp(-fogDensity * fogDensity * vDist * vDist);
         col = mix(col, fogColor, fogF);
@@ -1472,7 +1481,7 @@ function buildRoadMeshes() {
         K.cyl('paint', 0, 4.2, 0, 0.09, 8.4, 0x8a9096, { rt: 0.6, seg: 10 });
         K.rod('paint', [0, 8.2, 0], [0, 8.5, -1.8], 0.05, 0x8a9096);
         K.box('paint', 0, 8.45, -2.0, 0.35, 0.12, 0.7, 0x6a7076); K.box('glow', 0, 8.38, -2.0, 0.26, 0.03, 0.55, 0xfff1d6);
-        const hp = K.w(0, 8.2, -2.0); addHalo(hp[0], hp[1], hp[2], 6, 0xffe2b8); ROAD_LIGHTS.push(hp); addLightPool(hp[0], p[1], hp[2], 9, 0xffd29a);
+        const hp = K.w(0, 8.2, -2.0); addHalo(hp[0], hp[1], hp[2], 6, 0xffe2b8); ROAD_LIGHTS.push(hp); addLightPool(hp[0], p[1], hp[2], 6.5, 0xffd29a);
         addCollider(ox, oz, 0.15, 0.15, 0, p[1], p[1] + 8, 'wall');
       }
       if (s - lastPole >= 36) {
@@ -1697,7 +1706,7 @@ const TEX_PINE_ATLAS = paintAtlas((g, C) => {
     for (let i = 0; i < 46; i++) { const a = -Math.PI / 2 + R(-1.5, 1.5), L = R(0.09, 0.16) * C, k = R(0.6, 1); g.strokeStyle = `rgb(${170 * k | 0},${215 * k | 0},${190 * k | 0})`; g.lineWidth = R(2, 3.4); g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx + Math.cos(a) * L, ty + Math.sin(a) * L); g.stroke(); }
   }
 });
-const SAK_M = foliageMat(TEX_SAK_ATLAS, { emissive: 0x150a0c });
+const SAK_M = foliageMat(TEX_SAK_ATLAS, { emissive: 0x050304 });
 const LEAF_M = foliageMat(TEX_LEAF_ATLAS);
 const PINE_M = foliageMat(TEX_PINE_ATLAS);
 const GRASS_M = foliageMat(TEX_GRASS);
@@ -1810,7 +1819,7 @@ function canopy(kit, ox, oy, oz, clumps, o) {
     // 环境遮蔽：树冠内部、底部与朝内的面更暗
     const out = clamp(Math.hypot(px - cx, pz - cz) / ext, 0, 1), h = clamp((py - y0) / (y1 - y0 + 1e-3), 0, 1);
     const face = (dx * gx + dy * gy + dz * gz) / gl;
-    return clamp(0.32 + 0.38 * h + 0.2 * out + 0.22 * face, 0.22, 1);
+    return clamp(0.42 + 0.34 * h + 0.18 * out + 0.22 * face, 0.38, 1);
   };
   const sh = o.shade || o.base;
   for (const c of clumps) {
@@ -1860,8 +1869,8 @@ function sakuraTree(x, z, s = 1, o = {}) {
   const trunkH = (o.trunkH || 1.7) * s, r0 = (o.r0 || 0.2) * s;
   const lean = R(-0.12, 0.12), leanA = R(0, TAU);
   const top = [Math.cos(leanA) * lean * trunkH, trunkH, Math.sin(leanA) * lean * trunkH];
-  kit.rod('bark', [0, -0.3, 0], [top[0] * 0.5, trunkH * 0.5, top[2] * 0.5], r0 * 1.15, P.bark, { rt: 0.92, seg: 10 });
-  kit.rod('bark', [top[0] * 0.5, trunkH * 0.5, top[2] * 0.5], top, r0 * 1.05, P.bark, { rt: 0.9, seg: 10 });
+  kit.rod('bark', [0, -0.3, 0], [top[0] * 0.5, trunkH * 0.5, top[2] * 0.5], r0 * 1.15, P.bark, { rt: 0.8, seg: 10 });
+  kit.rod('bark', [top[0] * 0.5, trunkH * 0.5, top[2] * 0.5], top, r0 * 1.05, P.bark, { rt: 0.75, seg: 10 });
   for (let i = 0; i < 4; i++) { const a = i * TAU / 4 + R(-0.3, 0.3); kit.rod('bark', [0, 0.25 * s, 0], [Math.cos(a) * r0 * 2.6, -0.05, Math.sin(a) * r0 * 2.6], r0 * 0.45, P.bark, { rt: 0.4, seg: 5 }); }
   const tips = [];
   const nMain = o.main || RI(3, 4); const a0 = R(0, TAU);
@@ -1888,7 +1897,7 @@ function greenTree(x, z, s = 1, o = {}) {
   const kit = new Kit(x, y, z, 0);
   const P = { droop: 0.02, spread: 0.7, flatten: 0.85, lenK: 0.68, depth: 2, bark: new THREE.Color(0x6e6150) };
   const trunkH = 2.2 * s, r0 = 0.22 * s;
-  kit.rod('bark', [0, -0.3, 0], [0, trunkH, 0], r0, P.bark, { rt: 0.75, seg: 8 });
+  kit.rod('bark', [0, -0.3, 0], [0, trunkH, 0], r0, P.bark, { rt: 0.62, seg: 8 });
   const tips = []; const n = RI(3, 4); const a0 = R(0, TAU);
   for (let i = 0; i < n; i++) growBranches(kit, [0, trunkH, 0], a0 + i * TAU / n, R(0.8, 1.1), 2.2 * s, r0 * 0.6, 0, P, tips);
   const cl = clusterTips(tips.map(t => [t.p[0], t.p[1] + 0.45 * s, t.p[2]]), 1.5 * s);
@@ -1906,15 +1915,15 @@ function pineTree(x, z, s = 1, o = {}) {
   const y = o.y != null ? o.y : groundAt(x, z);
   const kit = new Kit(x, y, z, 0); const bark = new THREE.Color(0x5e4b3c);
   let p = [0, -0.3, 0]; let a = R(0, TAU); const pts = [p];
-  for (let i = 0; i < 4; i++) { const np = [p[0] + Math.cos(a) * 0.6 * s, p[1] + 1.4 * s, p[2] + Math.sin(a) * 0.6 * s]; kit.rod('bark', p, np, 0.2 * s * (1 - i * 0.18), bark, { rt: 0.85, seg: 7 }); p = np; pts.push(np); a += R(-1.2, 1.2); }
+  for (let i = 0; i < 4; i++) { const np = [p[0] + Math.cos(a) * 0.6 * s, p[1] + 1.4 * s, p[2] + Math.sin(a) * 0.6 * s]; kit.rod('bark', p, np, 0.2 * s * (1 - i * 0.18), bark, { rt: 0.7, seg: 7 }); p = np; pts.push(np); a += R(-1.2, 1.2); }
   const clumps = [];
   for (let i = 1; i < pts.length; i++) {
     const nb = i === pts.length - 1 ? 1 : 2;
     for (let k = 0; k < nb; k++) {
       const ba = R(0, TAU), bl = (i === pts.length - 1 ? 0.3 : R(1.2, 2.2)) * s * (1 - i * 0.1);
       const e = [pts[i][0] + Math.cos(ba) * bl, pts[i][1] + R(-0.2, 0.3), pts[i][2] + Math.sin(ba) * bl];
-      if (bl > 0.5) kit.rod('bark', pts[i], e, 0.07 * s, bark, { rt: 0.5, seg: 5 });
-      clumps.push({ x: e[0], y: e[1] + 0.25 * s, z: e[2], r: R(1.0, 1.4) * s * (1 - i * 0.06), sq: 0.36 });
+      if (bl > 0.5) kit.rod('bark', pts[i], e, 0.07 * s, bark, { rt: 0.4, seg: 5 });
+      clumps.push({ x: e[0], y: e[1] + 0.25 * s, z: e[2], r: R(1.15, 1.55) * s * (1 - i * 0.06), sq: 0.55 });
     }
   }
   canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3f5c48), lite: new THREE.Color(0x8aa874), shade: new THREE.Color(0x1f3436), card: (o.proto ? 0.8 : 0.6) * Math.sqrt(s), dens: o.proto ? 1.0 : 1.6, crop: true, body: 0.8, inner: o.proto ? 0 : 0.1, local: 0.6, sway: 0.3, lo: o.proto });
@@ -1979,9 +1988,9 @@ function sugiTree(x, z, s = 1, o = {}) {
   kit.cyl('bark', 0, H * 0.45, 0, 0.32 * s, H * 0.9, 0x8a7060, { rt: 0.25, seg: 8 });
   // 杉：沿主干一层层的锥形针叶团
   const clumps = [];
-  for (let h = 4.4 * s; h < H; h += 1.7 * s) {
-    const t = (h - 4.4 * s) / (H - 4.4 * s); const r = lerp(2.5, 0.6, Math.pow(t, 0.9)) * s; const n = t > 0.6 ? 1 : 2; const a0 = R(0, TAU);
-    for (let k = 0; k < n; k++) { const a = a0 + k * Math.PI, d = n > 1 ? r * 0.3 : 0; clumps.push({ x: Math.cos(a) * d, y: h, z: Math.sin(a) * d, r: n > 1 ? r * 0.82 : r, sq: 0.62 }); }
+  for (let h = 4.4 * s; h < H; h += 1.15 * s) {
+    const t = (h - 4.4 * s) / (H - 4.4 * s); const r = lerp(2.7, 0.7, Math.pow(t, 0.9)) * s; const n = t > 0.6 ? 1 : 2; const a0 = R(0, TAU);
+    for (let k = 0; k < n; k++) { const a = a0 + k * Math.PI, d = n > 1 ? r * 0.3 : 0; clumps.push({ x: Math.cos(a) * d, y: h, z: Math.sin(a) * d, r: n > 1 ? r * 0.82 : r, sq: 0.72 }); }
   }
   canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3c5a40), lite: new THREE.Color(0x7d9c64), shade: new THREE.Color(0x1c3032), card: 1.2 * s, dens: 0.8, crop: true, body: 0.86, local: 0.5, sway: 0.25, lo: o.proto });
   if (!o.proto) TREES.push({ x, z, r: 3 * s, kind: 'sugi', y });
@@ -2166,7 +2175,7 @@ function buildGrass() {
         float covered = cv.g > 0.5 && cv.r > gf.x - 0.5 ? 1.0 : 0.0;
         float gd = length(gwp - gCam);
         float macro = gNoise(gwp * 0.07) * 0.7 + gNoise(gwp * 0.31) * 0.3;
-        float dens = smoothstep(0.4, 0.8, gf.y) * (1.0 - covered) * (1.0 - smoothstep(gSize * 0.3, gSize * 0.5, gd));
+        float dens = smoothstep(0.4, 0.8, gf.y) * (1.0 - covered) * (1.0 - smoothstep(gSize * 0.2, gSize * 0.5, gd));
         // 草丛成簇：再加一层中频噪声，让密度一丛一丛而不是均匀撒点
         float clump = 0.45 + 0.8 * gNoise(gwp * 0.55);
         float keep = step(aBlade.z, dens * mix(0.45, 1.0, macro) * clump);
@@ -2182,8 +2191,9 @@ function buildGrass() {
         float wn = gNoise(gwp * 0.045 - vec2(uTime * 0.35, uTime * 0.22));
         float gust = clamp(wave * 0.55 + wn * 0.75 - 0.3, 0.0, 1.0) * uWind;
         vec2 wdir = vec2(0.85, 0.53);
+        vec2 bld = vec2(cos(ang * 3.1), sin(ang * 3.1));
         float flutter = sin(uTime * 4.3 + aBlade.z * 40.0) * 0.06;
-        vec2 lean = (wdir * (0.12 + gust * 0.8) + vec2(cos(ang * 1.7), sin(ang * 1.7)) * 0.2 + flutter) * t * t * hgt;
+        vec2 lean = (wdir * (0.05 + gust * 0.8) + bld * (0.13 + aBlade.z * 0.12) + vec2(cos(ang * 1.7), sin(ang * 1.7)) * 0.2 + flutter) * t * t * hgt;
         vec3 transformed = vec3(gwp.x, gf.x - 0.03, gwp.y) + sideV * position.x * w * mix(1.0 - t * 0.9, 1.0 + t * 2.2, vFlower) + vec3(lean.x, t * hgt * (1.0 - 0.3 * gust * t), lean.y);
         // 踩倒：玩家与最近 NPC 脚下的草叶向外压倒
         for (int gi = 0; gi < 2; gi++) {
@@ -2198,7 +2208,7 @@ function buildGrass() {
       ` + sh.fragmentShader.replace('#include <color_fragment>', `
         // 根部取地面草色，向上提亮并偏黄绿；阵风经过的草叶翻出亮面
         vec3 gb = pow(mix(texture2D(gTex, vGXZ / 4.5).rgb, texture2D(gTex, vGXZ / 13.0).rgb, 0.35), vec3(2.2));
-        vec3 gc = gb * mix(0.38, 1.28, smoothstep(0.0, 0.9, vGT)) * mix(0.82, 1.15, vGRand) * mix(0.85, 1.12, vGMacro);
+        vec3 gc = gb * mix(0.42, 1.18, smoothstep(0.0, 0.9, vGT)) * mix(0.82, 1.15, vGRand) * mix(0.85, 1.12, vGMacro);
         // 每根草的色相微抖（青黄↔草绿↔偏褐），消除同色的塑料感
         gc *= mix(vec3(0.86, 1.0, 0.78), vec3(1.04, 0.93, 0.8), fract(vGRand * 6.7));
         gc = mix(gc, gc * vec3(1.22, 1.12, 0.62), vGT * vGT * 0.55);
@@ -2414,7 +2424,7 @@ function buildShop(d) {
   addCollider(...K.w(0, 0, -RD - 0.05).filter((_, i) => i !== 1), gw / 2, 0.15, ry, SW_Y, SW_Y + F0, 'wall');
   // 招牌
   // 接地阴影：沿街立面的落地感
-  const sp = K.w(0, 0, -D / 2 - 0.4); addGroundShadow(sp[0], sp[2], w + 1.8, D + 2.2, ry, 0.55);
+  const sp = K.w(0, 0, -D / 2 - 0.4); addGroundShadow(sp[0], sp[2], w + 1.8, D + 2.2, ry, 0.55, 1.0);
   // 墙面过渡：后墙与山墙的墙脚潮气带
   for (const [lx, lz, wry, ww] of [[0, -D - 0.03, 0, w - 1], [-w / 2 - 0.53, -D / 2, Math.PI / 2, D], [w / 2 + 0.53, -D / 2, Math.PI / 2, D]]) { const p = K.w(lx, 0.45, lz); addWallFade(p[0], p[1], p[2], ww, 0.9, ry + wry, 0.45, 0); }
   const sW = w - 0.3; const sUV = drawShopSign(d, sW * 110, 1.05 * 110);
@@ -2655,7 +2665,7 @@ function streetLamp(x, z, side) {
   k.rod('paint', [0, 5.2, 0], [-0.7, 5.55, 0], 0.035, 0x3b4a4a);
   k.cyl('paint', -0.75, 5.62, 0, 0.26, 0.12, 0x3b4a4a, { rt: 0.4, seg: 12 });
   k.cyl('glow', -0.75, 5.35, 0, 0.18, 0.42, 0xfff1d0, { rt: 1.2, seg: 12 });
-  const p = k.w(-0.75, 5.3, 0); addHalo(p[0], p[1], p[2], 4, 0xffe2b0); addLightPool(p[0], SW_Y, p[2], 6.5, 0xffd8a8);
+  const p = k.w(-0.75, 5.3, 0); addHalo(p[0], p[1], p[2], 4, 0xffe2b0); addLightPool(p[0], SW_Y, p[2], 4.2, 0xffd8a8);
   // 横幅
   const txt = pick([['樱丘商店街', '海风通'], ['春之樱花祭', '4/1-4/14'], ['欢迎来到星见岛', 'WELCOME']]);
   const uv = allocSign(64, 200, (g, w, h) => { g.fillStyle = '#f7e1e8'; g.fillRect(0, 0, w, h); g.fillStyle = '#d24d73'; g.fillRect(0, 0, w, 14); g.fillRect(0, h - 14, w, 14); for (let i = 0; i < 6; i++) { g.fillStyle = 'rgba(232,140,170,0.5)'; g.beginPath(); g.arc(R(0, w), R(20, h - 20), R(4, 8), 0, TAU); g.fill(); } g.fillStyle = '#7a2f45'; g.font = `900 30px ${FONT.wei}`; g.textAlign = 'center'; [...txt[0]].forEach((c, i) => g.fillText(c, w / 2, 48 + i * 30)); g.font = `700 10px ${FONT.sans}`; g.fillText(txt[1], w / 2, h - 20); });
@@ -2796,7 +2806,7 @@ function buildHouse(x, z, ry, o = {}) {
   const glowP = K.w(dx, 2.2, 0.6); addHalo(glowP[0], glowP[1], glowP[2], 1.5, 0xffe2b0);
   K.box('glow', dx, 2.25, 0.25, 0.25, 0.12, 0.1, 0xfff0cf);
   // 接地阴影：房子 + 院墙范围贴一块软性 AO，消除浮感
-  const sp = K.w(0, 0, (2.8 - d) / 2 - 0.2); addGroundShadow(sp[0], sp[2], w + 3.2, d + 4.4, ry, 0.85);
+  const sp = K.w(0, 0, (2.8 - d) / 2 - 0.2); addGroundShadow(sp[0], sp[2], w + 3.2, d + 4.4, ry, 0.85, 1.15);
   // 墙面过渡：四面墙脚潮气带 + 前后檐口阴带
   for (const [lx, lz, wry, ww] of [[0, 0.03, 0, w], [0, -d - 0.03, 0, w], [-w / 2 - 0.03, -d / 2, Math.PI / 2, d], [w / 2 + 0.03, -d / 2, Math.PI / 2, d]]) {
     const p = K.w(lx, 0.5, lz); addWallFade(p[0], p[1], p[2], ww * 0.98, 1.0, ry + wry, 0.5, 0);
@@ -2892,7 +2902,7 @@ function buildHome() { // 自宅也用 buildHouse 同款接地阴影（在 build
   HOME.bed = bed; HOME.desk = desk; HOME.inside = inside; HOME.door = door; HOME.doorIn = K.w(dx, 0, -0.9); HOME.ry = ry;
   HOME.box = { K, hw: w / 2 - 0.2, d };
   addPlace('小信使的家', door[0] - 1.2, door[2], Math.PI / 2, 'home');
-  const sp = K.w(0, 0, -d / 2 + 0.4); addGroundShadow(sp[0], sp[2], w + 2.6, d + 3.0, ry, 0.8);
+  const sp = K.w(0, 0, -d / 2 + 0.4); addGroundShadow(sp[0], sp[2], w + 2.6, d + 3.0, ry, 0.8, 1.0);
 }
 function insideHome(x, z) { if (!HOME.K) return false; const K = HOME.K; const dx = x - K.x, dz = z - K.z; const lx = dx * K.c - dz * K.s, lz = dx * K.s + dz * K.c; return Math.abs(lx) < HOME.box.hw && lz < -0.1 && lz > -HOME.box.d; }
 function drawHomeBoard(day, stamps) {
@@ -2926,11 +2936,11 @@ function buildSchool() {
   K.set(-42, TOWN_Y, -34, 0);
   const w = 24, d = 9, F = 3.4, n = 3;
   K.box('plaster', 0, F * n / 2, -d / 2, w, F * n, d, 0xf3efe6, { solid: true, wuv: 0.4 });
-  for (let f = 0; f < n; f++) { K.box('vc', 0, f * F + 0.05, 0.05, w + 0.1, 0.12, 0.2, 0xe2ddd2); for (let i = 0; i < 8; i++) windowAt(K, -w / 2 + 1.5 + i * 3, f * F + 1.8, 0, 2.2, 1.6, 0xd9dde0, { v: [1, 5, 3, 7][(i + f) % 4] }); }
+  for (let f = 0; f < n; f++) { K.box('vc', 0, f * F + 0.05, 0.05, w + 0.1, 0.12, 0.2, 0xe2ddd2); for (let i = 0; i < 8; i++) windowAt(K, -w / 2 + 1.5 + i * 3, f * F + 1.8, 0, 2.2, 1.6, 0xd9dde0, { v: [13, 11, 5, 14][(i + f) % 4] }); }
   K.box('concrete', 0, F * n + 0.4, -d / 2, w, 0.8, d, 0xdcd8d0, { wuv: 0.5 });
   // 中央钟楼
   K.box('plaster', 0, F * n + 1.6, -1.0, 4, 3.2, 2.4, 0xf3efe6, { wuv: 0.4 });
-  addGroundShadow(-42, -34 - 4.5, w + 3.5, d + 3.5, 0, 0.75);
+  addGroundShadow(-42, -34 - 4.5, w + 3.5, d + 3.5, 0, 0.75, 0.9);
   const cUV = allocSignAlpha(160, 160, (g) => { g.fillStyle = '#fffdf6'; g.beginPath(); g.arc(80, 80, 76, 0, TAU); g.fill(); g.strokeStyle = '#26375e'; g.lineWidth = 8; g.stroke(); g.fillStyle = '#26375e'; for (let i = 0; i < 12; i++) { const a = i * TAU / 12; g.fillRect(80 + Math.cos(a) * 60 - 4, 80 + Math.sin(a) * 60 - 4, 8, 8); } });
   K.plane('signCut', 0, F * n + 1.9, 0.22, 1.8, 1.8, 0xffffff, { uvr: cUV });
   const hands = new THREE.Group(); const hp = K.w(0, F * n + 1.9, 0.26); hands.position.set(hp[0], hp[1], hp[2]);
@@ -3320,7 +3330,7 @@ function buildRailStations() {
         g2.fillStyle = '#26375e'; g2.beginPath(); g2.arc(w - 50, 50, 28, 0, TAU); g2.fill(); g2.fillStyle = '#fff'; g2.font = `900 22px ${FONT.sans}`; g2.textAlign = 'center'; g2.fillText(st.code, w - 50, 58);
       });
       for (const x of [-8, 8]) { for (const f of [-1, 1]) K.plane('sign', x, 2.0, f * 0.04, 2.4, 0.94, 0xffffff, { uvr: uv, ry: f > 0 ? 0 : Math.PI }); K.box('vc', x, 2.0, 0, 2.5, 1.04, 0.06, 0x5a6670); for (const r of [-1, 1]) K.box('vc', x + r * 1.1, 0.75, 0, 0.08, 1.5, 0.08, 0x5a6670); }
-      for (const x of [-12, 0, 12]) { K.cyl('paint', x, 1.8, back, 0.06, 3.6, 0x5a6670, { seg: 8 }); K.box('glow', x, 3.55, back - sd * 0.3, 0.5, 0.06, 0.16, 0xfafafa); const hp = K.w(x, 3.4, back - sd * 0.3); addHalo(hp[0], hp[1], hp[2], 1.8, 0xf2f6ff); const lp = K.w(x, 0, back - sd * 0.6); addLightPool(lp[0], c.y + 1.3, lp[2], 3.5, 0xe8f0ff); }
+      for (const x of [-12, 0, 12]) { K.cyl('paint', x, 1.8, back, 0.06, 3.6, 0x5a6670, { seg: 8 }); K.box('glow', x, 3.55, back - sd * 0.3, 0.5, 0.06, 0.16, 0xfafafa); const hp = K.w(x, 3.4, back - sd * 0.3); addHalo(hp[0], hp[1], hp[2], 1.8, 0xf2f6ff); const lp = K.w(x, 0, back - sd * 0.6); addLightPool(lp[0], c.y + 1.3, lp[2], 2.6, 0xe8f0ff); }
     }
     const pl = railAt(st.s); const inl = islandC(pl.x + pl.lx * 20, pl.z + pl.lz * 20) > islandC(pl.x - pl.lx * 20, pl.z - pl.lz * 20) ? 1 : -1; // 放在岛内一侧
     addPlace(st.name + '站', pl.x + pl.lx * inl * (railSep(st.s) / 2 + 6.5), pl.z + pl.lz * inl * (railSep(st.s) / 2 + 6.5), Math.atan2(-pl.lx * inl, -pl.lz * inl), 'station2');
@@ -3366,7 +3376,7 @@ function buildStation() {
   const cy = PLAT_Y + 3.2;
   for (let x = 38; x <= 84; x += 6.5) { WK.cyl('paint', x, (PLAT_Y + cy) / 2, cz, 0.12, cy - PLAT_Y, 0x7d8a8f, { seg: 10 }); addCollider(x, cz, 0.15, 0.15, 0, PLAT_Y, cy, 'wall'); WK.box('paint', x, cy - 0.15, cz, 0.12, 0.2, 4.6, 0x7d8a8f); }
   for (const s of [-1, 1]) WK.box('metal', 61, cy + 0.12 + 0.12, cz + s * 1.3, 48, 0.08, 2.75, 0xd6dbe0, { rx: s * 0.09, wuv: 0.8 });
-  for (let x = 40; x <= 82; x += 6.5) for (const s of [-1, 1]) { WK.box('glow', x + 3, cy - 0.05, cz + s * 1.4, 1.6, 0.05, 0.12, 0xfafafa); addHalo(x + 3, cy - 0.3, cz + s * 1.4, 2.0, 0xf2f6ff); addLightPool(x + 3, PLAT_Y, cz + s * 1.4, 4, 0xe8f0ff); }
+  for (let x = 40; x <= 82; x += 6.5) for (const s of [-1, 1]) { WK.box('glow', x + 3, cy - 0.05, cz + s * 1.4, 1.6, 0.05, 0.12, 0xfafafa); addHalo(x + 3, cy - 0.3, cz + s * 1.4, 2.0, 0xf2f6ff); addLightPool(x + 3, PLAT_Y, cz + s * 1.4, 3, 0xe8f0ff); }
   // 站名牌
   for (const x of [46, 76]) stationNameBoard(x, cz);
   const hUV = allocSign(400, 80, (g, w, h) => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h); g.fillStyle = '#e48fa6'; g.fillRect(0, h - 12, w, 12); g.fillStyle = '#222'; g.font = `900 40px ${FONT.sans}`; g.textAlign = 'center'; g.fillText('樱丘  SAKURAGAOKA', w / 2, 50); });
@@ -3685,7 +3695,7 @@ function streetLampPlaza(x, z) {
   const K = new Kit(x, TOWN_Y + 0.12, z, 0);
   K.cyl('paint', 0, 1.9, 0, 0.07, 3.8, 0x2f4a4a, { rt: 0.75, seg: 10 }); K.cyl('paint', 0, 0.2, 0, 0.14, 0.4, 0x2f4a4a, { seg: 10 });
   K.sph('glow', 0, 4.05, 0, 0.3, 0.32, 0.3, 0xfff2d8); K.cyl('paint', 0, 4.42, 0, 0.32, 0.1, 0x2f4a4a, { rt: 0.3, seg: 12 });
-  addHalo(x, TOWN_Y + 4.1, z, 4.5, 0xffe6b8); addLightPool(x, TOWN_Y, z, 7, 0xffdcae);
+  addHalo(x, TOWN_Y + 4.1, z, 4.5, 0xffe6b8); addLightPool(x, TOWN_Y, z, 5, 0xffdcae);
   addCollider(x, z, 0.15, 0.15, 0, TOWN_Y, TOWN_Y + 4, 'wall');
 }
 
@@ -3755,7 +3765,7 @@ function bankLantern(x, z) {
   K.box('wood', 0, 1.0, 0, 0.1, 2.0, 0.1, 0x5a3a20);
   K.box('wood', 0.25, 2.0, 0, 0.6, 0.06, 0.06, 0x5a3a20);
   K.cyl('glow', 0.45, 1.72, 0, 0.16, 0.42, 0xfff0d8, { seg: 12 }); K.cyl('vc', 0.45, 1.95, 0, 0.12, 0.05, 0x222222, { seg: 12 }); K.cyl('vc', 0.45, 1.49, 0, 0.12, 0.05, 0x222222, { seg: 12 });
-  const p = K.w(0.45, 1.72, 0); addHalo(p[0], p[1], p[2], 2.6, 0xffd8a8); addLightPool(p[0], y, p[2], 3.5, 0xffc890);
+  const p = K.w(0.45, 1.72, 0); addHalo(p[0], p[1], p[2], 2.6, 0xffd8a8); addLightPool(p[0], y, p[2], 2.8, 0xffc890);
 }
 function bridge(z, width) {
   const rx = riverAtZ(z); const span = 19;
@@ -4110,13 +4120,29 @@ function buildCountryside() {
         const g = new THREE.CylinderGeometry(2.8, 2.8, 15, 16, 1, true, -Math.PI / 2, Math.PI); g.rotateZ(Math.PI / 2);
         WK.geo('vinyl', g, cx, y, cz + oz, 0xffffff);
         for (let i = 0; i <= 5; i++) WK.geo('rail', new THREE.TorusGeometry(2.8, 0.03, 4, 16, Math.PI), cx - 7.5 + i * 3, y, cz + oz, 0xb0b4b8, { ry: Math.PI / 2 });
-        for (let i = 0; i < 3; i++) WK.box('vcNoShadow', cx, y + 0.3, cz + oz - 1.6 + i * 1.6, 14, 0.4, 0.6, 0x4f7a3a, { noCol: true });
+        // 温室垄行：土垄 + 叶簇（不再是实心绿盒）
+        for (let i = 0; i < 3; i++) {
+          const rz = cz + oz - 1.6 + i * 1.6;
+          WK.box('dirt', cx, y + 0.18, rz, 14, 0.3, 0.55, 0x8a7250, { wuv: 0.4, noCol: true });
+          const gb = cardBucket('leaf', cx, rz);
+          for (let k = 0; k < 40; k++) {
+            const px = cx - 6.7 + k * 0.34 + R(-0.1, 0.1), pz = rz + R(-0.2, 0.2), a = R(0, TAU);
+            _cB.setHSL(R(0.24, 0.3), R(0.4, 0.55), R(0.28, 0.4));
+            addCard(gb, px, y + 0.48 + R(-0.05, 0.05), pz, Math.cos(a), R(0.15, 0.5), Math.sin(a), R(0.34, 0.5), RI(0, 3), _cB, 0.12, 0, 1, 0, 1, a + Math.PI / 2, CROP4[RI(0, 3)]);
+          }
+        }
         addCollider(cx, cz + oz, 7.5, 2.8, 0, y, y + 2.8, 'wall');
       }
       WK.box('dirt', cx, y + 0.05, cz, W, 0.1, D, 0xa89878, { wuv: 0.4, noCol: true });
       c.gh = true; continue;
     }
-    WK.box('paddyMat', cx, y + 0.07, cz, W, 0.02, D, 0xffffff, { wuv: 0.18, noCol: true });
+    WK.box('paddyMat', cx, y + 0.07, cz, W, 0.02, D, 0xaccadb, { wuv: 0.18, noCol: true });
+    // 秧苗行：网格状的新绿苗撮
+    { const pb = cardBucket('grass', cx, cz);
+      for (let rx = cx - W / 2 + 1.0; rx < cx + W / 2 - 0.6; rx += 1.1) for (let rz2 = cz - D / 2 + 0.9; rz2 < cz + D / 2 - 0.6; rz2 += 0.85) {
+        const a = R(0, TAU); _cB.setHSL(R(0.22, 0.26), R(0.5, 0.62), R(0.4, 0.55));
+        addCard(pb, rx + R(-0.12, 0.12), y + 0.3, rz2 + R(-0.1, 0.1), Math.cos(a), R(0.6, 1), Math.sin(a), R(0.26, 0.4), 0, _cB, 0.3, 0, 1, 0, 1, a + Math.PI / 2);
+      } }
     addCollider(cx, cz, W / 2, D / 2, 0, y - 1, y + 0.08, { walk: true });
   }
   FARM.cells = FARM.cells.filter(c => !c.gh);
@@ -4161,7 +4187,7 @@ function buildGasStation() {
   // 雨棚
   for (const [px, pz] of [[-6, 2], [6, 2], [-6, 8], [6, 8]]) { K.box('paint', px, 2.6, pz, 0.4, 5.2, 0.4, 0xf2f2f0, { solid: true }); }
   K.box('paint', 0, 5.45, 5, 18, 0.6, 11, 0xf4f4f2); K.box('paint', 0, 5.2, 5, 18.2, 0.12, 11.2, 0xe03a2e);
-  K.box('glow', 0, 5.1, 5, 14, 0.04, 8, 0xfff8ec); for (const px of [-5, 0, 5]) { const hp = K.w(px, 4.9, 5); addHalo(hp[0], hp[1], hp[2], 7, 0xf4f6ff); addLightPool(hp[0], y, hp[2], 8, 0xf0f4ff); }
+  K.box('glow', 0, 5.1, 5, 14, 0.04, 8, 0xfff8ec); for (const px of [-5, 0, 5]) { const hp = K.w(px, 4.9, 5); addHalo(hp[0], hp[1], hp[2], 7, 0xf4f6ff); addLightPool(hp[0], y, hp[2], 5.5, 0xf0f4ff); }
   const lUV = allocSign(900, 120, (g, w, h) => { g.fillStyle = '#e03a2e'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.font = `900 70px ${FONT.sans}`; g.textAlign = 'center'; g.fillText('海风石油  HAIFU OIL', w / 2, 86); });
   K.plane('sign', 0, 5.45, 10.52, 13, 0.55, 0xffffff, { uvr: lUV });
   // 加油机
@@ -4257,7 +4283,7 @@ function convenienceStore(x, z, ry) {
   K.plane('sign', 0, 3.25, 0.09, 7, 1.1, 0xffffff, { uvr: uv });
   for (const sx of [5.2, 6.0]) K.box('paint', sx, 0.5, 0.6, 0.6, 1.0, 0.5, sx < 5.5 ? 0x3a7a4a : 0x2c6ea0);
   vendingMachine(new Kit(...K.w(-6.4, 0, 0.5), K.ry), 0, 0, 0, 0xd9483b);
-  const hp = K.w(0, 3.0, 0.8); addHalo(hp[0], hp[1], hp[2], 5, 0xf4f8ff); addLightPool(hp[0], TOWN_Y, hp[2] + 2, 7, 0xf0f6ff);
+  const hp = K.w(0, 3.0, 0.8); addHalo(hp[0], hp[1], hp[2], 5, 0xf4f8ff); addLightPool(hp[0], TOWN_Y, hp[2] + 2, 5, 0xf0f6ff);
   bicycleStatic(K, -4, 1.4, 0.3, 0xffffff); bicycleStatic(K, -3.2, 1.4, 0.3, 0xd9483b);
 }
 /* 船屋：海边的木结构棚子，里面放着小船与渔具 */
@@ -5463,6 +5489,8 @@ function applyTimeOfDay(h) {
   if (isDay) { const az = lerp(-0.35, Math.PI + 0.35, dayT), el = Math.sin(dayT * Math.PI) * 1.0 + 0.02; sd.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el) * 0.75 + 0.25).normalize(); }
   else { const nt = (h < 12 ? h + 24 : h) - 18.9; const el = clamp(Math.sin(nt / 10.7 * Math.PI), 0, 1) * 0.15 - 0.12; sd.set(-0.6, el, 0.5).normalize(); }
   SKY_U.sunDir.value.copy(sd); SKY_U.moonDir.value.set(-0.45, 0.42, 0.62).normalize(); SKY_U.night.value = night;
+  // 方向性假影：影子背离太阳，太阳越低拖得越长；夜间回到圆形 AO
+  if (GSH.U) { const el = Math.max(sd.y, 0.05), n2 = Math.hypot(sd.x, sd.z) || 1; GSH.U.uDir.value.set(-sd.x / n2, -sd.z / n2); GSH.U.uLen.value = lerp(clamp(0.55 / el, 1.0, 2.4), 1.0, night); }
   if (SKY.sky) { const u = SKY.sky.material.uniforms; u.sunPosition.value.copy(sd).multiplyScalar(4000); u.turbidity.value = turb * 0.7 + WX.grey * 6; u.rayleigh.value = lerp(1.1, 2.2, smooth(16.5, 18.6, h) * (1 - night)); u.skyGain.value = lerp(0.42, 0.6, smooth(16.5, 18.8, h)) * (1 - WX.grey * 0.4); }
   SKY_U.cloudLit.value.copy(LT.cl).multiplyScalar(lerp(1.4, 0.25, night) * (1 - WX.grey * 0.35)); SKY_U.cloudShade.value.copy(LT.cs).multiplyScalar(lerp(1.0, 0.3, night) * (1 - WX.grey * 0.4)); SKY_U.cover.value = WX.cover;
   sun.color.copy(LT.sun); sun.intensity = sunI * WX.sun; LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);

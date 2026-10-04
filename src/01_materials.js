@@ -82,8 +82,8 @@ regMat('ballast', pm(TEX.ballast, { roughness: 1 }), { cast: false, tint: 0 });
 regMat('stone', pm(TEX.stone, { roughness: 0.92 }), { tint: 0.3 });
 regMat('sandMat', pm(TEX.sand, { roughness: 1 }), { cast: false, tint: 0.2 });
 regMat('rockMat', pm(TEX.rock, { roughness: 0.95 }), { tint: 0.3 });
-regMat('paddyMat', stdMat({ map: TEX.paddy, roughness: 0.25, envMapIntensity: 1.4 }), { cast: false, tint: 0 });
-regMat('glass', new THREE.MeshStandardMaterial({ color: lin(0xa9c4cf), roughness: 0.03, metalness: 0.1, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.6 }), { cast: false, receive: false });
+regMat('paddyMat', stdMat({ map: TEX.paddy, roughness: 0.15, envMapIntensity: 1.9 }), { cast: false, tint: 0 });
+regMat('glass', new THREE.MeshStandardMaterial({ color: lin(0x9db8c4), roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 0.65 }), { cast: false, receive: false });
 /* 发光体（灯泡、灯笼）：夜里亮度超过 1，交给辉光 */
 const glowMat = regMat('glow', new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xcfcfcf }), { cast: false, receive: false });
 /* 道路标线 */
@@ -96,7 +96,7 @@ const winDay = makeCanvas(1024, 1024), winNight = makeCanvas(1024, 1024);
   const gd = winDay.getContext('2d'), gn = winNight.getContext('2d');
   gn.fillStyle = '#000'; gn.fillRect(0, 0, 1024, 1024);
   for (let i = 0; i < 16; i++) {
-    const cx = (i % 4) * 256, cy = Math.floor(i / 4) * 256; const kind = i % 8; const lit = i < 12;
+    const cx = (i % 4) * 256, cy = Math.floor(i / 4) * 256; const kind = i % 8; const lit = i < 10;
     // 白天：天空反射
     const gr = gd.createLinearGradient(cx, cy, cx + 256, cy + 256);
     gr.addColorStop(0, '#3b4650'); gr.addColorStop(0.5, '#2a333b'); gr.addColorStop(1, '#1d242a');
@@ -203,23 +203,30 @@ function buildPools() {
 /* --- 接地阴影（廉价的接触 AO，让建筑「长」在地里而不是浮在上面） ---
    与 buildPools 同套路：所有调用先攒进 GSH.pos，建完场景后一次性铺成贴地网格。
    顶点色通道复用为「强度」：col 里存 a，材质基色是暗绿黑，vColor 相乘即阴影深浅。 */
-const GSH = { pos: [] };
-function addGroundShadow(x, z, w, d, ry = 0, a = 0.8) { GSH.pos.push([x, z, w, d, ry, a]); }
+const GSH = { pos: [], U: { uDir: { value: new THREE.Vector2(1, 0) }, uLen: { value: 1 } } };
+function addGroundShadow(x, z, w, d, ry = 0, a = 0.8, h = 0.7) { GSH.pos.push([x, z, w, d, ry, a, h]); }
 function buildGroundShadows() {
   if (!GSH.pos.length) return;
   const tex = canvasTex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,0.9)'); gr.addColorStop(0.5, 'rgba(0,0,0,0.42)'); gr.addColorStop(0.8, 'rgba(0,0,0,0.12)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); }, { data: true });
-  const pos = [], uv = [], col = [], idx = []; const N = 5; // 细分成网格，逐顶点贴地
-  for (const [x, z, w, d, ry, a] of GSH.pos) {
+  const pos = [], uv = [], col = [], ac = [], as2 = [], idx = []; const N = 5; // 细分成网格，逐顶点贴地
+  for (const [x, z, w, d, ry, a, hs] of GSH.pos) {
     const b = pos.length / 3, c = Math.cos(ry), s = Math.sin(ry);
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       const lx = (i / N - 0.5) * w, lz = (j / N - 0.5) * d;
       const px = x + lx * c + lz * s, pz = z - lx * s + lz * c;
-      pos.push(px, terrainH(px, pz) + 0.05, pz); uv.push(i / N, j / N); col.push(a, a, a);
+      pos.push(px, terrainH(px, pz) + 0.05, pz); uv.push(i / N, j / N); col.push(a, a, a); ac.push(x, z); as2.push(hs);
     }
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = b + j * (N + 1) + i; idx.push(q, q + N + 1, q + 1, q + 1, q + N + 1, q + N + 2); }
   }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
-  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, color: 0x2a3226, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, fog: true }));
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('aC', new THREE.Float32BufferAttribute(ac, 2)); g.setAttribute('aS', new THREE.Float32BufferAttribute(as2, 1)); g.setIndex(idx);
+  const mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, color: 0x2a3226, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, fog: true });
+  // 方向性假影：顶点沿太阳方位剪切拉伸，uLen=1 时回到圆形（夜晚）
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, GSH.U);
+    sh.vertexShader = 'attribute vec2 aC; attribute float aS; uniform vec2 uDir; uniform float uLen;\n' +
+      sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nvec2 gshOff = transformed.xz - aC; transformed.xz += uDir * (uLen - 1.0) * (dot(gshOff, uDir) + 0.45) * aS;`);
+  };
+  const m = new THREE.Mesh(g, mat);
   m.renderOrder = 2; m.frustumCulled = false; scene.add(m);
 }
 /* --- 墙面过渡贴片（潮气带/檐口阴带/窗下水痕） ---
