@@ -16,7 +16,7 @@ UI.toast = (msg, ms = 3400) => {
 function phaseName(h) { return h < 5 ? '深夜' : h < 7 ? '清晨' : h < 11 ? '上午' : h < 13 ? '正午' : h < 17 ? '下午' : h < 19 ? '黄昏' : h < 22 ? '夜樱' : '深夜'; }
 UI.refreshHUD = () => {
   const st = S();
-  $('hudDay').textContent = '第 ' + st.day + ' 天 · ' + WEEK[(st.day - 1) % 7] + ' · ' + (W_P[WEATHER.tgt] || W_P.sun).cn;
+  $('hudDay').textContent = '第 ' + st.day + ' 天 · ' + WEEK[(st.day - 1) % 7] + ' · ' + (W_P[weatherNow(st.min)] || W_P.sun).cn;
   $('hudTime').textContent = fmtTime(st.min); $('hudPhase').textContent = phaseName(st.min / 60);
   $('hudCoins').textContent = st.coins;
   const ul = $('taskList'); ul.innerHTML = '';

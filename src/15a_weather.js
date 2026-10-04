@@ -36,7 +36,7 @@ function updateWeather(dt) {
   const st = S(); if (!st) return;
   if (WEATHER.day !== st.day) { WEATHER.day = st.day; WEATHER.plan = weatherPlan(st.day); WEATHER.manual = null; }
   const w = weatherNow(st.min);
-  if (w !== WEATHER.tgt) { WEATHER.from = Object.assign({}, WX); WEATHER.tgt = w; WEATHER.k = 0; }
+  if (w !== WEATHER.tgt) { WEATHER.from = Object.assign({}, WX); WEATHER.tgt = w; WEATHER.k = 0; UI.refreshHUD(); }
   WEATHER.k = Math.min(1, WEATHER.k + dt / 14);
   const B = W_P[w], t = smooth(0, 1, WEATHER.k), A = WEATHER.from || B;
   for (const kk of W_KEYS) WX[kk] = lerp(A[kk], B[kk], t);
