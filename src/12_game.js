@@ -495,7 +495,7 @@ function updatePlayer(dt, t) {
     pushOut(P.pos, 0.3, P.pos.y);
     if (!ok(P.pos.x, P.pos.z) && terrainH(P.pos.x, P.pos.z) < -0.35 && !groundAt.floor) { P.pos.x = ox; P.pos.z = oz; }
     // 列车 / 汽车
-    if (TRAIN.box) { const b = TRAIN.box; if (P.pos.x > b.x0 && P.pos.x < b.x1 && P.pos.z > b.z0 && P.pos.z < b.z1 && P.pos.y < RAIL_Y + 3.8) { const zc = (b.z0 + b.z1) / 2; P.pos.z = P.pos.z < zc ? b.z0 - 0.05 : b.z1 + 0.05; if (TRAIN.v > 1) UI.toast('危险！请离铁轨远一点。'); } }
+    { const tp = trainPush(P.pos.x, P.pos.z, P.pos.y, 0.3); if (tp) { P.pos.x += tp[0]; P.pos.z += tp[1]; if (TRAIN.v > 1) UI.toast('危险！请离铁轨远一点。'); } }
     for (const c of VEHICLES) { const dx = P.pos.x - c.x, dz = P.pos.z - c.z; const cs = Math.cos(c.yaw), sn = Math.sin(c.yaw); const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs; const hw = c.M.halfW + 0.3, hl = c.M.L / 2 + 0.3; if (Math.abs(lx) < hw && Math.abs(lz) < hl && P.pos.y < c.y + c.M.H) { const px = hw - Math.abs(lx), pz = hl - Math.abs(lz); if (px < pz) { const s = Math.sign(lx) || 1; P.pos.x += cs * s * px; P.pos.z += -sn * s * px; } else { const s = Math.sign(lz) || 1; P.pos.x += sn * s * pz; P.pos.z += cs * s * pz; } if (c.ai && c.v > 4) UI.toast('小心车辆！'); } }
     // 垂直
     const g = groundAt(P.pos.x, P.pos.z, P.pos.y);
@@ -537,7 +537,9 @@ function updateCamera(dt) {
   while (d < dist) { const x = _camT.x - dir.x * d, y = _camT.y - dir.y * d + 0.15, z = _camT.z - dir.z * d; if (blockedAt(x, y, z)) break; d += step; }
   d = Math.max(0.8, d - 0.25);
   _camP.set(_camT.x - dir.x * d, _camT.y - dir.y * d + 0.15, _camT.z - dir.z * d);
-  const tg = terrainH(_camP.x, _camP.z) + 0.4; if (_camP.y < tg) _camP.y = tg;
+  { const ug = groundAt(_camT.x, _camT.z, _camT.y); // 在隧道内：镜头限制在洞内，不抬到山体之上
+    if (groundAt.under && terrainH(_camT.x, _camT.z) > ug + 3) _camP.y = clamp(_camP.y, ug + 0.8, ug + 5.2);
+    else { const tg = terrainH(_camP.x, _camP.z) + 0.4; if (_camP.y < tg) _camP.y = tg; } }
   camera.position.lerp(_camP, Math.min(1, dt * (v ? 10 : 14)));
   if (CAMSHAKE.t > 0) { CAMSHAKE.t -= dt; camera.position.x += R(-1, 1) * CAMSHAKE.t * 0.4; camera.position.y += R(-1, 1) * CAMSHAKE.t * 0.4; }
   camera.lookAt(_camT);

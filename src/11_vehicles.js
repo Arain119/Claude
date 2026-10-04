@@ -113,6 +113,11 @@ function placeVehicle(v, dt) {
 /* ---------------- 交通路径 ---------------- */
 const CAR_PATH = { loop: true, pts: [[-1.7, 41.8], [-1.7, -78.5], [1.5, -81.8], [98.5, -81.8], [101.8, -78.5], [101.8, 38.5], [98.5, 41.8], [1.6, 41.8]] };
 const CAR_STOPS = [{ x: -1.7, z: -47.4, cx: 0 }, { x: 101.8, z: -72.6, cx: 100 }, { x: 98.2, z: -47.4, cx: 100 }];
+// 环岛公路与铁路的平交道：双向各一条停车线（左侧通行，车道中心偏左 1.85 m）
+function addRingCrossingStops() {
+  if (!RAIL.cross) return; const p = RAIL.cross.road; const tx = p[3], tz = p[4], lx = tz, lz = -tx; const d = railSep(RAIL.cross.s) / 2 + 5;
+  CAR_STOPS.push({ x: RAIL.cross.x - tx * d + lx * 1.85, z: RAIL.cross.z - tz * d + lz * 1.85, cx: 'W' }, { x: RAIL.cross.x + tx * d - lx * 1.85, z: RAIL.cross.z + tz * d - lz * 1.85, cx: 'W' });
+}
 const TRAFFIC_PATHS = {};
 function buildTrafficPaths() {
   TRAFFIC_PATHS.town = CAR_PATH;
@@ -122,6 +127,7 @@ function buildTrafficPaths() {
   TRAFFIC_PATHS.ringR = { loop: true, pts: [[95.5, 41.8], [-60, 41.8], [-84, 41.8], ...rv.slice(0, -2), [101.8, -66], [101.8, 36]] };
 }
 function spawnTraffic() {
+  addRingCrossingStops();
   buildTrafficPaths();
   const looks = () => ({ gender: chance(0.5) ? 'm' : 'f', age: pick(['adult', 'adult', 'old']), top: pick([0x3a4a5a, 0xe8e2d6, 0x6a5a4a, 0x2a2a2a, 0x8fa8c8]), hair: pick(['short', 'bob', 'short']) });
   const add = (pathKey, types, n) => { const P = TRAFFIC_PATHS[pathKey]; if (!P) return; const L = pathLen(P); for (let i = 0; i < n; i++) { const s = (i + R(0, 0.4)) * L / n; const p = pathAt(P, s); const v = spawnVehicle(pick(types), p[0], p[1], p[2], { ai: pathKey, s, vmax: R(9, 12.5) * (pathKey === 'town' ? 0.8 : 1), driverLook: looks() }); } };
@@ -145,7 +151,7 @@ function updateTraffic(dt, ppos) {
     for (const o of VEHICLES) { if (o === v) continue; const dx = o.x - v.x, dz = o.z - v.z; const ah = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx); if (ah > 0 && ah < 16 && lat < 2.2) target = Math.min(target, Math.max(0, (ah - (o.M.L + v.M.L) / 2 - 1.8) * 1.4)); }
     { const dx = ppos.x - v.x, dz = ppos.z - v.z; const ah = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx); if (!DRIVE.v && ah > 0 && ah < 11 && lat < 1.9 && Math.abs(ppos.y - v.y) < 3) { target = Math.min(target, Math.max(0, (ah - v.M.L / 2 - 1.5) * 1.5)); if (ah < v.M.L / 2 + 2.5 && !v.honked) { v.honked = true; AUDIO.horn && AUDIO.horn(0.6); } } else if (ah > 14) v.honked = false; }
     // 道口
-    for (const st of CAR_STOPS) { const C = CROSSINGS.find(k => k.x === st.cx); if (!C) continue; const dx = st.x - v.x, dz = st.z - v.z; const ah = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx); if (lat < 2 && ah > -0.5 && ah < 32 && (C.active || C.arm > 0.02)) target = Math.min(target, Math.max(0, (ah - v.M.L / 2 - 0.3) * 1.2)); }
+    for (const st of CAR_STOPS) { const C = CROSSINGS.find(k => k.id === st.cx); if (!C) continue; const dx = st.x - v.x, dz = st.z - v.z; const ah = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx); if (lat < 2 && ah > -0.5 && ah < 32 && (C.active || C.arm > 0.02)) target = Math.min(target, Math.max(0, (ah - v.M.L / 2 - 0.3) * 1.2)); }
     const prevV = v.v; v.v += clamp(target - v.v, -7 * dt, 2.2 * dt); v.v = Math.max(0, v.v); v.brake = prevV - v.v > 0.02 ? 1 : 0;
     v.s = (v.s + v.v * dt) % L;
     const q = pathAt(P, v.s); v.x = q[0]; v.z = q[1];
@@ -205,7 +211,7 @@ function updateDriving(dt, t) {
   for (const o of VEHICLES) { if (o === v) continue; const dx = v.x - o.x, dz = v.z - o.z, d = Math.hypot(dx, dz), m = (v.M.halfW + o.M.halfW) * 1.05 + Math.min(v.M.L, o.M.L) * 0.18; if (d < m && d > 0.01) { v.x += dx / d * (m - d); v.z += dz / d * (m - d); hit = true; if (o.ai) o.v = 0; } }
   if (terrainH(v.x, v.z) < -0.4 && !groundAt.floor || islandC(v.x, v.z) < -0.15) { v.x = ox; v.z = oz; hit = true; }
   if (hit) { const imp = Math.abs(v.v); v.v *= 0.45; if (imp > 6) { AUDIO.crash && AUDIO.crash(Math.min(1, imp / 25)); CAMSHAKE.t = Math.min(0.5, imp / 40); } }
-  if (TRAIN.box) { const b = TRAIN.box; if (v.x > b.x0 - 1 && v.x < b.x1 + 1 && v.z > b.z0 - 1 && v.z < b.z1 + 1) { v.z = v.z < (b.z0 + b.z1) / 2 ? b.z0 - 1.2 : b.z1 + 1.2; v.v = 0; CAMSHAKE.t = 0.5; AUDIO.crash && AUDIO.crash(1); } }
+  { const tp = trainPush(v.x, v.z, v.y, v.M.halfW + 0.3); if (tp) { v.x += tp[0]; v.z += tp[1]; v.v = 0; CAMSHAKE.t = 0.5; AUDIO.crash && AUDIO.crash(1); } }
   placeVehicle(v, dt);
   PLAYER.pos.set(v.x, v.y, v.z); PLAYER.yaw = v.yaw;
   playerChar.root.position.y = 0; if (T.bike) poseCharacter(playerChar, dt, 'bike', Math.abs(v.v) * 0.3, t); else poseCharacter(playerChar, dt, 'sit', 0, t);

@@ -18,12 +18,13 @@ function scatterNature() {
     if (Math.abs(z + 60) < 9 && x > -170 && x < 140) continue;
     if (roadSample(x, z) > 0.3 || flatW(x, z, -320, -130, -40, 110, 0) > 0.5 && FARM.paddy(x, z)) continue;
     if (polyDist(CAPE_PATH, x, z) < 2.2 || (Math.abs(x + 40) < 24 && z < -84 && z > -152 && h > 13)) continue;
+    if (occNear(x, z, 1.4)) continue;
     grassPatch(x, z, null, RI(4, 8), 1.4);
   }
-  for (const [x, z] of [[-20, 40], [20, 40], [-10, 84], [10, 84], [30, -44], [-30, 36], [70, 36], [90, -40], [20, -49], [-60, -44], [-64, 84]]) shrub(x, z, R(0.8, 1.2), pick([0, 0xf28ab2, 0xffffff]));
-  for (const [x, z, s] of [[36, -42, 0.9], [72, -41, 0.95], [88, -44, 1.0], [-20, -80, 1.0], [-58, -80, 1.05], [20, -88, 1.0], [110, 40, 0.9], [110, -40, 0.95], [-110, -46, 1.0], [-118, 46, 1.0], [-90, 84, 1.0], [-44, 46, 0.9], [44, 50, 0.9]]) sakuraTree(x, z, s, { cards: 1400 });
+  for (const [x, z] of [[-20, 40], [20, 40], [-10, 84], [10, 84], [30, -44], [-30, 36], [70, 36], [90, -40], [20, -49], [-60, -44], [-64, 84]]) { if (occNear(x, z, 1.3)) continue; shrub(x, z, R(0.8, 1.2), pick([0, 0xf28ab2, 0xffffff])); }
+  for (const [x, z, s] of [[36, -42, 0.9], [72, -41, 0.95], [88, -44, 1.0], [-20, -80, 1.0], [-58, -80, 1.05], [20, -88, 1.0], [110, 40, 0.9], [110, -40, 0.95], [-110, -46, 1.0], [-118, 46, 1.0], [-90, 84, 1.0], [-44, 46, 0.9], [44, 50, 0.9]]) { if (occNear(x, z, 1.6)) continue; sakuraTree(x, z, s, { cards: 1400 }); }
   // 环岛公路沿线的樱花
-  const ring = ROADS[0]; if (ring) for (let s = 80; s < ring.len - 80; s += 70) { const p = ring.pts[Math.round(s / 2)]; const side = chance(0.5) ? 1 : -1; const ox = p[0] + p[4] * side * (ring.hw + 6), oz = p[2] - p[3] * side * (ring.hw + 6); if (islandC(ox, oz) > 0.06 && roadSample(ox, oz) < 0.4) sakuraTree(ox, oz, R(0.9, 1.15), { cards: 1300 }); }
+  const ring = ROADS[0]; if (ring) for (let s = 80; s < ring.len - 80; s += 70) { const p = ring.pts[Math.round(s / 2)]; const side = chance(0.5) ? 1 : -1; const ox = p[0] + p[4] * side * (ring.hw + 6), oz = p[2] - p[3] * side * (ring.hw + 6); if (islandC(ox, oz) > 0.06 && roadSample(ox, oz) < 0.4 && !occNear(ox, oz, 2)) sakuraTree(ox, oz, R(0.9, 1.15), { cards: 1300 }); }
 }
 async function build() {
   await loadFonts();
@@ -33,7 +34,7 @@ async function build() {
   await loadModels((k) => progress(0.14 + k * 0.06, '正在把车辆开上岛……'));
   await loadCharModels((k) => progress(0.2 + k * 0.05, '岛上的居民正在醒来……'));
   progress(0.25, '正在修环岛公路……'); await tick();
-  buildRoadData();
+  railPrep(); buildRoadData(); buildRailData();
   progress(0.3, '正在铺开山、海与天空……'); await tick();
   buildTerrain(); buildDepthTex(); buildSea(); buildRiver(); buildSky(); buildFarLand(); buildRoadMeshes();
   progress(0.4, '正在给商店街挂上招牌……'); await tick();
@@ -48,7 +49,8 @@ async function build() {
   progress(0.68, '正在修港口与灯塔……'); await tick();
   buildHarbor(); buildCape(); buildBeach();
   progress(0.74, '正在长出森林……'); await tick();
-  scatterNature(); buildForest();
+  flushBatches(scene); buildOccupancy();
+  scatterNature(); buildForest(); addTreeColliders();
   progress(0.82, '正在合并网格……'); await tick();
   flushBatches(scene); flushCards(); buildWires(); buildHalos(); buildPetals(); buildPools();
   TEX_SIGN.needsUpdate = true;
@@ -56,7 +58,7 @@ async function build() {
   seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic();
   scene.updateMatrixWorld(true); buildGrass();
   mailboxInteractables(); shopInteractables(); homeInteractables();
-  const ORDER = ['home', 'post', 'station', 'plaza', 'shrine', 'river', 'harbor', 'cape', 'beach', 'platform', 'park', 'school', 'farm', 'gas', 'view'];
+  const ORDER = ['home', 'post', 'station', 'plaza', 'shrine', 'river', 'harbor', 'cape', 'beach', 'platform', 'park', 'school', 'farm', 'gas', 'view', 'station2'];
   PLACES.sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
   buildMapBase(); refreshHomeBoard(); applyShadowQuality(); setQuality(qName, true);
   applyTimeOfDay(S().min / 60); updateSkyEnv(true);
@@ -92,19 +94,77 @@ const GradeShader = {
       #include <encodings_fragment>
     }`
 };
+/* 世界描边（屏幕空间）：深度跳变 → 轮廓线；1/深度 的二阶差分 → 折角线（平面上恒为 0，墙面、路面保持干净） */
+const OutlineShader = {
+  uniforms: { tDiffuse: { value: null }, tDepth: { value: null }, res: { value: new THREE.Vector2(1, 1) }, cNear: { value: 0.1 }, cFar: { value: 3000 }, strength: { value: 1 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse, tDepth; uniform vec2 res; uniform float cNear, cFar, strength; varying vec2 vUv;
+    float viewZ(vec2 uv){ float d = texture2D(tDepth, uv).x; float z = d * 2.0 - 1.0; return 2.0 * cNear * cFar / (cFar + cNear - z * (cFar - cNear)); }
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      float d0 = texture2D(tDepth, vUv).x; if (d0 >= 0.99999) { gl_FragColor = c; return; }
+      vec2 px = 1.0 / res;
+      float z0 = viewZ(vUv), zl = viewZ(vUv - vec2(px.x, 0.0)), zr = viewZ(vUv + vec2(px.x, 0.0)), zd = viewZ(vUv - vec2(0.0, px.y)), zu = viewZ(vUv + vec2(0.0, px.y));
+      float sil = max(max(z0 - zl, z0 - zr), max(z0 - zd, z0 - zu)) / z0;            // 只在靠后的一侧画线，线宽 1 像素
+      float w0 = 1.0 / z0; float lap = (abs(1.0 / zl + 1.0 / zr - 2.0 * w0) + abs(1.0 / zd + 1.0 / zu - 2.0 * w0)) / w0;
+      float e = smoothstep(0.03, 0.09, sil) + smoothstep(0.0025, 0.008, lap) * 0.6;
+      e = clamp(e, 0.0, 1.0) * (1.0 - smoothstep(45.0, 200.0, z0)) * strength;
+      vec3 line = c.rgb * vec3(0.34, 0.31, 0.38);
+      gl_FragColor = vec4(mix(c.rgb, line, e * 0.8), c.a);
+    }`
+};
+/* 轻量 FXAA（替代多重采样，因为描边需要深度纹理） */
+const FXAAShader = {
+  uniforms: { tDiffuse: { value: null }, res: { value: new THREE.Vector2(1, 1) } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 res; varying vec2 vUv;
+    float lum(vec3 c){ return sqrt(dot(c, vec3(0.299, 0.587, 0.114))); }
+    void main(){
+      vec2 px = 1.0 / res;
+      vec3 rgbM = texture2D(tDiffuse, vUv).rgb;
+      float lNW = lum(texture2D(tDiffuse, vUv + vec2(-1.0, -1.0) * px).rgb), lNE = lum(texture2D(tDiffuse, vUv + vec2(1.0, -1.0) * px).rgb);
+      float lSW = lum(texture2D(tDiffuse, vUv + vec2(-1.0, 1.0) * px).rgb), lSE = lum(texture2D(tDiffuse, vUv + vec2(1.0, 1.0) * px).rgb), lM = lum(rgbM);
+      float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE))), lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+      vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), ((lNW + lSW) - (lNE + lSE)));
+      float red = max((lNW + lNE + lSW + lSE) * 0.03125, 1.0 / 128.0);
+      dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + red), vec2(-8.0), vec2(8.0)) * px;
+      vec3 a = 0.5 * (texture2D(tDiffuse, vUv + dir * (1.0 / 3.0 - 0.5)).rgb + texture2D(tDiffuse, vUv + dir * (2.0 / 3.0 - 0.5)).rgb);
+      vec3 b = a * 0.5 + 0.25 * (texture2D(tDiffuse, vUv + dir * -0.5).rgb + texture2D(tDiffuse, vUv + dir * 0.5).rgb);
+      float lB = lum(b);
+      gl_FragColor = vec4((lB < lMin || lB > lMax) ? a : b, 1.0);
+      #include <encodings_fragment>
+    }`
+};
+class SceneOutlinePass extends THREE.Pass {
+  constructor(size) {
+    super();
+    const depth = new THREE.DepthTexture(size.x, size.y); depth.type = THREE.UnsignedIntType;
+    this.rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthTexture: depth });
+    this.mat = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.clone(OutlineShader.uniforms), vertexShader: OutlineShader.vertexShader, fragmentShader: OutlineShader.fragmentShader });
+    this.mat.uniforms.tDepth.value = depth; this.mat.uniforms.res.value.copy(size); this.uniforms = this.mat.uniforms;
+    this.quad = new THREE.FullScreenQuad(this.mat);
+  }
+  render(renderer, writeBuffer) {
+    renderer.setRenderTarget(this.rt); renderer.clear(); renderer.render(scene, camera);
+    this.mat.uniforms.tDiffuse.value = this.rt.texture;
+    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer); this.quad.render(renderer);
+  }
+  dispose() { this.rt.dispose(); this.rt.depthTexture && this.rt.depthTexture.dispose(); this.mat.dispose(); }
+}
 function initPost() {
   if (!THREE.EffectComposer || !THREE.UnrealBloomPass) return;
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  let rt;
-  if (Q.msaa && renderer.capabilities.isWebGL2 && THREE.WebGLMultisampleRenderTarget) { rt = new THREE.WebGLMultisampleRenderTarget(size.x, size.y, { type: THREE.HalfFloatType }); rt.samples = Q.msaa; }
-  else rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType });
+  // 场景先渲染到自带深度纹理的目标，再由描边通道写入合成链（避免读写同一深度纹理）
+  const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType });
   composer = new THREE.EffectComposer(renderer, rt);
-  composer.addPass(new THREE.RenderPass(scene, camera));
+  const outline = new SceneOutlinePass(size); composer.addPass(outline); composer.outline = outline;
   bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.35, 0.55, 0.9); composer.addPass(bloomPass);
   const grade = new THREE.ShaderPass(GradeShader); composer.addPass(grade); composer.grade = grade;
+  const fxaa = new THREE.ShaderPass(FXAAShader); fxaa.uniforms.res.value.copy(size); composer.addPass(fxaa);
 }
 function renderFrame() {
   if (composer && Q.bloom) {
+    composer.outline.uniforms.cNear.value = camera.near; composer.outline.uniforms.cFar.value = camera.far;
     bloomPass.strength = lerp(0.34, 0.95, NIGHT.v); bloomPass.threshold = lerp(0.86, 0.7, NIGHT.v); composer.grade.uniforms.night.value = NIGHT.v;
     composer.render();
   } else renderer.render(scene, camera);
@@ -168,8 +228,8 @@ function frame(now) {
     envT = 0.4; let near = 1e9, cnt = 0; for (const tr of TREES) { const dx = tr.x - camera.position.x, dz = tr.z - camera.position.z; if (Math.abs(dx) > 60 || Math.abs(dz) > 60) continue; const d = Math.hypot(dx, dz); if (tr.kind === 'sakura') near = Math.min(near, d - tr.r); if (d < 30) cnt++; }
     petalNear = smooth(45, 6, near); ENV.trees = clamp(cnt / 8, 0, 1);
     const c = islandC(PLAYER.pos.x, PLAYER.pos.z); ENV.sea = Math.max(smooth(0.2, 0.02, c), PLAYER.pos.x > 112 && PLAYER.pos.z > -40 && PLAYER.pos.z < 65 ? 0.8 : 0);
-    let cr = 0; for (const C of CROSSINGS) if (C.active) cr = Math.max(cr, smooth(160, 15, Math.hypot(PLAYER.pos.x - C.x, PLAYER.pos.z + 60)));
-    ENV.crossing = cr; ENV.train = TRAIN.state === 'wait' ? 0 : smooth(220, 10, Math.hypot(PLAYER.pos.x - TRAIN.x, PLAYER.pos.z - TRACK_Z[TRAIN.track])); ENV.trainSpeed = TRAIN.v;
+    let cr = 0; for (const C of CROSSINGS) if (C.active) cr = Math.max(cr, smooth(160, 15, Math.hypot(PLAYER.pos.x - C.x, PLAYER.pos.z - C.z)));
+    ENV.crossing = cr; ENV.train = smooth(220, 10, nearestTrainDist(PLAYER.pos.x, PLAYER.pos.z)); ENV.trainSpeed = TRAIN.v;
     ENV.night = NIGHT.v; ENV.height = PLAYER.pos.y - TOWN_Y; ENV.windy = 0.3 + Math.max(0, Math.sin(T * 0.11)) * 0.5;
   }
   PETAL_U.density.value += (petalNear - PETAL_U.density.value) * Math.min(1, dt * 2);
@@ -185,7 +245,7 @@ function updateHeadlights() {
   headSpot.intensity = on ? 6 : 0;
   if (on) { const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw); headSpot.position.set(v.x + fx * v.M.L * 0.45, v.y + v.M.H * 0.45, v.z + fz * v.M.L * 0.45); headSpot.target.position.set(v.x + fx * 25, v.y - 1, v.z + fz * 25); headSpot.target.updateMatrixWorld(); }
 }
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); if (composer) { const s = renderer.getDrawingBufferSize(new THREE.Vector2()); composer.setSize(innerWidth, innerHeight); } });
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); if (composer) { composer.outline && composer.outline.dispose(); composer.dispose && composer.dispose(); initPost(); } });
 document.addEventListener('visibilitychange', () => { if (document.hidden && GAME.started) GAME.save(); });
 
 build().then(() => { requestAnimationFrame(frame); }).catch((e) => { console.error(e); progress(1, '加载出错：' + e.message); });

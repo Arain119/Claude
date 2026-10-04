@@ -270,6 +270,7 @@ function shrub(x, z, s = 1, flowers = 0, y) {
     addCard(b, x + px, y + py, z + pz, px, 1, pz, R(0.6, 0.9) * s, RI(0, 3), col, 0.2, px, 1, pz);
   }
   WK.sph('vc', x, y + 0.42 * s, z, s * 0.7, s * 0.4, s * 0.7, 0x2f4a2a, { lo: true });
+  if (!BATCH_NOCHUNK) addCollider(x, z, 0.65 * s, 0.65 * s, 0, y, y + 0.9 * s, { round: true, noFloor: true });
   if (flowers) for (let i = 0; i < 10 * s; i++) { const th = R(0, TAU), rr = R(0.3, 0.9) * s; WK.sph('vcNoShadow', x + Math.cos(th) * rr, y + R(0.6, 0.95) * s, z + Math.sin(th) * rr, 0.09, 0.07, 0.09, flowers, { lo: true }); }
 }
 
@@ -331,6 +332,12 @@ function sugiTree(x, z, s = 1, o = {}) {
   if (!o.proto) TREES.push({ x, z, r: 3 * s, kind: 'sugi', y });
 }
 const FOREST = { meshes: [] };
+// 树干碰撞：所有单独种下的树（森林实例在 buildForest 里单独处理）
+function addTreeColliders() {
+  for (const t of TREES) { if (t.forest || t._col) continue; t._col = true;
+    const r = t.giant ? 1.3 : clamp(t.r * 0.09, 0.16, 0.45);
+    addCollider(t.x, t.z, r, r, 0, t.y - 0.5, t.y + 3.5, { round: true, noFloor: true }); }
+}
 function makeProto(fn) {
   const saved = CARD_STORE; CARD_STORE = new Map(); const savedTrees = TREES.length;
   const group = buildLocal(fn); const store = CARD_STORE; CARD_STORE = saved; TREES.length = savedTrees;
@@ -362,10 +369,11 @@ function buildForest() {
     if (Math.abs(x + 40) < 30 && z < -80 && z > -158) continue;
     if (Math.hypot(x - CAPE.x, z - CAPE.z) < 22 || polyDist(CAPE_PATH, x, z) < 5) continue;
     if (roadSample(x, z) > 0.02 || riverDist(x, z) < 11) continue;
-    const h = terrainH(x, z); if (h < 3) continue;
+    const h = terrainH(x, z); if (h < 3 || occNear(x, z, 3.6)) continue;
     const dens = smooth(0.35, 0.6, fbm(x * 0.012 + 7, z * 0.012, 3)) * 0.8 + smooth(10, 40, h) * 0.6; if (rng() > dens) continue;
     const kind = c < 0.12 ? 'pine' : (h > 22 ? (chance(0.75) ? 'sugi' : 'broad') : (chance(0.3) ? 'sugi' : 'broad'));
-    const arr = lists[kind]; arr[RI(0, arr.length - 1)].push([x, h - 0.2, z, R(0, TAU), R(0.8, 1.25)]);
+    const sc = R(0.8, 1.25); const arr = lists[kind]; arr[RI(0, arr.length - 1)].push([x, h - 0.2, z, R(0, TAU), sc]);
+    addCollider(x, z, (kind === 'sugi' ? 0.3 : 0.24) * sc, (kind === 'sugi' ? 0.3 : 0.24) * sc, 0, h - 0.5, h + 4, { round: true, noFloor: true });
     placed++;
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);

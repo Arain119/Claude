@@ -3,22 +3,20 @@
    被道路、人行道、建筑覆盖的地方（俯视渲染得到的覆盖高度图）不长草。 */
 const GRASS = { mesh: null, U: null, size: 56 };
 
-// 俯视渲染：记录每个位置最高的"非地形"表面高度（R）与是否有覆盖（G）
-function renderGrassCover(N) {
+// 俯视渲染整个岛上的"人造物"（地形、水、植被、天空、角色、车辆、透明物除外）
+function renderTopDown(N, mat, type, fromBelow) {
   const W = WORLD, sx = W.x1 - W.x0, sz = W.z1 - W.z0;
-  const rt = new THREE.WebGLRenderTarget(N, Math.round(N * sz / sx), { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
+  const rt = new THREE.WebGLRenderTarget(N, Math.round(N * sz / sx), { type, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
   const cam = new THREE.OrthographicCamera(-sx / 2, sx / 2, sz / 2, -sz / 2, 1, 1500);
-  cam.position.set((W.x0 + W.x1) / 2, 700, (W.z0 + W.z1) / 2); cam.rotation.set(-Math.PI / 2, 0, 0); cam.updateMatrixWorld(true);
-  const mat = new THREE.ShaderMaterial({ side: THREE.DoubleSide,
-    vertexShader: 'varying float vY; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vY = w.y; gl_Position = projectionMatrix * viewMatrix * w; }',
-    fragmentShader: 'varying float vY; void main(){ gl_FragColor = vec4(vY, 1.0, 0.0, 1.0); }' });
+  cam.position.set((W.x0 + W.x1) / 2, fromBelow ? -700 : 700, (W.z0 + W.z1) / 2); cam.rotation.set(fromBelow ? Math.PI / 2 : -Math.PI / 2, 0, 0); cam.updateMatrixWorld(true);
+  scene.updateMatrixWorld(true);
   const skip = new Set([terrainMesh, GRASS.mesh, ...CARD_MESHES, ...FOREST.meshes]);
   const hidden = [];
   const hide = (o) => { if (o && o.visible) { o.visible = false; hidden.push(o); } };
   for (const v of VEHICLES) hide(v.g); for (const c of CHARS) hide(c.root);
   scene.traverse(o => {
     if (o === scene) return;
-    if (skip.has(o) || o.name === 'sea' || o.name === 'river' || o.name === 'farland' || o.isSprite || o.isPoints || o.isLine || o.isInstancedMesh || o.isSkinnedMesh) { hide(o); return; }
+    if (skip.has(o) || (fromBelow && /^bark\|/.test(o.name)) || o.name === 'sea' || o.name === 'river' || o.name === 'farland' || o.isSprite || o.isPoints || o.isLine || o.isInstancedMesh || o.isSkinnedMesh) { hide(o); return; }
     if (o.isMesh) { const m = o.material; if (!m || m.transparent || (Array.isArray(m) && m.some(x => x.transparent))) hide(o); }
   });
   hide(SKY.sky); hide(SKY.overlay);
@@ -26,8 +24,49 @@ function renderGrassCover(N) {
   scene.fog = null; scene.overrideMaterial = mat;
   renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, cam);
   renderer.setRenderTarget(null); scene.overrideMaterial = null; scene.fog = prevFog; renderer.setClearColor(prevC, prevA);
-  for (const o of hidden) o.visible = true; mat.dispose();
-  return rt.texture;
+  for (const o of hidden) o.visible = true;
+  return rt;
+}
+// 草地覆盖图：R = 最高人造表面高度，G = 是否有覆盖
+function renderGrassCover(N) {
+  const mat = new THREE.ShaderMaterial({ side: THREE.DoubleSide,
+    vertexShader: 'varying float vY; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vY = w.y; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: 'varying float vY; void main(){ gl_FragColor = vec4(vY, 1.0, 0.0, 1.0); }' });
+  const rt = renderTopDown(N, mat, THREE.HalfFloatType); mat.dispose(); return rt.texture;
+}
+/* 占用图（CPU 可查询）：道路、人行道、建筑、铁路、栏杆等占据的位置不再种树和灌木 */
+const OCC = { data: null, w: 0, h: 0 };
+// 从地下往上看，记录每处最低的人造表面高度（16 位编码在 RG 中），再与地形比较：贴地的才算占用
+function buildOccupancy() {
+  const W = WORLD, sx = W.x1 - W.x0; const N = Math.round(sx / 0.5);
+  const mat = new THREE.ShaderMaterial({ side: THREE.DoubleSide,
+    vertexShader: 'varying float vY; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vY = w.y; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: 'varying float vY; void main(){ float v = clamp((vY + 50.0) / 250.0, 0.0, 1.0) * 255.0; gl_FragColor = vec4(floor(v) / 255.0, fract(v), 0.0, 1.0); }' });
+  const rt = renderTopDown(N, mat, THREE.UnsignedByteType, true); mat.dispose();
+  const w = rt.width, h = rt.height, px = new Uint8Array(w * h * 4);
+  renderer.readRenderTargetPixels(rt, 0, 0, w, h, px); rt.dispose();
+  OCC.w = w; OCC.h = h; OCC.data = new Uint8Array(w * h);
+  const G = TERRAIN_GRID;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const k = (j * w + i) * 4; if (px[k + 3] < 128) continue;
+    const y = (px[k] + px[k + 1] / 255) / 255 * 250 - 50;
+    const x = W.x0 + (i + 0.5) / w * sx, z = W.z0 + (j + 0.5) / h * (W.z1 - W.z0);
+    const gi = clamp(Math.round((x - G.x0) / G.dx), 0, G.nx - 1), gj = clamp(Math.round((z - G.z0) / G.dz), 0, G.nz - 1);
+    const th = G.data[(gj * G.nx + gi) * 4];
+    if (y < th + 2.2) OCC.data[j * w + i] = 1;
+  }
+}
+function occAt(x, z) {
+  if (!OCC.data) return false; const W = WORLD;
+  const i = Math.floor((x - W.x0) / (W.x1 - W.x0) * OCC.w), j = Math.floor((z - W.z0) / (W.z1 - W.z0) * OCC.h);
+  if (i < 0 || j < 0 || i >= OCC.w || j >= OCC.h) return false;
+  return OCC.data[j * OCC.w + i] === 1;
+}
+// 以 (x,z) 为圆心、半径 r 内是否有占用（中心 + 两圈采样）
+function occNear(x, z, r) {
+  if (occAt(x, z)) return true;
+  for (const k of [0.5, 1]) for (let a = 0; a < 8; a++) { const t = a / 8 * TAU; if (occAt(x + Math.cos(t) * r * k, z + Math.sin(t) * r * k)) return true; }
+  return false;
 }
 
 function buildGrass() {
@@ -77,7 +116,7 @@ function buildGrass() {
         float dens = smoothstep(0.4, 0.8, gf.y) * (1.0 - covered) * (1.0 - smoothstep(gSize * 0.3, gSize * 0.5, gd));
         float keep = step(aBlade.z, dens * mix(0.45, 1.0, macro));
         float meadow = smoothstep(0.45, 0.75, gNoise(gwp * 0.018 + 7.0));
-        float hgt = gH * mix(0.55, 1.35, aBlade.w) * mix(0.65, 1.3, macro) * mix(1.0, 2.1, meadow) * keep;
+        float hgt = gH * mix(0.55, 1.35, aBlade.w) * mix(0.65, 1.3, macro) * mix(1.0, 1.6, meadow) * keep;
         vFlower = step(0.985, fract(aBlade.w * 91.7)) * step(0.3, macro);
         float t = position.y;
         float ang = aBlade.w * 6.2831 + aBlade.z * 3.0;

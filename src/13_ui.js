@@ -57,7 +57,7 @@ function buildMapBase() {
   const rects = [[-7, 7, -84, 44], [-46, 104, -84, -76], [96, 108, -84, 47], [-62, 104, 34, 47], [22, 26, -50, 36], [-26, -22, -17, 36], [-62, 22, -23, -17], [-98, -94, -45, 65]];
   g.fillStyle = '#c9ced4'; for (const [x0, x1, z0, z1] of rects) { const a = W(x0, z0), b2 = W(x1, z1); g.fillRect(a[0], a[1], b2[0] - a[0], b2[1] - a[1]); }
   for (const r of ROADS) line(r.pts.map(p => [p[0], p[2]]), '#d7dbe0', 6);
-  line([[-170, -60], [140, -60]], '#8a8f99', 2.5, [6, 4]);
+  line(RAIL.pts.filter((p, i) => i % 3 === 0).map(p => [p.x, p.z]).concat([[RAIL.pts[0].x, RAIL.pts[0].z]]), '#8a8f99', 2.5, [6, 4]);
   for (const t of TREES) { if (t.forest) continue; if (t.kind !== 'sakura') continue; const q = W(t.x, t.z); g.fillStyle = 'rgba(240,150,180,0.75)'; g.beginPath(); g.arc(q[0], q[1], Math.max(1.5, t.r * 0.5 / step), 0, TAU); g.fill(); }
   mapBase = c;
 }
@@ -208,7 +208,7 @@ function setQuality(k, silent) {
   qName = k; Q = QUALITY[k]; store.set('quality', k);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.pr)); renderer.setSize(innerWidth, innerHeight);
   camera.far = Q.far + 2600; camera.updateProjectionMatrix(); applyShadowQuality(); applyFoliageQuality(); applyPetalQuality(); applyForestQuality();
-  SEA_U.waves.value = Q.waves; if (composer) { composer.dispose && composer.dispose(); initPost(); } if (!silent) UI.toast('画质：' + Q.label);
+  SEA_U.waves.value = Q.waves; if (composer) { composer.outline && composer.outline.dispose(); composer.dispose && composer.dispose(); initPost(); } if (!silent) UI.toast('画质：' + Q.label);
 }
 function initUIEvents() {
   document.querySelectorAll('.tbtn').forEach(b => b.onclick = () => UI.openPanel(b.dataset.panel));

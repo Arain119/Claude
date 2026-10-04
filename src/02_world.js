@@ -85,6 +85,42 @@ function riverWaterY(i, t) { const P = riverProfile(); return lerp(P[i], P[i + 1
 
 /* --- 道路栅格（由 02b_roads.js 填写）：高度与权重 --- */
 const RG = { cell: 2, x0: WORLD.x0, z0: WORLD.z0, nx: Math.ceil((WORLD.x1 - WORLD.x0) / 2), nz: Math.ceil((WORLD.z1 - WORLD.z0) / 2), h: null, w: null };
+/* 隧道覆土下限：隧道上方及两侧的地面不得低于拱顶 + 覆土，向外按约 50° 放坡（避免路堑把山挖穿、露出隧道） */
+function addTunnelCover(x, z, crown, half) {
+  if (!RG.mh) RG.mh = new Float32Array(RG.nx * RG.nz).fill(-1e9);
+  const R = half + 14;
+  for (let j = Math.floor((z - R - RG.z0) / RG.cell); j <= Math.ceil((z + R - RG.z0) / RG.cell); j++) for (let i = Math.floor((x - R - RG.x0) / RG.cell); i <= Math.ceil((x + R - RG.x0) / RG.cell); i++) {
+    if (i < 0 || j < 0 || i >= RG.nx || j >= RG.nz) continue;
+    const d = Math.hypot(RG.x0 + (i + 0.5) * RG.cell - x, RG.z0 + (j + 0.5) * RG.cell - z); if (d > R) continue;
+    const v = crown - Math.max(0, d - half) * 1.2; const k = j * RG.nx + i; if (v > RG.mh[k]) RG.mh[k] = v;
+  }
+}
+/* 线路净空上限：路面 / 道床两侧的地面不得高于路面，向外按约 50° 放坡（优先级高于隧道覆土） */
+function addClearance(x, z, floor, half) {
+  if (!RG.xh) RG.xh = new Float32Array(RG.nx * RG.nz).fill(1e9);
+  const R = half + 10;
+  for (let j = Math.floor((z - R - RG.z0) / RG.cell); j <= Math.ceil((z + R - RG.z0) / RG.cell); j++) for (let i = Math.floor((x - R - RG.x0) / RG.cell); i <= Math.ceil((x + R - RG.x0) / RG.cell); i++) {
+    if (i < 0 || j < 0 || i >= RG.nx || j >= RG.nz) continue;
+    const d = Math.hypot(RG.x0 + (i + 0.5) * RG.cell - x, RG.z0 + (j + 0.5) * RG.cell - z); if (d > R) continue;
+    const v = floor + Math.max(0, d - half) * 1.2; const k = j * RG.nx + i; if (v < RG.xh[k]) RG.xh[k] = v;
+  }
+}
+function clearanceAt(x, z) {
+  if (!RG.xh) return 1e9;
+  const fx = (x - RG.x0) / RG.cell - 0.5, fz = (z - RG.z0) / RG.cell - 0.5; const i = Math.floor(fx), j = Math.floor(fz);
+  if (i < 0 || j < 0 || i >= RG.nx - 1 || j >= RG.nz - 1) return 1e9;
+  const tx = fx - i, tz = fz - j, k = j * RG.nx + i, M = RG.xh;
+  const a = M[k], b = M[k + 1], c = M[k + RG.nx], d = M[k + RG.nx + 1]; if (Math.max(a, b, c, d) > 1e8) return Math.min(a, b, c, d) + 3;
+  return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + d * tx) * tz;
+}
+function tunnelCoverAt(x, z) {
+  if (!RG.mh) return -1e9;
+  const fx = (x - RG.x0) / RG.cell - 0.5, fz = (z - RG.z0) / RG.cell - 0.5; const i = Math.floor(fx), j = Math.floor(fz);
+  if (i < 0 || j < 0 || i >= RG.nx - 1 || j >= RG.nz - 1) return -1e9;
+  const tx = fx - i, tz = fz - j, k = j * RG.nx + i, M = RG.mh;
+  const a = M[k], b = M[k + 1], c = M[k + RG.nx], d = M[k + RG.nx + 1]; if (Math.min(a, b, c, d) < -1e8) return Math.max(a, b, c, d) - 3;
+  return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + d * tx) * tz;
+}
 RG.h = new Float32Array(RG.nx * RG.nz); RG.w = new Float32Array(RG.nx * RG.nz);
 function roadSample(x, z) {
   const fx = (x - RG.x0) / RG.cell - 0.5, fz = (z - RG.z0) / RG.cell - 0.5; const ix = Math.floor(fx), iz = Math.floor(fz);
@@ -106,6 +142,8 @@ function terrainH(x, z) {
     if (rd < reach) { const prof = rd < 5 ? bed : lerp(bed, h, smooth(5, reach, rd)); h = Math.min(h, prof); } }
   // 道路（填挖）
   const rw = roadSample(x, z); if (rw > 0) h = lerp(h, roadSample.h, rw);
+  h = Math.max(h, Math.min(tunnelCoverAt(x, z), terrainNatural(x, z))); // 隧道上方保持山体（不高于原地形）
+  h = Math.min(h, clearanceAt(x, z)); // 明线段的路面与道床保持净空
   // 港湾
   const w = smooth(127.6, 129, x) * smooth(-31, -27, z) * (1 - smooth(57, 61, z)); h = lerp(h, -4.5, w);
   return h;

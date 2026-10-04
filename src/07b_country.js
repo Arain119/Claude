@@ -48,7 +48,8 @@ function buildCountryside() {
   // 环岛公路的巴士站与自动售货机
   const ring = ROADS[0];
   if (ring) for (const s of [ring.len * 0.33, ring.len * 0.72]) {
-    const p = ring.pts[Math.round(s / 2)]; const lx = p[4], lz = -p[3]; const ox = p[0] - lx * (ring.hw + 2.4), oz = p[2] - lz * (ring.hw + 2.4);
+    let pi = Math.round(s / 2); while (pi < ring.pts.length - 1 && ring.pts[pi][6] !== 'grd') pi++; const p = ring.pts[pi]; const lx0 = p[4], lz0 = -p[3]; const inl = islandC(p[0] + lx0 * 20, p[2] + lz0 * 20) > islandC(p[0] - lx0 * 20, p[2] - lz0 * 20) ? -1 : 1; // 放在岛内一侧（远离海与铁路）
+    const lx = lx0 * inl, lz = lz0 * inl; const ox = p[0] - lx * (ring.hw + 2.4), oz = p[2] - lz * (ring.hw + 2.4);
     const K = new Kit(ox, terrainH(ox, oz), oz, Math.atan2(-lx, -lz) + Math.PI);
     K.box('concrete', 0, 0.08, 0, 4, 0.16, 2.2, 0xcfc8bc, { solid: { walk: true } });
     K.box('vc', 0, 2.5, 0, 3.6, 0.08, 1.8, 0x3a6a8a); for (const sx of [-1.6, 1.6]) K.box('vc', sx, 1.25, -0.8, 0.07, 2.5, 0.07, 0x8a9096);
@@ -95,7 +96,7 @@ function buildGasStation() {
 }
 function buildViewpoint() {
   const ring = ROADS[0]; if (!ring) return;
-  let top = ring.pts[0]; for (const p of ring.pts) if (p[1] > top[1] && p[5] > 200 && p[5] < ring.len - 200) top = p;
+  let top = ring.pts[0]; for (const p of ring.pts) if (p[6] === 'grd' && p[1] > top[1] && p[5] > 200 && p[5] < ring.len - 200) top = p;
   const lx = top[4], lz = -top[3]; const side = islandC(top[0] + lx * 30, top[2] + lz * 30) < islandC(top[0] - lx * 30, top[2] - lz * 30) ? 1 : -1;
   const cx = top[0] + lx * side * (ring.hw + 9), cz = top[2] + lz * side * (ring.hw + 9);
   const K = new Kit(cx, top[1], cz, Math.atan2(lx * side, lz * side));

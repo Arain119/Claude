@@ -238,14 +238,18 @@ class Kit {
   _m(x, y, z, o, sx, sy, sz) { return this.F.clone().multiply(MX(x, y, z, o.ry || 0, sx, sy, sz, o.rx || 0, o.rz || 0)); }
   box(mk, x, y, z, w, h, d, col, o = {}) {
     addGeo(G.box, mk, this._m(x, y, z, o, w, h, d), col, o);
-    if (o.solid) { const p = this.w(x, y, z); addCollider(p[0], p[2], w / 2, d / 2, this.ry + (o.ry || 0), p[1] - h / 2, p[1] + h / 2, o.solid); }
+    const p = this.w(x, y, z);
+    const solid = o.solid != null ? o.solid : autoSolid(mk, p, h, Math.min(w, d), Math.max(w, d), o);
+    if (solid) addCollider(p[0], p[2], w / 2, d / 2, this.ry + (o.ry || 0), p[1] - h / 2, p[1] + h / 2, solid);
   }
   boxB(mk, x, y, z, w, h, d, col, o = {}) { this.box(mk, x, y + h / 2, z, w, h, d, col, o); }
   cyl(mk, x, y, z, r, h, col, o = {}) {
     const geo = o.rt != null ? taper(o.rt * r, r, o.seg || 12) : (o.seg === 6 ? taper(1, 1, 6) : o.seg === 8 ? G.cyl8 : o.seg === 16 ? G.cyl16 : o.seg === 24 ? G.cyl24 : G.cyl12);
     const sc = o.rt != null ? 1 : r;
     addGeo(geo, mk, this._m(x, y, z, o, sc * (o.sx || 1), h, sc * (o.sz || 1)), col, o);
-    if (o.solid) { const p = this.w(x, y, z); addCollider(p[0], p[2], r, r, 0, p[1] - h / 2, p[1] + h / 2, o.solid); }
+    const p = this.w(x, y, z); const rr = r * Math.max(o.sx || 1, o.sz || 1);
+    const solid = o.solid != null ? o.solid : autoSolid(mk, p, h, rr * 2, rr * 2, o);
+    if (solid) addCollider(p[0], p[2], rr, rr, 0, p[1] - h / 2, p[1] + h / 2, solid === true ? { round: true } : Object.assign({ round: true }, solid));
   }
   sph(mk, x, y, z, rx, ry, rz, col, o = {}) { addGeo(o.lo ? G.sph : G.sph16, mk, this._m(x, y, z, o, rx, ry, rz), col, o); }
   plane(mk, x, y, z, w, h, col, o = {}) { addGeo(G.plane, mk, this._m(x, y, z, o, w, h, 1), col, o); }
@@ -261,6 +265,18 @@ class Kit {
   }
 }
 const WK = new Kit(); // 世界坐标建造器
+/* 自动碰撞：人能撞到的实体部件（墙、围墙、栏杆、柱子、长椅、售货机……）自动生成碰撞体；
+   低矮宽大的平板（人行道、台阶、站台）作为可站立的地面；玻璃、招牌、标线、发光件、倾斜件除外。
+   buildLocal 中（可移动物体）不生成。 */
+const NO_COL = new Set(['glass', 'glow', 'marking', 'tactile', 'petalGround', 'blob', 'paint2d', 'sign', 'signCut', 'win', 'awning', 'vcNoShadow', 'ballast', 'rail']);
+function autoSolid(mk, p, h, thin, wide, o) {
+  if (BATCH_NOCHUNK || NO_COL.has(mk) || o.rx || o.rz || o.noCol) return false;
+  const base = terrainH(p[0], p[2]), y0 = p[1] - h / 2, y1 = p[1] + h / 2;
+  if (y0 > base + 2.0 || y1 < base - 0.3) return false; // 头顶以上 / 埋在地下
+  if (h >= 0.3 && thin >= 0.025 && wide >= 0.08) return { src: mk };
+  if (h < 0.3 && thin >= 0.6 && y1 > base + 0.03 && y1 < base + 0.6) return { src: mk }; // 可站立的低矮平台
+  return false;
+}
 
 /* ---------- 碰撞（OBB + 坡道）与空间哈希 ---------- */
 const COLS = []; const CELL = 8; const GRID = new Map();
@@ -283,17 +299,17 @@ function colTop(c, lz) { return c.ramp ? lerp(c.ramp[0], c.ramp[1], clamp((lz + 
 const STEP = 0.5;
 /* 地面高度：地形与可站立物体中，不高于 feetY+STEP 的最高者 */
 function groundAt(x, z, feetY = 1e9) {
-  let h = terrainH(x, z), floor = false;
+  let h = terrainH(x, z), floor = false, under = false;
   const list = nearCols(x, z);
   for (let i = 0; i < list.length; i++) {
     const c = list[i]; if (c.noFloor) continue;
     const l = localOf(c, x, z);
     if (c.round ? (l[0] * l[0] + l[1] * l[1] <= c.hw * c.hw) : (Math.abs(l[0]) <= c.hw && Math.abs(l[1]) <= c.hd)) {
       const t = colTop(c, l[1]);
-      if (t <= feetY + STEP && t > h - 0.01) { h = t; floor = true; }
+      if (t <= feetY + STEP && (t > h - 0.01 || (c.under && feetY < t + 3 && !under))) { h = t; floor = true; under = !!c.under; }
     }
   }
-  groundAt.floor = floor;
+  groundAt.floor = floor; groundAt.under = under;
   return h;
 }
 /* 圆形角色与障碍物的推出 */
