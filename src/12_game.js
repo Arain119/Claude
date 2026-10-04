@@ -433,8 +433,26 @@ function updateGulls(dt, t, day) {
     u.wl.rotation.z = f; u.wr.rotation.z = -f;
   }
 }
+/* --- 炊烟：屋顶烟囱上升腾的柔和烟团 --- */
+const SMOKE = { list: [], tex: null };
+function smokeStack(x, y, z, s = 1) { SMOKE.list.push({ x, y, z, s }); }
+function buildSmoke() {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g2 = c.getContext('2d');
+  const gr = g2.createRadialGradient(32, 32, 4, 32, 32, 30); gr.addColorStop(0, 'rgba(238,238,240,0.5)'); gr.addColorStop(0.6, 'rgba(232,232,238,0.25)'); gr.addColorStop(1, 'rgba(232,232,238,0)');
+  g2.fillStyle = gr; g2.fillRect(0, 0, 64, 64); SMOKE.tex = new THREE.CanvasTexture(c);
+  for (const e of SMOKE.list) { e.sp = []; for (let i = 0; i < 5; i++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: SMOKE.tex, transparent: true, depthWrite: false, opacity: 0 })); m.position.set(e.x, e.y, e.z); e.sp.push(m); scene.add(m); } }
+}
+function updateSmoke(dt, t) {
+  for (const e of SMOKE.list) for (let i = 0; i < e.sp.length; i++) {
+    const m = e.sp[i]; const p = (t * 0.1 + i * 0.2 + e.x * 0.013) % 1;
+    m.position.set(e.x + Math.sin(t * 0.6 + i * 2.6) * (0.25 + p * 1.2) + p * 2.4 * (WX.wind || 0.4), e.y + p * 5.0 * e.s, e.z + Math.cos(t * 0.5 + i) * (0.2 + p * 0.8));
+    m.material.opacity = (p < 0.18 ? p / 0.18 : 1 - (p - 0.18) / 0.82) * 0.4 * e.s;
+    const sc = (0.45 + p * 2.6) * e.s; m.scale.set(sc, sc, 1);
+  }
+}
 function updateAnimals(dt, t, hour) {
   updateGulls(dt, t, hour < 19 && hour > 5.5);
+  updateSmoke(dt, t);
   // 猫
   const k = CAT.obj; let moving = false;
   if (CAT.follow && !insideHome(PLAYER.pos.x, PLAYER.pos.z) || CAT.follow && insideHome(CAT.pos.x, CAT.pos.z)) {

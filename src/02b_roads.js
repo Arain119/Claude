@@ -134,6 +134,7 @@ function buildRoadMeshes() {
         WK.cyl('vc', ox, gy + 8.55, oz, 0.175, 0.55, 0xe8e6de, { seg: 8 }); // 白环带
         if (chance(0.4)) WK.box('vc', ox, gy + 7.2, oz, 0.55, 0.85, 0.5, 0x8a8f94, { ry: R(0, TAU) }); // 变压器
         if (chance(0.75)) WK.box('vcNoShadow', ox - lx * side * 0.15, gy + 2.6, oz - lz * side * 0.15, 0.3, 0.5, 0.02, 0xf2f2ee, { ry: Math.atan2(p[3], p[4]) }); // 住号牌
+        if (chance(0.2)) { const pry = Math.atan2(p[3], p[4]); crowAt(ox + Math.cos(pry) * 0.6, gy + 9.2, oz - Math.sin(pry) * 0.6, R(0, TAU)); } // 横担上的乌鸦
         poles.push([ox, gy + 9.15, oz]);
         addCollider(ox, oz, 0.2, 0.2, 0, gy, gy + 10, 'wall');
       }

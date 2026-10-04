@@ -57,7 +57,7 @@ async function build() {
   flushBatches(scene); flushCards(); buildWires(); buildHalos(); buildPetals(); buildPools(); buildLampCones(); buildGroundShadows(); buildWallFades(); buildDecals(); buildPuddles();
   TEX_SIGN.needsUpdate = true;
   progress(0.9, '居民和车流正在醒来……'); await tick();
-  seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic(); buildGulls();
+  seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic(); buildGulls(); buildSmoke();
   scene.updateMatrixWorld(true); buildGrass();
   mailboxInteractables(); shopInteractables(); homeInteractables();
   initLiveWorld(); // 天气 / 乘降 / 巴士 / 通勤

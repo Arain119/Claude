@@ -28,8 +28,17 @@ function buildHouse(x, z, ry, o = {}) {
   K.box('vc', 0, F + 0.02, -d / 2, w + 0.06, 0.12, d + 0.06, wc.clone().multiplyScalar(0.85));
   const roofCol = o.roof || pick([0x4a5568, 0x5a4a44, 0x3f5a5a, 0x6b4f45, 0x2f3a4a, 0x7a3b33, 0x556b5a]);
   const rh = R(1.6, 2.2);
-  if (chance(0.7)) gableRoof(K, 0, F * 2, -d / 2, w, d, rh, roofCol, 0, 0.5);
+  const gable = chance(0.7);
+  if (gable) gableRoof(K, 0, F * 2, -d / 2, w, d, rh, roofCol, 0, 0.5);
   else { K.geo('roof', PRISM, 0, F * 2, -d / 2, roofCol, { sx: w + 1, sy: 1.6, sz: d + 1, wuv: 1 }); }
+  // 前坡太阳能板（约三成斜顶房）
+  if (gable && chance(0.32)) { const sl = Math.atan2(rh, d / 2); K.box('vc', R(-w / 6, w / 6), F * 2 + rh * 0.52, -d / 4, R(2.0, 2.8), 0.07, R(1.3, 1.6), 0x1c2f52, { rx: sl }); }
+  // 烟囱（少数人家有炊烟，生活感）
+  if (chance(0.2) && SMOKE.list.length < 8) {
+    const chx = R(-w / 4, w / 4);
+    K.box('vc', chx, F * 2 + rh * 0.6 + 0.5, -d * 0.72, 0.42, 1.0, 0.42, 0x8a8078);
+    const sp2 = K.w(chx, F * 2 + rh * 0.6 + 1.05, -d * 0.72); smokeStack(sp2[0], sp2[1], sp2[2], R(0.8, 1.15));
+  }
   // 山墙封檐板：两个山墙面的斜边包一条板，遮掉墙-屋顶的裸几何边
   {
     const slope = Math.atan2(rh, d / 2), rl = Math.hypot(d / 2, rh) + 0.5, bc = new THREE.Color(roofCol).multiplyScalar(0.72);

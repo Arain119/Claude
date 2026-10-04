@@ -358,6 +358,9 @@ function buildSea() {
         float bands = smoothstep(0.55, 0.85, sin(depth * 14.0 - time * 1.6 + sin(vW.x * 0.13) * 2.0) * 0.5 + 0.5) * smoothstep(3.2, 0.2, depth);
         float foam = clamp(shore * 0.85 + bands * 0.55, 0.0, 1.0) * (0.7 + 0.3 * sin(time * 2.0 + vW.x * 0.3));
         col = mix(col, foamCol * (0.25 + 0.75 * light), foam * 0.75);
+        // 远处稀疏白浪点（破开深水区的平）
+        float cap = smoothstep(0.44, 0.56, wh(vW.xz * 0.55 + time * 0.35, time * 0.6)) * smoothstep(20.0, 90.0, vDist) * smoothstep(1.2, 6.0, depth) * (1.0 - night * 0.7) * 0.3;
+        col = mix(col, foamCol * (0.3 + 0.7 * light), cap);
         float fogF = 1.0 - exp(-fogDensity * fogDensity * vDist * vDist);
         col = mix(col, fogColor, fogF);
         gl_FragColor = vec4(col, 1.0);

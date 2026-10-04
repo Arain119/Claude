@@ -164,6 +164,7 @@ function buildShrine() {
   for (const s of [-1, 1]) WK.box('stone', -40 + s * 2.55, (TOWN_Y + SHRINE.y) / 2 - 0.2, -98, 0.4, 1, 24.5, 0xbdb6a8, { rx: Math.atan2(SHRINE.y - TOWN_Y, 24), wuv: 0.5 });
   // 大鸟居（参道下）
   torii(-40, -85, TOWN_Y, 1.35, 0xd8432f);
+  crowAt(-40 + 1.5, TOWN_Y + 7.05, -85, 0.4);
   // 千本鸟居
   for (let i = 0; i < 11; i++) { const z = -88.5 - i * 2.1; torii(-40, z, groundAt(-40, z) - 0.05, 0.62, new THREE.Color(0xe0502f).multiplyScalar(R(0.82, 1.06)).getHex(), true); }
   // 台地：砂石、石灯笼、狐狸像
@@ -233,6 +234,13 @@ function torii(x, z, y, s, col, small) {
   K.box('paint', 0, h + 0.05 * s, 0, w + 1.6 * s, 0.35 * s, 0.45 * s, col, { rz: 0 });
   K.box('vc', 0, h + 0.3 * s, 0, w + 1.9 * s, 0.18 * s, 0.5 * s, 0x2a2a2a);
   if (!small) { K.box('vc', 0, h - 0.45 * s, 0.17 * s, 0.6 * s, 0.75 * s, 0.05, 0x2a2a2a); const uv = allocSign(60, 80, (g, w2, h2) => { g.fillStyle = '#2a2a2a'; g.fillRect(0, 0, w2, h2); g.fillStyle = '#d9b45a'; g.font = `400 28px ${FONT.brush}`; g.textAlign = 'center'; g.fillText('狐', w2 / 2, 34); g.fillText('守', w2 / 2, 68); }); K.plane('sign', 0, h - 0.45 * s, 0.2 * s, 0.5 * s, 0.66 * s, 0xffffff, { uvr: uv }); }
+}
+function crowAt(x, y, z, ry) { // 停栖的乌鸦（电线、鸟居上）
+  const k = new Kit(x, y, z, ry);
+  k.sph('vcNoShadow', 0, 0.09, 0, 0.09, 0.11, 0.13, 0x1c1c22, { lo: true });
+  k.sph('vcNoShadow', 0, 0.19, 0.06, 0.06, 0.07, 0.07, 0x1c1c22, { lo: true });
+  k.box('vcNoShadow', 0, 0.19, 0.13, 0.03, 0.03, 0.07, 0xe8b040);
+  k.box('vcNoShadow', 0, 0.07, -0.15, 0.06, 0.03, 0.16, 0x1c1c22);
 }
 function stoneLantern(x, z, y) {
   const K = new Kit(x, y, z, 0);

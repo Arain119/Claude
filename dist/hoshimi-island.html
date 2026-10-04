@@ -1338,6 +1338,9 @@ function buildSea() {
         float bands = smoothstep(0.55, 0.85, sin(depth * 14.0 - time * 1.6 + sin(vW.x * 0.13) * 2.0) * 0.5 + 0.5) * smoothstep(3.2, 0.2, depth);
         float foam = clamp(shore * 0.85 + bands * 0.55, 0.0, 1.0) * (0.7 + 0.3 * sin(time * 2.0 + vW.x * 0.3));
         col = mix(col, foamCol * (0.25 + 0.75 * light), foam * 0.75);
+        // 远处稀疏白浪点（破开深水区的平）
+        float cap = smoothstep(0.44, 0.56, wh(vW.xz * 0.55 + time * 0.35, time * 0.6)) * smoothstep(20.0, 90.0, vDist) * smoothstep(1.2, 6.0, depth) * (1.0 - night * 0.7) * 0.3;
+        col = mix(col, foamCol * (0.3 + 0.7 * light), cap);
         float fogF = 1.0 - exp(-fogDensity * fogDensity * vDist * vDist);
         col = mix(col, fogColor, fogF);
         gl_FragColor = vec4(col, 1.0);
@@ -1545,6 +1548,7 @@ function buildRoadMeshes() {
         WK.cyl('vc', ox, gy + 8.55, oz, 0.175, 0.55, 0xe8e6de, { seg: 8 }); // 白环带
         if (chance(0.4)) WK.box('vc', ox, gy + 7.2, oz, 0.55, 0.85, 0.5, 0x8a8f94, { ry: R(0, TAU) }); // 变压器
         if (chance(0.75)) WK.box('vcNoShadow', ox - lx * side * 0.15, gy + 2.6, oz - lz * side * 0.15, 0.3, 0.5, 0.02, 0xf2f2ee, { ry: Math.atan2(p[3], p[4]) }); // 住号牌
+        if (chance(0.2)) { const pry = Math.atan2(p[3], p[4]); crowAt(ox + Math.cos(pry) * 0.6, gy + 9.2, oz - Math.sin(pry) * 0.6, R(0, TAU)); } // 横担上的乌鸦
         poles.push([ox, gy + 9.15, oz]);
         addCollider(ox, oz, 0.2, 0.2, 0, gy, gy + 10, 'wall');
       }
@@ -2811,8 +2815,17 @@ function buildHouse(x, z, ry, o = {}) {
   K.box('vc', 0, F + 0.02, -d / 2, w + 0.06, 0.12, d + 0.06, wc.clone().multiplyScalar(0.85));
   const roofCol = o.roof || pick([0x4a5568, 0x5a4a44, 0x3f5a5a, 0x6b4f45, 0x2f3a4a, 0x7a3b33, 0x556b5a]);
   const rh = R(1.6, 2.2);
-  if (chance(0.7)) gableRoof(K, 0, F * 2, -d / 2, w, d, rh, roofCol, 0, 0.5);
+  const gable = chance(0.7);
+  if (gable) gableRoof(K, 0, F * 2, -d / 2, w, d, rh, roofCol, 0, 0.5);
   else { K.geo('roof', PRISM, 0, F * 2, -d / 2, roofCol, { sx: w + 1, sy: 1.6, sz: d + 1, wuv: 1 }); }
+  // 前坡太阳能板（约三成斜顶房）
+  if (gable && chance(0.32)) { const sl = Math.atan2(rh, d / 2); K.box('vc', R(-w / 6, w / 6), F * 2 + rh * 0.52, -d / 4, R(2.0, 2.8), 0.07, R(1.3, 1.6), 0x1c2f52, { rx: sl }); }
+  // 烟囱（少数人家有炊烟，生活感）
+  if (chance(0.2) && SMOKE.list.length < 8) {
+    const chx = R(-w / 4, w / 4);
+    K.box('vc', chx, F * 2 + rh * 0.6 + 0.5, -d * 0.72, 0.42, 1.0, 0.42, 0x8a8078);
+    const sp2 = K.w(chx, F * 2 + rh * 0.6 + 1.05, -d * 0.72); smokeStack(sp2[0], sp2[1], sp2[2], R(0.8, 1.15));
+  }
   // 山墙封檐板：两个山墙面的斜边包一条板，遮掉墙-屋顶的裸几何边
   {
     const slope = Math.atan2(rh, d / 2), rl = Math.hypot(d / 2, rh) + 0.5, bc = new THREE.Color(roofCol).multiplyScalar(0.72);
@@ -3866,6 +3879,7 @@ function buildShrine() {
   for (const s of [-1, 1]) WK.box('stone', -40 + s * 2.55, (TOWN_Y + SHRINE.y) / 2 - 0.2, -98, 0.4, 1, 24.5, 0xbdb6a8, { rx: Math.atan2(SHRINE.y - TOWN_Y, 24), wuv: 0.5 });
   // 大鸟居（参道下）
   torii(-40, -85, TOWN_Y, 1.35, 0xd8432f);
+  crowAt(-40 + 1.5, TOWN_Y + 7.05, -85, 0.4);
   // 千本鸟居
   for (let i = 0; i < 11; i++) { const z = -88.5 - i * 2.1; torii(-40, z, groundAt(-40, z) - 0.05, 0.62, new THREE.Color(0xe0502f).multiplyScalar(R(0.82, 1.06)).getHex(), true); }
   // 台地：砂石、石灯笼、狐狸像
@@ -3935,6 +3949,13 @@ function torii(x, z, y, s, col, small) {
   K.box('paint', 0, h + 0.05 * s, 0, w + 1.6 * s, 0.35 * s, 0.45 * s, col, { rz: 0 });
   K.box('vc', 0, h + 0.3 * s, 0, w + 1.9 * s, 0.18 * s, 0.5 * s, 0x2a2a2a);
   if (!small) { K.box('vc', 0, h - 0.45 * s, 0.17 * s, 0.6 * s, 0.75 * s, 0.05, 0x2a2a2a); const uv = allocSign(60, 80, (g, w2, h2) => { g.fillStyle = '#2a2a2a'; g.fillRect(0, 0, w2, h2); g.fillStyle = '#d9b45a'; g.font = `400 28px ${FONT.brush}`; g.textAlign = 'center'; g.fillText('狐', w2 / 2, 34); g.fillText('守', w2 / 2, 68); }); K.plane('sign', 0, h - 0.45 * s, 0.2 * s, 0.5 * s, 0.66 * s, 0xffffff, { uvr: uv }); }
+}
+function crowAt(x, y, z, ry) { // 停栖的乌鸦（电线、鸟居上）
+  const k = new Kit(x, y, z, ry);
+  k.sph('vcNoShadow', 0, 0.09, 0, 0.09, 0.11, 0.13, 0x1c1c22, { lo: true });
+  k.sph('vcNoShadow', 0, 0.19, 0.06, 0.06, 0.07, 0.07, 0x1c1c22, { lo: true });
+  k.box('vcNoShadow', 0, 0.19, 0.13, 0.03, 0.03, 0.07, 0xe8b040);
+  k.box('vcNoShadow', 0, 0.07, -0.15, 0.06, 0.03, 0.16, 0x1c1c22);
 }
 function stoneLantern(x, z, y) {
   const K = new Kit(x, y, z, 0);
@@ -5937,8 +5958,26 @@ function updateGulls(dt, t, day) {
     u.wl.rotation.z = f; u.wr.rotation.z = -f;
   }
 }
+/* --- 炊烟：屋顶烟囱上升腾的柔和烟团 --- */
+const SMOKE = { list: [], tex: null };
+function smokeStack(x, y, z, s = 1) { SMOKE.list.push({ x, y, z, s }); }
+function buildSmoke() {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g2 = c.getContext('2d');
+  const gr = g2.createRadialGradient(32, 32, 4, 32, 32, 30); gr.addColorStop(0, 'rgba(238,238,240,0.5)'); gr.addColorStop(0.6, 'rgba(232,232,238,0.25)'); gr.addColorStop(1, 'rgba(232,232,238,0)');
+  g2.fillStyle = gr; g2.fillRect(0, 0, 64, 64); SMOKE.tex = new THREE.CanvasTexture(c);
+  for (const e of SMOKE.list) { e.sp = []; for (let i = 0; i < 5; i++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: SMOKE.tex, transparent: true, depthWrite: false, opacity: 0 })); m.position.set(e.x, e.y, e.z); e.sp.push(m); scene.add(m); } }
+}
+function updateSmoke(dt, t) {
+  for (const e of SMOKE.list) for (let i = 0; i < e.sp.length; i++) {
+    const m = e.sp[i]; const p = (t * 0.1 + i * 0.2 + e.x * 0.013) % 1;
+    m.position.set(e.x + Math.sin(t * 0.6 + i * 2.6) * (0.25 + p * 1.2) + p * 2.4 * (WX.wind || 0.4), e.y + p * 5.0 * e.s, e.z + Math.cos(t * 0.5 + i) * (0.2 + p * 0.8));
+    m.material.opacity = (p < 0.18 ? p / 0.18 : 1 - (p - 0.18) / 0.82) * 0.4 * e.s;
+    const sc = (0.45 + p * 2.6) * e.s; m.scale.set(sc, sc, 1);
+  }
+}
 function updateAnimals(dt, t, hour) {
   updateGulls(dt, t, hour < 19 && hour > 5.5);
+  updateSmoke(dt, t);
   // 猫
   const k = CAT.obj; let moving = false;
   if (CAT.follow && !insideHome(PLAYER.pos.x, PLAYER.pos.z) || CAT.follow && insideHome(CAT.pos.x, CAT.pos.z)) {
@@ -6383,7 +6422,7 @@ async function build() {
   flushBatches(scene); flushCards(); buildWires(); buildHalos(); buildPetals(); buildPools(); buildLampCones(); buildGroundShadows(); buildWallFades(); buildDecals(); buildPuddles();
   TEX_SIGN.needsUpdate = true;
   progress(0.9, '居民和车流正在醒来……'); await tick();
-  seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic(); buildGulls();
+  seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic(); buildGulls(); buildSmoke();
   scene.updateMatrixWorld(true); buildGrass();
   mailboxInteractables(); shopInteractables(); homeInteractables();
   initLiveWorld(); // 天气 / 乘降 / 巴士 / 通勤
