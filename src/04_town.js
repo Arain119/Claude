@@ -99,6 +99,7 @@ function acUnit(kit, x, y, z, ry = 0) {
   kit.box('vc', x, y, z, 0.8, 0.6, 0.3, 0xe8e6df, { ry });
   kit.cyl('vc', x - 0.1, y, z + 0.16, 0.2, 0.02, 0x6a6e72, { rx: Math.PI / 2, ry, seg: 12 });
   kit.box('vc', x + 0.38, y - 0.55, z, 0.05, 0.6, 0.05, 0xd6d3c8, { ry });
+  const sp = kit.w(x, y - 0.85, z + 0.03); addWallFade(sp[0], sp[1], sp[2], 0.55, 1.1, kit.ry + ry, 0.3, 1); // 冷凝水痕
 }
 function antenna(kit, x, y, z, ry = 0) {
   kit.box('vc', x, y + 1.2, z, 0.05, 2.4, 0.05, 0x8d9096);
@@ -127,6 +128,9 @@ function windowAt(kit, x, y, z, w, h, frame = 0xe6e3dc, o = {}) {
   const f = 0.07;
   kit.box('vc', x, y + h / 2, z + 0.04, w + f * 2, f, 0.08, frame); kit.box('vc', x, y - h / 2, z + 0.06, w + f * 2 + 0.1, f, 0.14, frame);
   kit.box('vc', x - w / 2, y, z + 0.04, f, h, 0.08, frame); kit.box('vc', x + w / 2, y, z + 0.04, f, h, 0.08, frame);
+  // 窗台下沿的水痕（沿该面墙的外法向贴出）
+  const or_ = o.ry || 0, nx = Math.sin(or_) * 0.028, nz = Math.cos(or_) * 0.028;
+  const sp = kit.w(x + nx, y - h / 2 - 0.4, z + nz); addWallFade(sp[0], sp[1], sp[2], w * 0.5, 0.75, kit.ry + or_, 0.26, 1);
 }
 /* 三棱柱屋顶（单位：宽 1 × 高 1 × 深 1，屋脊沿 x） */
 const PRISM = (() => {
@@ -184,6 +188,10 @@ function buildShop(d) {
   for (let i = 0; i <= 3; i++) K.box('vc', -gw / 2 + i * gw / 3, (F0 - 0.5) / 2, -RD, 0.07, F0 - 0.5, 0.1, 0x55575d);
   addCollider(...K.w(0, 0, -RD - 0.05).filter((_, i) => i !== 1), gw / 2, 0.15, ry, SW_Y, SW_Y + F0, 'wall');
   // 招牌
+  // 接地阴影：沿街立面的落地感
+  const sp = K.w(0, 0, -D / 2 - 0.4); addGroundShadow(sp[0], sp[2], w + 1.8, D + 2.2, ry, 0.55, 1.0);
+  // 墙面过渡：后墙与山墙的墙脚潮气带
+  for (const [lx, lz, wry, ww] of [[0, -D - 0.03, 0, w - 1], [-w / 2 - 0.53, -D / 2, Math.PI / 2, D], [w / 2 + 0.53, -D / 2, Math.PI / 2, D]]) { const p = K.w(lx, 0.45, lz); addWallFade(p[0], p[1], p[2], ww, 0.9, ry + wry, 0.45, 0); }
   const sW = w - 0.3; const sUV = drawShopSign(d, sW * 110, 1.05 * 110);
   K.box('vc', 0, F0 + 0.35, 0.1, sW + 0.1, 1.15, 0.2, 0x3a3a3e);
   K.plane('sign', 0, F0 + 0.35, 0.205, sW, 1.05, 0xffffff, { uvr: sUV });
@@ -210,7 +218,7 @@ function buildShop(d) {
       const x = -w / 2 + (i + 0.5) * (w / nWin);
       if (d.vsign && Math.abs(x - (hw - 0.5)) < 1.0) continue;
       windowAt(K, x, y, 0.0, 1.45, 1.45);
-      if (!hasBal && chance(0.35)) acUnit(K, x + 0.3, y - 1.15, 0.2);
+      if (!hasBal && f > 1 && chance(0.35)) acUnit(K, x + 0.3, y - 1.15, 0.2); // f=1 层空调会压到招牌带，只许上层放
     }
     if (hasBal) { balcony(K, 0, F0 + (f - 1) * FU + 0.2, 0, w - 0.6); acUnit(K, -w / 2 + 0.8, F0 + (f - 1) * FU + 0.62, 0.45); if (chance(0.8)) laundry(K, 0.4, F0 + (f - 1) * FU + 2.1, 0.55, w - 2.2); }
   }
@@ -362,8 +370,17 @@ function bicycleStatic(K, x, z, ry, col) {
 
 /* ---------------- 街道 ---------------- */
 function buildStreets() {
-  const road = (x0, x1, z0, z1, y = TOWN_Y) => WK.box('asphalt', (x0 + x1) / 2, y + 0.02, (z0 + z1) / 2, x1 - x0, 0.04, z1 - z0, 0xffffff, { wuv: 0.25, nochunk: false });
-  const walk = (x0, x1, z0, z1, mat = 'paving', col = 0xffffff, h = 0.15) => { WK.box(mat, (x0 + x1) / 2, TOWN_Y + h / 2, (z0 + z1) / 2, x1 - x0, h, z1 - z0, col, { wuv: 0.5, solid: { walk: true } }); };
+  // 道路两长缘立混凝土缘石收口（草地贴在缘石外侧）；便道边用矮混凝土护缘
+  const curb = (cx, cz, len, alongX, y) => WK.box('concrete', cx, y + 0.055, cz, alongX ? len : 0.15, 0.13, alongX ? 0.15 : len, 0xe3e0da, { wuv: 0.8 });
+  const road = (x0, x1, z0, z1, y = TOWN_Y) => {
+    WK.box('asphalt', (x0 + x1) / 2, y + 0.02, (z0 + z1) / 2, x1 - x0, 0.04, z1 - z0, 0xffffff, { wuv: 0.25, nochunk: false });
+    if (x1 - x0 > z1 - z0) { curb((x0 + x1) / 2, z0 - 0.075, x1 - x0, true, y); curb((x0 + x1) / 2, z1 + 0.075, x1 - x0, true, y); }
+    else { curb(x0 - 0.075, (z0 + z1) / 2, z1 - z0, false, y); curb(x1 + 0.075, (z0 + z1) / 2, z1 - z0, false, y); }
+  };
+  const walk = (x0, x1, z0, z1, mat = 'paving', col = 0xffffff, h = 0.15) => {
+    WK.box('concrete', (x0 + x1) / 2, TOWN_Y + 0.022, (z0 + z1) / 2, x1 - x0 + 0.3, 0.045, z1 - z0 + 0.3, 0xd6d2ca, { wuv: 0.6 });
+    WK.box(mat, (x0 + x1) / 2, TOWN_Y + h / 2, (z0 + z1) / 2, x1 - x0, h, z1 - z0, col, { wuv: 0.5, solid: { walk: true } });
+  };
   // 主街
   road(-3.5, 3.5, -84, 44);
   walk(3.5, 7, -48, 36); walk(-7, -3.5, -48, 36);
@@ -375,19 +392,20 @@ function buildStreets() {
     for (let z = -46; z < 36; z += 6) if (z < -24 || z > -16) WK.box('vc', s * 3.75, TOWN_Y + 0.155, z, 0.28, 0.02, 0.9, 0x55575c);
   }
   // 白色边线
-  for (const s of [-1, 1]) WK.box('vcNoShadow', s * 3.2, TOWN_Y + 0.045, -20, 0.12, 0.01, 128, 0xf4f4f0);
+  for (const s of [-1, 1]) WK.box('vcNoShadow', s * 3.2, TOWN_Y + 0.045, -20, 0.12, 0.01, 128, new THREE.Color().setHSL(0.12, 0.02, R(0.76, 0.88)));
   // 北路、港口路、南路
   road(-46, 104, -84, -76); road(96, 104, -76, 44); road(-62, 104, 36, 44);
   walk(104, 108, -76, 46); walk(-62, 104, 44, 47);
   walk(7, 96, 34, 36); walk(-62, -7, 34, 36);
   // 后巷
   road(22, 26, -50, 36); road(-26, -22, -17, 36);
-  // 斑马线
-  const zebra = (cx, cz, w, len, alongX) => { for (let i = 0; i < Math.floor(w / 0.9); i++) { const o = -w / 2 + 0.45 + i * 0.9; WK.box('vcNoShadow', alongX ? cx + o : cx, TOWN_Y + 0.045, alongX ? cz : cz + o, alongX ? 0.45 : len, 0.01, alongX ? len : 0.45, 0xf4f4f0); } };
+  // 斑马线（磨损做旧：每条明暗/暖度不同）
+  const wornW = () => new THREE.Color().setHSL(0.12, R(0.0, 0.05), R(0.7, 0.9));
+  const zebra = (cx, cz, w, len, alongX) => { for (let i = 0; i < Math.floor(w / 0.9); i++) { const o = -w / 2 + 0.45 + i * 0.9; WK.box('vcNoShadow', alongX ? cx + o : cx, TOWN_Y + 0.045, alongX ? cz : cz + o, alongX ? 0.45 : len, 0.01, alongX ? len : 0.45, wornW()); } };
   zebra(0, 31, 7, 3, true); zebra(0, -20, 7, 4, true); zebra(100, 48, 8, 3, true);
   // 停止线与「止まれ」
-  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -73.5, 3.2, 0.01, 0.4, 0xf4f4f0);
-  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -47.2, 3.2, 0.01, 0.4, 0xf4f4f0);
+  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -73.5, 3.2, 0.01, 0.4, wornW());
+  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -47.2, 3.2, 0.01, 0.4, wornW());
   const tUV = allocSignAlpha(256, 128, (g, w, h) => { g.fillStyle = '#ffffff'; g.font = `900 92px ${FONT.sans}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('止まれ', w / 2, h / 2 + 4); });
   WK.plane('paint2d', -1.6, TOWN_Y + 0.05, -42.5, 2.6, 3.6, 0xffffff, { rx: -Math.PI / 2, rz: 0, ry: 0, uvr: tUV });
   stopSign(-4.2, -46, 0);
@@ -422,7 +440,7 @@ function streetLamp(x, z, side) {
   k.rod('paint', [0, 5.2, 0], [-0.7, 5.55, 0], 0.035, 0x3b4a4a);
   k.cyl('paint', -0.75, 5.62, 0, 0.26, 0.12, 0x3b4a4a, { rt: 0.4, seg: 12 });
   k.cyl('glow', -0.75, 5.35, 0, 0.18, 0.42, 0xfff1d0, { rt: 1.2, seg: 12 });
-  const p = k.w(-0.75, 5.3, 0); addHalo(p[0], p[1], p[2], 4, 0xffe2b0); addLightPool(p[0], SW_Y, p[2], 6.5, 0xffd8a8);
+  const p = k.w(-0.75, 5.3, 0); addHalo(p[0], p[1], p[2], 4, 0xffe2b0); addLightPool(p[0], SW_Y, p[2], 4.2, 0xffd8a8);
   // 横幅
   const txt = pick([['樱丘商店街', '海风通'], ['春之樱花祭', '4/1-4/14'], ['欢迎来到星见岛', 'WELCOME']]);
   const uv = allocSign(64, 200, (g, w, h) => { g.fillStyle = '#f7e1e8'; g.fillRect(0, 0, w, h); g.fillStyle = '#d24d73'; g.fillRect(0, 0, w, 14); g.fillRect(0, h - 14, w, 14); for (let i = 0; i < 6; i++) { g.fillStyle = 'rgba(232,140,170,0.5)'; g.beginPath(); g.arc(R(0, w), R(20, h - 20), R(4, 8), 0, TAU); g.fill(); } g.fillStyle = '#7a2f45'; g.font = `900 30px ${FONT.wei}`; g.textAlign = 'center'; [...txt[0]].forEach((c, i) => g.fillText(c, w / 2, 48 + i * 30)); g.font = `700 10px ${FONT.sans}`; g.fillText(txt[1], w / 2, h - 20); });

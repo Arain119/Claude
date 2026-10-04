@@ -10,7 +10,15 @@ function freshState() { return { v: 1, day: 1, min: 9 * 60, coins: 20, inv: {}, 
 GAME.S = store.get('save', null);
 if (!GAME.S || GAME.S.v !== 1) GAME.S = freshState();
 const S = () => GAME.S;
-GAME.save = () => { S().pos = [PLAYER.pos.x, PLAYER.pos.y, PLAYER.pos.z, PLAYER.yaw]; store.set('save', S()); };
+GAME.save = () => {
+  if (GAME.ride) { // 乘车中存档记在乘车站台上，读档时站在站台上
+    const r = GAME.ride; let p;
+    if (r.kind === 'train') { const a = railAt(RAIL.stops[r.boardSi].s); p = [a.x, a.y + 1.3, a.z, PLAYER.yaw]; }
+    else { const b = BUS_STOPS[r.boardSi]; p = [b.sx, 0, b.sz, PLAYER.yaw]; p[1] = groundAt(b.sx, b.sz, 3); }
+    S().pos = p;
+  } else S().pos = [PLAYER.pos.x, PLAYER.pos.y, PLAYER.pos.z, PLAYER.yaw];
+  store.set('save', S());
+};
 GAME.hour = () => S().min / 60;
 const fmtTime = (m) => { const h = Math.floor(m / 60) % 24, mm = Math.floor(m % 60); return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0'); };
 GAME.diary = (text) => { S().diary.push({ day: S().day, t: fmtTime(S().min), text }); if (S().diary.length > 80) S().diary.shift(); };
@@ -30,6 +38,8 @@ const amb = new THREE.AmbientLight(0xffffff, 0.0); scene.add(amb);
 scene.fog = new THREE.FogExp2(0xc4d8e8, 0.001);
 function applyShadowQuality() {
   sun.castShadow = Q.shadow > 0; renderer.shadowMap.enabled = Q.shadow > 0;
+  // 没有真阴影（低画质/手机）时假影减淡，免得满地黑印
+  if (GSH.mat) GSH.mat.color.setHex(Q.shadow ? 0x2a3226 : 0x59624e);
   if (Q.shadow) { sun.shadow.mapSize.set(Q.shadow, Q.shadow); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
   const ext = Q.shadow >= 4096 ? 75 : 55; const sc = sun.shadow.camera; sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext; sc.near = 1; sc.far = 400; sc.updateProjectionMatrix();
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04; sun.shadow.radius = 2;
@@ -49,6 +59,7 @@ const KEYS_T = [
   [24, 0x9fb4e0, 0.5, 0x405890, 0x161620, 0.55, 0x101a2c, 0.0015, 0x2a3450, 0x10141f, 1, 1.0, 4],
 ];
 const _ca = new THREE.Color(), _cb = new THREE.Color();
+const _duskWarm = new THREE.Color(1.0, 0.5, 0.24);
 function lerpHex(a, b, t, out) { _ca.setHex(a).convertSRGBToLinear(); _cb.setHex(b).convertSRGBToLinear(); return out.copy(_ca).lerp(_cb, t); }
 const LT = { sun: new THREE.Color(), hs: new THREE.Color(), hg: new THREE.Color(), fog: new THREE.Color(), cl: new THREE.Color(), cs: new THREE.Color() };
 const LIGHT_DIR = new THREE.Vector3(0.4, 0.7, 0.3);
@@ -65,22 +76,26 @@ function applyTimeOfDay(h) {
   if (isDay) { const az = lerp(-0.35, Math.PI + 0.35, dayT), el = Math.sin(dayT * Math.PI) * 1.0 + 0.02; sd.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el) * 0.75 + 0.25).normalize(); }
   else { const nt = (h < 12 ? h + 24 : h) - 18.9; const el = clamp(Math.sin(nt / 10.7 * Math.PI), 0, 1) * 0.15 - 0.12; sd.set(-0.6, el, 0.5).normalize(); }
   SKY_U.sunDir.value.copy(sd); SKY_U.moonDir.value.set(-0.45, 0.42, 0.62).normalize(); SKY_U.night.value = night;
-  if (SKY.sky) { const u = SKY.sky.material.uniforms; u.sunPosition.value.copy(sd).multiplyScalar(4000); u.turbidity.value = turb * 0.7; u.rayleigh.value = lerp(1.1, 2.2, smooth(16.5, 18.6, h) * (1 - night)); u.skyGain.value = lerp(0.42, 0.6, smooth(16.5, 18.8, h)); }
-  SKY_U.cloudLit.value.copy(LT.cl).multiplyScalar(lerp(1.4, 0.25, night)); SKY_U.cloudShade.value.copy(LT.cs).multiplyScalar(lerp(1.0, 0.3, night)); SKY_U.cover.value = 0.52;
-  sun.color.copy(LT.sun); sun.intensity = sunI; LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);
-  hemi.color.copy(LT.hs); hemi.groundColor.copy(LT.hg); hemi.intensity = hemiI;
-  scene.fog.color.copy(LT.fog); scene.fog.density = fogD * (Q === QUALITY.low ? 1.5 : 1);
+  // 方向性假影：影子背离太阳，太阳越低拖得越长；夜间回到圆形 AO
+  if (GSH.U) { const el = Math.max(sd.y, 0.05), n2 = Math.hypot(sd.x, sd.z) || 1; GSH.U.uDir.value.set(-sd.x / n2, -sd.z / n2); GSH.U.uLen.value = lerp(clamp(0.55 / el, 1.0, Q.shadow ? 2.4 : 1.6), 1.0, night); }
+  if (SKY.sky) { const u = SKY.sky.material.uniforms; u.sunPosition.value.copy(sd).multiplyScalar(4000); u.turbidity.value = turb * 0.7 + WX.grey * 6; u.rayleigh.value = lerp(1.1, 2.2, smooth(16.5, 18.6, h) * (1 - night)); u.skyGain.value = lerp(0.42, 0.6, smooth(16.5, 18.8, h)) * (1 - WX.grey * 0.4); }
+  SKY_U.cloudLit.value.copy(LT.cl).multiplyScalar(lerp(1.4, 0.25, night) * (1 - WX.grey * 0.35)); SKY_U.cloudShade.value.copy(LT.cs).multiplyScalar(lerp(1.0, 0.3, night) * (1 - WX.grey * 0.4)); SKY_U.cover.value = WX.cover;
+  // 低日角暖光：接近日落/日出时平行光偏橙金，地面与立面染夕色
+  const lowSun = isDay ? 1 - smooth(0.12, 0.62, sd.y) : 0;
+  sun.color.copy(LT.sun).lerp(_duskWarm, lowSun * 0.7); sun.intensity = sunI * WX.sun * (1 - lowSun * 0.3); LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);
+  hemi.color.copy(LT.hs); hemi.groundColor.copy(LT.hg); hemi.intensity = hemiI * (1 - WX.dark * 0.45);
+  scene.fog.color.copy(LT.fog).lerp(_grey503, WX.grey * 0.5); scene.fog.density = fogD * WX.fog * (Q === QUALITY.low ? 1.5 : 1);
   SEA_U.sunCol.value.copy(LT.sun).multiplyScalar(isDay ? 1 : 0.3); SEA_U.light.value = lerp(1.0, 0.18, night);
   SEA_U.fogColor.value.copy(LT.fog); SEA_U.fogDensity.value = scene.fog.density;
   PETAL_U.light.value = lerp(1, 0.3, night);
   // 空气透视 / 云影 / 叶片透光
   const dayK = isDay ? smooth(0, 0.12, sd.y) : 0;
   FOGX.sun[0] = sd.x; FOGX.sun[1] = sd.y; FOGX.sun[2] = sd.z;
-  FOGX.sunCol[0] = LT.sun.r * 0.55 * dayK; FOGX.sunCol[1] = LT.sun.g * 0.45 * dayK; FOGX.sunCol[2] = LT.sun.b * 0.3 * dayK;
-  FOGX.leafCol[0] = LT.sun.r * sunI * 0.22 * dayK; FOGX.leafCol[1] = LT.sun.g * sunI * 0.22 * dayK; FOGX.leafCol[2] = LT.sun.b * sunI * 0.16 * dayK;
-  FOGX.p[1] = night; FOGX.p[2] = 2; FOGX.p[3] = 0.4 * dayK * (1 - night);
+  FOGX.sunCol[0] = LT.sun.r * 0.55 * dayK * WX.sun; FOGX.sunCol[1] = LT.sun.g * 0.45 * dayK * WX.sun; FOGX.sunCol[2] = LT.sun.b * 0.3 * dayK * WX.sun;
+  FOGX.leafCol[0] = LT.sun.r * sunI * 0.22 * dayK * WX.sun; FOGX.leafCol[1] = LT.sun.g * sunI * 0.22 * dayK * WX.sun; FOGX.leafCol[2] = LT.sun.b * sunI * 0.16 * dayK * WX.sun;
+  FOGX.p[1] = night; FOGX.p[2] = 2 * WX.wind; FOGX.p[3] = 0.4 * dayK * (1 - night);
   if (farMat) farMat.color.copy(LT.fog).multiplyScalar(0.75);
-  renderer.toneMappingExposure = expo;
+  renderer.toneMappingExposure = expo * (1 - WX.dark * 0.2);
   // 夜灯
   winMat.emissiveIntensity = night * 1.6; signMat.emissiveIntensity = 0.02 + night * 0.9; SAK_M.m.emissiveIntensity = 1 + night * 1.2;
   glowMat.color.setScalar(lerp(0.85, 6, night));
@@ -88,6 +103,7 @@ function applyTimeOfDay(h) {
   if (LIGHTHOUSE.beamM) LIGHTHOUSE.beamM.opacity = smooth(0.3, 0.9, night) * 0.5;
   scene.environment && (envIntensity(lerp(1, 0.6, night)));
   if (POOLS.mat) POOLS.mat.opacity = smooth(0.3, 0.85, night) * 0.75;
+  if (CONES.mat) CONES.mat.opacity = smooth(0.3, 0.85, night) * 0.14;
   if (SKY.cubeRT) updateSkyEnv(false);
 }
 let _envI = -1; function envIntensity(k) { if (Math.abs(k - _envI) < 0.03) return; _envI = k; for (const key in MATS) { const m = MATS[key].material; if (m.isMeshStandardMaterial) m.envMapIntensity = (m.userData.envBase || (m.userData.envBase = m.envMapIntensity || 1)) * k; } toonMat.envMapIntensity = 0.7 * k; }
@@ -167,10 +183,10 @@ canvasEl.addEventListener('touchmove', (e) => {
 const endTouch = (e) => { for (const t of e.changedTouches) { if (TOUCH.move && t.identifier === TOUCH.move.id) { TOUCH.move = null; UI.joy(false); } if (TOUCH.look && t.identifier === TOUCH.look.id) TOUCH.look = null; } };
 canvasEl.addEventListener('touchend', endTouch); canvasEl.addEventListener('touchcancel', endTouch);
 
-GAME.vehicleKey = () => { if (DRIVE.v) { exitVehicle(); return; } if (GAME.sitting || GAME.fishing) return; const v = nearestVehicle(PLAYER.pos); if (v) enterVehicle(v); else UI.toast('附近没有可以驾驶的车辆。'); };
+GAME.vehicleKey = () => { if (GAME.ride) { leaveRide(); return; } if (DRIVE.v) { exitVehicle(); return; } if (GAME.sitting || GAME.fishing) return; const v = nearestVehicle(PLAYER.pos); if (v) enterVehicle(v); else UI.toast('附近没有可以驾驶的车辆。'); };
 GAME.cycleTime = () => { const presets = [[15 * 60, '下午'], [18 * 60, '黄昏'], [21 * 60, '夜樱']]; const h = S().min; let i = presets.findIndex(p => p[0] > h + 1); if (i < 0) i = 0; GAME.setTime(presets[i][0]); UI.toast('时间来到「' + presets[i][1] + '」'); };
 GAME.setTime = (m) => { if (m < S().min - 60 && m < 6 * 60) { } S().min = m; UI.refreshHUD(); };
-GAME.teleport = (i) => { const p = PLACES[i]; if (!p) return; GAME.standUp(); PLAYER.fly = false; PLAYER.pos.set(p.x, 0, p.z); PLAYER.pos.y = groundAt(p.x, p.z, terrainH(p.x, p.z) + 1.5); PLAYER.yaw = p.ry; PLAYER.camYaw = p.ry; PLAYER.vy = 0; UI.toast('来到「' + p.name + '」'); UI.closeAll(); };
+GAME.teleport = (i) => { const p = PLACES[i]; if (!p) return; GAME.standUp(); if (GAME.ride) { GAME.ride = null; scene.add(playerHolder); playerHolder.scale.setScalar(1); playerHolder.rotation.set(0, 0, 0); playerHolder.visible = true; } PLAYER.fly = false; PLAYER.pos.set(p.x, 0, p.z); PLAYER.pos.y = groundAt(p.x, p.z, terrainH(p.x, p.z) + 1.5); PLAYER.yaw = p.ry; PLAYER.camYaw = p.ry; PLAYER.vy = 0; UI.toast('来到「' + p.name + '」'); UI.closeAll(); };
 
 /* ---------------- 坐下 / 起身 ---------------- */
 GAME.sit = (x, y, z, ry, onLeave, attach) => {
@@ -193,7 +209,7 @@ GAME.standUp = () => {
 let currentInteract = null;
 function findInteract() {
   const p = PLAYER.pos; let best = null, bd = 1e9;
-  if (GAME.sitting || DRIVE.v) return null;
+  if (GAME.sitting || DRIVE.v || GAME.ride) return null;
   { const v = nearestVehicle(p, 2.6); if (v) { const d = Math.hypot(v.x - p.x, v.z - p.z) - v.M.halfW; best = { kind: 'veh', v, label: '驾驶「' + v.T.name + '」', key: 'F' }; bd = d + 0.6; } }
   // 居民
   for (const n of NPCS) {
@@ -210,6 +226,7 @@ function findInteract() {
 }
 GAME.interact = () => {
   if (GAME.fishing) { GAME.fish(); return; }
+  if (GAME.ride) { leaveRide(); return; }
   if (GAME.sitting) { GAME.standUp(); return; }
   if (DRIVE.v) { exitVehicle(); return; }
   const c = currentInteract; if (!c) return; AUDIO.click();
@@ -328,7 +345,7 @@ GAME.sellFish = () => { let total = 0; for (const [n, p] of FISH_KINDS) { const 
 GAME.fish = () => {
   const F = GAME.fishing;
   if (!F) {
-    const p = HARBOR.fish; GAME.fishing = { t: R(3, 8), bite: 0 };
+    const p = HARBOR.fish; GAME.fishing = { t: R(3, 8) * (WEATHER.rain > 0.4 ? 0.55 : 1), bite: 0 };
     PLAYER.pos.set(p.x + 0.4, p.y + 0.05, p.z); PLAYER.yaw = Math.PI / 2; PLAYER.fly = false;
     rod.visible = fishLine.visible = bobber.visible = true; AUDIO.splash(); UI.toast('抛竿……等浮标沉下去时按 E 收竿');
     return;
@@ -347,7 +364,7 @@ function updateFishing(dt, t) {
   const bp = new THREE.Vector3(HARBOR.fish.x + 4.2, 0.05 + Math.sin(t * 2) * 0.03 - (F.bite > 0 ? 0.12 : 0), HARBOR.fish.z + 0.6);
   bobber.position.copy(bp);
   fishLine.geometry.setFromPoints([tip, bp]);
-  if (F.bite > 0) { F.bite -= dt; if (F.bite <= 0) { UI.toast('鱼跑掉了……'); F.t = R(3, 8); UI.bite(false); } }
+  if (F.bite > 0) { F.bite -= dt; if (F.bite <= 0) { UI.toast('鱼跑掉了……'); F.t = R(3, 8) * (WEATHER.rain > 0.4 ? 0.55 : 1); UI.bite(false); } }
   else { F.t -= dt; if (F.t <= 0) { F.bite = 1.3; AUDIO.splash(); UI.bite(true); } }
 }
 
@@ -388,7 +405,59 @@ function foxInteract() {
   if (GAME.has('油豆腐')) { GAME.addItem('油豆腐', -1); S().flags.fox = true; GAME.addItem('#狐火灯笼'); sparkle(FOX.pos.x, FOX.pos.y + 0.6, FOX.pos.z, 0x9fd8ff, 60); AUDIO.bellRing(); UI.toast('白狐叼走了油豆腐。你的灯笼里亮起了一团青色的狐火——夜里它会为你照路。'); GAME.diary('夜里在神社遇见了传说中的白狐。它送了我一团狐火。'); GAME.stamp('fox'); }
   else UI.toast('一只发着微光的白狐，静静地看着你。它似乎在等什么好吃的。');
 }
+/* ---------------- 海鸥：港口/海岸上空的盘旋群 ---------------- */
+const GULLS = [];
+function buildGulls() {
+  const wingL = new THREE.PlaneGeometry(1.15, 0.32); wingL.rotateX(-Math.PI / 2); wingL.translate(0.58, 0, 0);
+  const wingR = wingL.clone(); wingR.scale(-1, 1, 1);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xf4f4f0, roughness: 0.8 });
+  const wmat = new THREE.MeshStandardMaterial({ color: 0xe6e9e2, roughness: 0.85, side: THREE.DoubleSide });
+  const spots = [[150, 32, 24, 24], [64, 138, 30, 22], [-36, 148, 28, 24], [176, -14, 22, 20], [108, -146, 34, 30], [-140, 66, 26, 22], [30, 100, 26, 20]];
+  for (const [cx, cz, r, cy] of spots) {
+    const n = RI(2, 3);
+    for (let i = 0; i < n; i++) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), mat); body.scale.set(0.75, 0.7, 2.1);
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 0.3), wmat); tail.position.set(0, 0.02, -0.42);
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.18, 6), new THREE.MeshStandardMaterial({ color: 0xe8a23a, roughness: 0.6 })); beak.rotation.x = Math.PI / 2; beak.position.set(0, 0.03, 0.42);
+      const wl = new THREE.Mesh(wingL, wmat), wr = new THREE.Mesh(wingR, wmat);
+      g.add(body, tail, beak, wl, wr); scene.add(g);
+      GULLS.push({ g, wl, wr, cx: cx + R(-8, 8), cz: cz + R(-8, 8), r: r * R(0.6, 1.25), cy: cy + R(-3, 3), ph: R(0, TAU), sp: R(0.22, 0.42) * (chance(0.5) ? 1 : -1), fl: R(6, 9) });
+    }
+  }
+}
+function updateGulls(dt, t, day) {
+  for (const u of GULLS) {
+    u.g.visible = day;
+    if (!day) continue;
+    const a = u.ph + t * u.sp;
+    u.g.position.set(u.cx + Math.cos(a) * u.r, u.cy + Math.sin(t * 0.7 + u.ph) * 2.5 + Math.sin(t * 0.23 + u.ph * 2) * 3, u.cz + Math.sin(a) * u.r);
+    const vx = -Math.sin(a) * u.sp, vz = Math.cos(a) * u.sp;
+    u.g.rotation.set(0, Math.atan2(vx, vz), 0.3 * Math.sign(u.sp), 'YXZ');
+    const f = Math.sin(t * u.fl + u.ph) * 0.55;
+    u.wl.rotation.z = f; u.wr.rotation.z = -f;
+  }
+}
+/* --- 炊烟：屋顶烟囱上升腾的柔和烟团 --- */
+const SMOKE = { list: [], tex: null };
+function smokeStack(x, y, z, s = 1) { SMOKE.list.push({ x, y, z, s }); }
+function buildSmoke() {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g2 = c.getContext('2d');
+  const gr = g2.createRadialGradient(32, 32, 4, 32, 32, 30); gr.addColorStop(0, 'rgba(238,238,240,0.5)'); gr.addColorStop(0.6, 'rgba(232,232,238,0.25)'); gr.addColorStop(1, 'rgba(232,232,238,0)');
+  g2.fillStyle = gr; g2.fillRect(0, 0, 64, 64); SMOKE.tex = new THREE.CanvasTexture(c);
+  for (const e of SMOKE.list) { e.sp = []; for (let i = 0; i < 5; i++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: SMOKE.tex, transparent: true, depthWrite: false, opacity: 0 })); m.position.set(e.x, e.y, e.z); e.sp.push(m); scene.add(m); } }
+}
+function updateSmoke(dt, t) {
+  for (const e of SMOKE.list) for (let i = 0; i < e.sp.length; i++) {
+    const m = e.sp[i]; const p = (t * 0.1 + i * 0.2 + e.x * 0.013) % 1;
+    m.position.set(e.x + Math.sin(t * 0.6 + i * 2.6) * (0.25 + p * 1.2) + p * 2.4 * (WX.wind || 0.4), e.y + p * 5.0 * e.s, e.z + Math.cos(t * 0.5 + i) * (0.2 + p * 0.8));
+    m.material.opacity = (p < 0.18 ? p / 0.18 : 1 - (p - 0.18) / 0.82) * 0.4 * e.s;
+    const sc = (0.45 + p * 2.6) * e.s; m.scale.set(sc, sc, 1);
+  }
+}
 function updateAnimals(dt, t, hour) {
+  updateGulls(dt, t, hour < 19 && hour > 5.5);
+  updateSmoke(dt, t);
   // 猫
   const k = CAT.obj; let moving = false;
   if (CAT.follow && !insideHome(PLAYER.pos.x, PLAYER.pos.z) || CAT.follow && insideHome(CAT.pos.x, CAT.pos.z)) {
@@ -459,6 +528,7 @@ function homeInteractables() {
 const _fw = new THREE.Vector3();
 function updatePlayer(dt, t) {
   const P = PLAYER;
+  if (GAME.ride) { INPUT.jump = false; return; } // 乘车中：坐标与姿态由 updateRide 接管
   // 移动输入
   let mx = 0, mz = 0;
   if (KEYS.has('w') || KEYS.has('arrowup')) mz += 1; if (KEYS.has('s') || KEYS.has('arrowdown')) mz -= 1;
@@ -517,6 +587,7 @@ const CAM = { lastLook: -10, fov: 58, T: 0 };
 const _side = new THREE.Vector3();
 function updateCamera(dt) {
   const P = PLAYER; const v = DRIVE.v; CAM.T += dt;
+  if (GAME.ride) { updateRideCam(dt); return; }
   if (INPUT.lookX || INPUT.lookY) { CAM.lastLook = CAM.T; P.camYaw -= INPUT.lookX; P.camPitch = clamp(P.camPitch + INPUT.lookY * (store.get('invertY', false) ? -1 : 1), -0.9, 1.2); INPUT.lookX = INPUT.lookY = 0; }
   const idle = CAM.T - CAM.lastLook > (v ? 1.2 : 2.2);
   const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));

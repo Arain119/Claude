@@ -172,11 +172,21 @@ function buildTerrain() {
     const rd = riverDist(x, z); if (rd < 9.5) { ro = Math.max(ro, smooth(9.5, 6, rd)); }
     const rw = roadSample(x, z); di = Math.max(di, rw * 0.8);
     if (h > 25) { di = Math.max(di, smooth(0.4, 0.8, n) * 0.6); }
+    // 斑状裸土：草丛里露出的泥地块（~10m 尺度斑块）
+    di = Math.max(di, smooth(0.63, 0.8, fbm(x * 0.09 + 3.3, z * 0.09 - 7.7, 3)) * 0.55);
     gr = Math.max(0, 1 - di - ro - sa);
     spl.set([gr, di, ro, sa], i * 4);
     // 色调：高处偏暗绿、低处偏黄绿
     tmp.setRGB(1, 1, 1).lerp(new THREE.Color(0.8, 0.88, 0.75), smooth(10, 60, h)).lerp(new THREE.Color(1.05, 1.0, 0.85), smooth(0.65, 0.8, fbm(x * 0.01 + 5, z * 0.01, 2)) * 0.5);
+    // 枯草斑：偏黄褐的大片色块
+    tmp.lerp(new THREE.Color(0.95, 0.86, 0.58), smooth(0.55, 0.78, fbm(x * 0.055 - 4.1, z * 0.055 + 2.6, 2)) * 0.5 * gr);
+    // 城镇草坪的割草条纹（~3m 交替明暗带）
+    tmp.multiplyScalar(1 + flatW(x, z, -112, 130, -90, 94, 6) * 0.045 * (Math.sin(x * 1.9) + Math.sin(z * 1.6)));
+    // 湿沙带：水线上下 ~1m 的沙滩压暗偏冷（潮间带）
+    tmp.lerp(new THREE.Color(0.55, 0.52, 0.48), smooth(0.95, 0.2, Math.abs(h - 0.15)) * clamp(sa, 0, 1) * 0.5);
     tmp.multiplyScalar(lerp(1, 0.55, smooth(0.3, -2.5, h)));
+    // 微色斑块：打破大片匀色的塑料感
+    tmp.multiplyScalar(0.9 + 0.15 * fbm(x * 0.11 + 9.7, z * 0.11 - 4.2, 2) + 0.07 * fbm(x * 0.55, z * 0.55, 1));
     col.set([tmp.r, tmp.g, tmp.b], i * 3);
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('splat', new THREE.BufferAttribute(spl, 4));
@@ -213,14 +223,14 @@ let DEPTH_TEX; const DEPTH_S = 640, DEPTH_O = [5, -8];
 function buildDepthTex() {
   const N = 512, S = DEPTH_S; const data = new Uint8Array(N * N * 4);
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const x = DEPTH_O[0] - S / 2 + (i + 0.5) * S / N, z = DEPTH_O[1] - S / 2 + (j + 0.5) * S / N; const h = terrainNatural(x, z) - (smooth(127.6, 129, x) * smooth(-31, -27, z) * (1 - smooth(57, 61, z))) * 6;
+    const x = DEPTH_O[0] - S / 2 + (i + 0.5) * S / N, z = DEPTH_O[1] - S / 2 + (j + 0.5) * S / N; const h = terrainH(x, z);
     const d = clamp(-h / 10, 0, 1); const k = (j * N + i) * 4; data[k] = d * 255; data[k + 1] = h > 0 ? 255 : 0; data[k + 2] = 0; data[k + 3] = 255;
   }
   DEPTH_TEX = new THREE.DataTexture(data, N, N, THREE.RGBAFormat); DEPTH_TEX.magFilter = THREE.LinearFilter; DEPTH_TEX.minFilter = THREE.LinearFilter; DEPTH_TEX.needsUpdate = true;
 }
 
 /* ---------------- 天空：物理大气（Preetham）+ 云层 + 星空 ---------------- */
-const SKY = { sky: null, skyB: null, overlay: null, overlayB: null, scene: new THREE.Scene(), cubeRT: null, cubeCam: null, pmrem: null, envRT: null, lastSun: new THREE.Vector3(), lastNight: -1 };
+const SKY = { sky: null, skyB: null, overlay: null, overlayB: null, scene: new THREE.Scene(), cubeRT: null, cubeCam: null, pmrem: null, envRT: null, lastSun: new THREE.Vector3(), lastNight: -1, lastCover: -1 };
 const SKY_U = {
   time: { value: 0 }, sunDir: { value: new THREE.Vector3(0.3, 0.6, 0.4) }, moonDir: { value: new THREE.Vector3(-0.4, 0.45, 0.6) }, night: { value: 0 },
   cloudLit: { value: new THREE.Color(1, 1, 1) }, cloudShade: { value: new THREE.Color(0.6, 0.65, 0.75) }, cover: { value: 0.5 }
@@ -249,6 +259,17 @@ function buildSky() {
           float md = dot(d, normalize(moonDir)); float disc = smoothstep(0.99955, 0.9997, md);
           col += vec3(1.0, 0.97, 0.9) * disc * night * 3.0; a = max(a, disc * night);
           float halo = pow(max(md, 0.0), 80.0) * 0.35 * night; col += vec3(0.6, 0.7, 0.9) * halo; a = max(a, halo);
+        }
+        if (night < 0.98) {
+          // 落日本体+暖色光晕（画在云层之前，云会自然遮日）
+          float sd2 = max(dot(d, normalize(sunDir)), 0.0);
+          float lowSun = 1.0 - smoothstep(0.02, 0.32, sunDir.y);
+          vec3 sunTint = mix(vec3(1.0, 0.96, 0.88), vec3(1.0, 0.5, 0.22), lowSun);
+          float sdisc = smoothstep(0.99985, 0.99996, sd2);
+          float sglow = pow(sd2, 200.0) * mix(0.1, 0.3, lowSun);
+          float k = (1.0 - night) * smoothstep(-0.05, 0.015, sunDir.y);
+          col += sunTint * (sdisc * 3.0 + sglow) * k;
+          a = max(a, clamp(sdisc + sglow, 0.0, 1.0) * k);
         }
         if (y > 0.0) {
           vec2 uv = d.xz / (y + 0.12) * 1.3 + vec2(time * 0.004, time * 0.0015);
@@ -279,8 +300,8 @@ function buildSky() {
 /* 太阳方向或昼夜明显变化时，重新烘焙环境光（反射 + 漫反射） */
 function updateSkyEnv(force) {
   const sd = SKY_U.sunDir.value; const n = SKY_U.night.value;
-  if (!force && sd.distanceTo(SKY.lastSun) < 0.035 && Math.abs(n - SKY.lastNight) < 0.06) return;
-  SKY.lastSun.copy(sd); SKY.lastNight = n;
+  if (!force && sd.distanceTo(SKY.lastSun) < 0.035 && Math.abs(n - SKY.lastNight) < 0.06 && Math.abs(SKY_U.cover.value - SKY.lastCover) < 0.05) return;
+  SKY.lastSun.copy(sd); SKY.lastNight = n; SKY.lastCover = SKY_U.cover.value;
   const tm = renderer.toneMapping; renderer.toneMapping = THREE.NoToneMapping;
   SKY.cubeCam.update(renderer, SKY.scene);
   if (SKY.envRT) SKY.envRT.dispose();
@@ -322,7 +343,7 @@ function buildSea() {
       void main(){
         vec2 duv = (vW.xz - depthO) / depthS + 0.5; float depth = texture2D(depthTex, duv).r * 10.0;
         if (duv.x < 0.0 || duv.x > 1.0 || duv.y < 0.0 || duv.y > 1.0) depth = 10.0;
-        vec3 n = wnorm(vW.xz, time); n = normalize(mix(n, vec3(0.0, 1.0, 0.0), smoothstep(25.0, 350.0, vDist) * 0.93));
+        vec3 n = wnorm(vW.xz, time); n = normalize(mix(n, vec3(0.0, 1.0, 0.0), smoothstep(20.0, 240.0, vDist)));
         vec3 v = normalize(cameraPosition - vW);
         float fr = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
         vec3 r = reflect(-v, n); r.y = abs(r.y);
@@ -331,11 +352,15 @@ function buildSea() {
         vec3 body = mix(shallowCol, deepCol, smoothstep(0.3, 7.0, depth)) * (0.35 + 0.65 * light) + shallowCol * sss * light;
         vec3 col = mix(body, refl, fr);
         vec3 h = normalize(sunDir + v); float sp = (pow(max(dot(n, h), 0.0), 600.0) * 40.0) * smoothstep(400.0, 60.0, vDist) + pow(max(dot(n, h), 0.0), 120.0) * 0.5;
-        col += sunCol * sp * (1.0 - night) * smoothstep(-0.05, 0.1, sunDir.y);
-        float shore = 1.0 - smoothstep(0.0, 0.5, depth);
-        float bands = smoothstep(0.6, 0.85, sin(depth * 24.0 - time * 1.6 + sin(vW.x * 0.13) * 2.0) * 0.5 + 0.5) * smoothstep(1.4, 0.15, depth);
-        float foam = clamp(shore * 0.8 + bands * 0.5, 0.0, 1.0) * (0.7 + 0.3 * sin(time * 2.0 + vW.x * 0.3));
+        float lowSun = 1.0 - smoothstep(0.03, 0.38, sunDir.y); // 低日角：宽瓣金光水路
+        col += sunCol * (sp + pow(max(dot(n, h), 0.0), 55.0) * 2.4 * lowSun) * (1.0 - night) * smoothstep(-0.05, 0.1, sunDir.y);
+        float shore = 1.0 - smoothstep(0.0, 0.9, depth);
+        float bands = smoothstep(0.55, 0.85, sin(depth * 14.0 - time * 1.6 + sin(vW.x * 0.13) * 2.0) * 0.5 + 0.5) * smoothstep(3.2, 0.2, depth);
+        float foam = clamp(shore * 0.85 + bands * 0.55, 0.0, 1.0) * (0.7 + 0.3 * sin(time * 2.0 + vW.x * 0.3));
         col = mix(col, foamCol * (0.25 + 0.75 * light), foam * 0.75);
+        // 远处稀疏白浪点（破开深水区的平）
+        float cap = smoothstep(0.44, 0.56, wh(vW.xz * 0.55 + time * 0.35, time * 0.6)) * smoothstep(20.0, 90.0, vDist) * smoothstep(1.2, 6.0, depth) * (1.0 - night * 0.7) * 0.3;
+        col = mix(col, foamCol * (0.3 + 0.7 * light), cap);
         float fogF = 1.0 - exp(-fogDensity * fogDensity * vDist * vDist);
         col = mix(col, fogColor, fogF);
         gl_FragColor = vec4(col, 1.0);
@@ -393,6 +418,15 @@ function buildFarLand() {
     for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); const a = Math.atan2(z, x); const k = 1 + (fbm(a * 2 + s[0] * 10, y * 0.02, 3) - 0.5) * 0.6; p.setX(i, x * k); p.setZ(i, z * k * 0.7); }
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, farMat); mesh.position.set(Math.cos(s[0]) * s[1], s[2] / 2 - 22, Math.sin(s[0]) * s[1]); mesh.scale.set(1.6, 1, 1); mesh.rotation.y = s[0]; group.add(mesh);
+  }
+  // 第二圈更远更淡的山影：大气透视的层次
+  const farMat2 = new THREE.MeshStandardMaterial({ color: lin(0x74889e), roughness: 1, fog: true });
+  const spots2 = [[0.6, 2600, 150, 520], [1.7, 2400, 110, 430], [2.7, 2750, 190, 560], [3.9, 2500, 130, 480], [5.0, 2650, 160, 500], [6.0, 2350, 100, 380]];
+  for (const s of spots2) {
+    const geo = new THREE.ConeGeometry(s[3], s[2], 32, 6, true); const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); const a = Math.atan2(z, x); const k = 1 + (fbm(a * 2 + s[0] * 7, y * 0.02, 3) - 0.5) * 0.5; p.setX(i, x * k); p.setZ(i, z * k * 0.7); }
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, farMat2); mesh.position.set(Math.cos(s[0]) * s[1], s[2] / 2 - 30, Math.sin(s[0]) * s[1]); mesh.scale.set(1.7, 1, 1); mesh.rotation.y = s[0]; group.add(mesh);
   }
   group.name = 'farland'; scene.add(group);
 }

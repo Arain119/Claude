@@ -202,6 +202,9 @@ function buildTracks() {
     K.box('concrete', 0, 0.1, 0, 12.5, 0.2, railSep(c.s) + 7, 0xb9b5ad, { wuv: 0.6, solid: { walk: true } });
     for (const sd of [-1, 1]) for (const r of [-0.62, 0.62]) K.box('vcNoShadow', 0, 0.205, sd * railSep(c.s) / 2 + r * 0.9, 12.5, 0.01, 0.12, 0x3a3a3a);
     buildCrossingAt('W', c.x, c.y, c.z, Math.atan2(-p.tz, p.tx), railSep(c.s) / 2 + 4.2, 4.6, c.s);
+    // 公路侧停止线（与 AI 车停靠位一致，靠左车道）
+    { const rp = c.road, tx = rp[3], tz = rp[4], lx = tz, lz = -tx, dd = railSep(c.s) / 2 + 5, cry = Math.atan2(-tz, tx);
+      for (const [sx, sz] of [[c.x - tx * dd + lx * 1.85, c.z - tz * dd + lz * 1.85], [c.x + tx * dd - lx * 1.85, c.z + tz * dd - lz * 1.85]]) WK.box('vcNoShadow', sx, rp[1] + 0.045, sz, 0.5, 0.012, 3.2, new THREE.Color().setHSL(0.12, 0.03, R(0.74, 0.88)), { ry: cry }); }
   }
   // 人行道口：铺板 + 警报器 + 栏杆
   for (const c of RAIL.xings) {
@@ -315,7 +318,7 @@ function buildRailStations() {
         g2.fillStyle = '#26375e'; g2.beginPath(); g2.arc(w - 50, 50, 28, 0, TAU); g2.fill(); g2.fillStyle = '#fff'; g2.font = `900 22px ${FONT.sans}`; g2.textAlign = 'center'; g2.fillText(st.code, w - 50, 58);
       });
       for (const x of [-8, 8]) { for (const f of [-1, 1]) K.plane('sign', x, 2.0, f * 0.04, 2.4, 0.94, 0xffffff, { uvr: uv, ry: f > 0 ? 0 : Math.PI }); K.box('vc', x, 2.0, 0, 2.5, 1.04, 0.06, 0x5a6670); for (const r of [-1, 1]) K.box('vc', x + r * 1.1, 0.75, 0, 0.08, 1.5, 0.08, 0x5a6670); }
-      for (const x of [-12, 0, 12]) { K.cyl('paint', x, 1.8, back, 0.06, 3.6, 0x5a6670, { seg: 8 }); K.box('glow', x, 3.55, back - sd * 0.3, 0.5, 0.06, 0.16, 0xfafafa); const hp = K.w(x, 3.4, back - sd * 0.3); addHalo(hp[0], hp[1], hp[2], 1.8, 0xf2f6ff); const lp = K.w(x, 0, back - sd * 0.6); addLightPool(lp[0], c.y + 1.3, lp[2], 3.5, 0xe8f0ff); }
+      for (const x of [-12, 0, 12]) { K.cyl('paint', x, 1.8, back, 0.06, 3.6, 0x5a6670, { seg: 8 }); K.box('glow', x, 3.55, back - sd * 0.3, 0.5, 0.06, 0.16, 0xfafafa); const hp = K.w(x, 3.4, back - sd * 0.3); addHalo(hp[0], hp[1], hp[2], 1.8, 0xf2f6ff); const lp = K.w(x, 0, back - sd * 0.6); addLightPool(lp[0], c.y + 1.3, lp[2], 2.6, 0xe8f0ff); }
     }
     const pl = railAt(st.s); const inl = islandC(pl.x + pl.lx * 20, pl.z + pl.lz * 20) > islandC(pl.x - pl.lx * 20, pl.z - pl.lz * 20) ? 1 : -1; // 放在岛内一侧
     addPlace(st.name + '站', pl.x + pl.lx * inl * (railSep(st.s) / 2 + 6.5), pl.z + pl.lz * inl * (railSep(st.s) / 2 + 6.5), Math.atan2(-pl.lx * inl, -pl.lz * inl), 'station2');
@@ -361,7 +364,7 @@ function buildStation() {
   const cy = PLAT_Y + 3.2;
   for (let x = 38; x <= 84; x += 6.5) { WK.cyl('paint', x, (PLAT_Y + cy) / 2, cz, 0.12, cy - PLAT_Y, 0x7d8a8f, { seg: 10 }); addCollider(x, cz, 0.15, 0.15, 0, PLAT_Y, cy, 'wall'); WK.box('paint', x, cy - 0.15, cz, 0.12, 0.2, 4.6, 0x7d8a8f); }
   for (const s of [-1, 1]) WK.box('metal', 61, cy + 0.12 + 0.12, cz + s * 1.3, 48, 0.08, 2.75, 0xd6dbe0, { rx: s * 0.09, wuv: 0.8 });
-  for (let x = 40; x <= 82; x += 6.5) for (const s of [-1, 1]) { WK.box('glow', x + 3, cy - 0.05, cz + s * 1.4, 1.6, 0.05, 0.12, 0xfafafa); addHalo(x + 3, cy - 0.3, cz + s * 1.4, 2.0, 0xf2f6ff); addLightPool(x + 3, PLAT_Y, cz + s * 1.4, 4, 0xe8f0ff); }
+  for (let x = 40; x <= 82; x += 6.5) for (const s of [-1, 1]) { WK.box('glow', x + 3, cy - 0.05, cz + s * 1.4, 1.6, 0.05, 0.12, 0xfafafa); addHalo(x + 3, cy - 0.3, cz + s * 1.4, 2.0, 0xf2f6ff); addLightPool(x + 3, PLAT_Y, cz + s * 1.4, 3, 0xe8f0ff); }
   // 站名牌
   for (const x of [46, 76]) stationNameBoard(x, cz);
   const hUV = allocSign(400, 80, (g, w, h) => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h); g.fillStyle = '#e48fa6'; g.fillRect(0, h - 12, w, 12); g.fillStyle = '#222'; g.font = `900 40px ${FONT.sans}`; g.textAlign = 'center'; g.fillText('樱丘  SAKURAGAOKA', w / 2, 50); });

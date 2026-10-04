@@ -43,8 +43,14 @@ function convenienceStore(x, z, ry) {
   K.plane('sign', 0, 3.25, 0.09, 7, 1.1, 0xffffff, { uvr: uv });
   for (const sx of [5.2, 6.0]) K.box('paint', sx, 0.5, 0.6, 0.6, 1.0, 0.5, sx < 5.5 ? 0x3a7a4a : 0x2c6ea0);
   vendingMachine(new Kit(...K.w(-6.4, 0, 0.5), K.ry), 0, 0, 0, 0xd9483b);
-  const hp = K.w(0, 3.0, 0.8); addHalo(hp[0], hp[1], hp[2], 5, 0xf4f8ff); addLightPool(hp[0], TOWN_Y, hp[2] + 2, 7, 0xf0f6ff);
+  const hp = K.w(0, 3.0, 0.8); addHalo(hp[0], hp[1], hp[2], 5, 0xf4f8ff); addLightPool(hp[0], TOWN_Y, hp[2] + 2, 5, 0xf0f6ff);
   bicycleStatic(K, -4, 1.4, 0.3, 0xffffff); bicycleStatic(K, -3.2, 1.4, 0.3, 0xd9483b);
+  // 侧墙（-x 面）自动贩卖机+海报，免得整面光板
+  vendingMachine(new Kit(...K.w(-w / 2 - 0.7, 0, -3.2), K.ry + Math.PI / 2), 0, 0, 0, 0x2c6ea0);
+  vendingMachine(new Kit(...K.w(-w / 2 - 0.7, 0, -5.2), K.ry + Math.PI / 2), 0, 0, 0, 0xf2f2f0);
+  const uv2 = allocSign(300, 400, (g, W, H) => { g.fillStyle = '#fdf6ea'; g.fillRect(0, 0, W, H); g.fillStyle = '#e06a3a'; g.font = `900 52px ${FONT.sans}`; g.textAlign = 'center'; g.fillText('新商品', W / 2, 90); g.fillStyle = '#2a4a6e'; g.font = `400 34px ${FONT.sans}`; g.fillText('海岛限定', W / 2, 150); g.fillStyle = '#d9483b'; g.beginPath(); g.arc(W / 2, 260, 70, 0, TAU); g.fill(); g.fillStyle = '#fff'; g.font = `900 60px ${FONT.sans}`; g.fillText('饮', W / 2, 282); });
+  K.plane('sign', -w / 2 - 0.03, 2.0, -7.5, 1.2, 1.6, 0xffffff, { ry: -Math.PI / 2, uvr: uv2 });
+  K.box('paint', -w / 2 - 0.5, 0.4, -8.6, 0.7, 0.8, 0.7, 0x5a6258);
 }
 /* 船屋：海边的木结构棚子，里面放着小船与渔具 */
 function boatShed(x, z, ry) {

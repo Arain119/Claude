@@ -6,7 +6,10 @@ function progress(p, text) { $('loadBar').style.width = Math.round(p * 100) + '%
 async function loadFonts() {
   if (!document.fonts || !document.fonts.load) return;
   const fams = ['400 32px "ZCOOL XiaoWei"', '900 32px "Noto Sans SC"', '700 32px "Noto Sans SC"', '900 32px "Noto Serif SC"', '400 32px "Ma Shan Zheng"', '400 32px "ZCOOL KuaiLe"'];
-  const sample = '星见岛樱丘町潮汐拉面小满面包房灯塔便利店邮局书店花店咖啡和菓子乌冬唱片洗衣五金钟表照相理发单车药局蔬果文具居酒屋渔火止まれ狐守社站学园桥川石油观景台';
+  // 预热样本：扫描全部脚本文本里的中日字符，任何 canvas 文案都能拿到字形（防止生僻字烧成豆腐块）
+  let sample = '';
+  for (const s of document.scripts) { const t = s.textContent || ''; for (const m of t.match(/[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]+/g) || []) sample += m; }
+  sample = [...new Set(sample)].join('') || '星见岛樱丘町潮汐拉面小满面包房灯塔便利店邮局书店花店咖啡和菓子乌冬唱片洗衣五金钟表照相理发单车药局蔬果文具居酒屋渔火止まれ狐守社站学园桥川石油观景台';
   await Promise.race([Promise.all(fams.map(f => document.fonts.load(f, sample).catch(() => { }))), new Promise(r => setTimeout(r, 3500))]);
 }
 function scatterNature() {
@@ -51,12 +54,13 @@ async function build() {
   flushBatches(scene); buildOccupancy();
   scatterNature(); buildForest(); addTreeColliders();
   progress(0.82, '正在合并网格……'); await tick();
-  flushBatches(scene); flushCards(); buildWires(); buildHalos(); buildPetals(); buildPools();
+  flushBatches(scene); flushCards(); buildWires(); buildHalos(); buildPetals(); buildPools(); buildLampCones(); buildGroundShadows(); buildWallFades(); buildDecals(); buildPuddles();
   TEX_SIGN.needsUpdate = true;
   progress(0.9, '居民和车流正在醒来……'); await tick();
-  seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic();
+  seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic(); buildGulls(); buildSmoke();
   scene.updateMatrixWorld(true); buildGrass();
   mailboxInteractables(); shopInteractables(); homeInteractables();
+  initLiveWorld(); // 天气 / 乘降 / 巴士 / 通勤
   const ORDER = ['home', 'post', 'station', 'plaza', 'shrine', 'river', 'harbor', 'cape', 'beach', 'platform', 'park', 'school', 'farm', 'gas', 'view', 'station2'];
   PLACES.sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
   buildMapBase(); refreshHomeBoard(); applyShadowQuality(); setQuality(qName, true);
@@ -170,7 +174,7 @@ function renderFrame() {
 }
 
 /* ---------------- 主循环 ---------------- */
-let last = performance.now(), T = 0, hudT = 0, mmT = 0, saveT = 0, envT = 0; const ENV = { sea: 0, trees: 0, night: 0, crossing: 0, train: 0, trainSpeed: 0, windy: 0.3, height: 0, musicOn: true };
+let last = performance.now(), T = 0, hudT = 0, mmT = 0, saveT = 0, envT = 0; const ENV = { sea: 0, trees: 0, night: 0, crossing: 0, train: 0, trainSpeed: 0, windy: 0.3, height: 0, musicOn: true, rain: 0 };
 let petalNear = 0;
 function frame(now) {
   requestAnimationFrame(frame);
@@ -182,6 +186,7 @@ function frame(now) {
     if (st.min >= 24 * 60) { st.min = 24 * 60 - 1; if (!GAME._passing) { GAME._passing = true; if (DRIVE.v) { DRIVE.v.v = 0; exitVehicle(); } UI.toast('太晚了……你迷迷糊糊地回到了家。'); GAME.sleep(false); setTimeout(() => GAME._passing = false, 3000); } }
   }
   const hour = st.min / 60;
+  updateWeather(dt);
   applyTimeOfDay(hour);
   SKY_U.time.value = T; FOGX.p[0] = T; animeUpdate(NIGHT.v);
   if (GAME.started) {
@@ -193,10 +198,12 @@ function frame(now) {
     const a = T * 0.04; camera.position.set(PLAZA.x + Math.cos(a) * 70, TOWN_Y + 32, PLAZA.z - 30 + Math.sin(a) * 70); camera.lookAt(PLAZA.x, TOWN_Y + 6, PLAZA.z - 30);
     playerHolder.position.copy(PLAYER.pos); poseCharacter(playerChar, dt, 'idle', 0, T);
   }
-  updateNPCs(dt, T, hour, PLAYER.pos); updateTrain(dt); updateCrossings(dt, T); updateTraffic(dt, PLAYER.pos);
+  updateNPCs(dt, T, hour, PLAYER.pos); updateTrain(dt); updateCrossings(dt, T); updateTraffic(dt, PLAYER.pos); updateRide(dt, T);
   updateAnimals(dt, T, hour); updateDate(dt, T, hour); updateFishing(dt, T); updateSparks(dt);
   for (const f of UPDATERS) f(dt, T);
-  SEA_U.time.value = T; WIND.uTime.value = T; WIND.uWind.value = 0.8 + Math.sin(T * 0.23) * 0.35 + Math.sin(T * 0.071) * 0.25;
+  SEA_U.time.value = T; WIND.uTime.value = T; WIND.uWind.value = (0.8 + Math.sin(T * 0.23) * 0.35 + Math.sin(T * 0.071) * 0.25) * WX.wind;
+  SEA_U.waves.value = Q.waves * WX.waves;
+  RAIN_U.time.value = T; RAIN_U.camPos.value.copy(camera.position); RAIN_U.amt.value = WEATHER.rain * (insideHome(PLAYER.pos.x, PLAYER.pos.z) ? 0 : 1); RAIN_U.tilt.value.x = 0.08 + WX.wind * 0.14;
   PETAL_U.camPos.value.copy(camera.position); updateGrass();
   // 阴影相机跟随（按纹素对齐，避免闪烁）
   const tp = PLAYER.pos; const snap = 0.5; sun.target.position.set(Math.round(tp.x / snap) * snap, Math.round(tp.y), Math.round(tp.z / snap) * snap); sun.position.copy(sun.target.position).addScaledVector(LIGHT_DIR, 200); sun.target.updateMatrixWorld();
@@ -216,6 +223,7 @@ function frame(now) {
     if (GAME.sitting) { pr.hidden = false; $('promptText').textContent = '起身'; pr.firstChild.textContent = k('空格'); }
     else if (GAME.fishing) { pr.hidden = false; $('promptText').textContent = GAME.fishing.bite > 0 ? '快收竿！' : '收竿'; pr.firstChild.textContent = k('E'); }
     else if (DRIVE.v) { pr.hidden = Math.abs(DRIVE.v.v) > 2; $('promptText').textContent = '下车'; pr.firstChild.textContent = k('F'); }
+    else if (GAME.ride) { pr.hidden = false; const r = GAME.ride; const open = r.kind === 'train' ? r.T.state === 'stop' : r.v.dwell > 0; $('promptText').textContent = open ? '下车' : (r.kind === 'train' ? '列车行驶中…' : '巴士行驶中…'); pr.firstChild.textContent = k('F'); }
     else if (currentInteract) { pr.hidden = false; $('promptText').textContent = currentInteract.label; pr.firstChild.textContent = k(currentInteract.key || 'E'); }
     else pr.hidden = true;
     if (hudT < 0) { hudT = 0.25; UI.tickHUD(st, hour); }
@@ -229,9 +237,10 @@ function frame(now) {
     const c = islandC(PLAYER.pos.x, PLAYER.pos.z); ENV.sea = Math.max(smooth(0.2, 0.02, c), PLAYER.pos.x > 112 && PLAYER.pos.z > -40 && PLAYER.pos.z < 65 ? 0.8 : 0);
     let cr = 0; for (const C of CROSSINGS) if (C.active) cr = Math.max(cr, smooth(160, 15, Math.hypot(PLAYER.pos.x - C.x, PLAYER.pos.z - C.z)));
     ENV.crossing = cr; ENV.train = smooth(220, 10, nearestTrainDist(PLAYER.pos.x, PLAYER.pos.z)); ENV.trainSpeed = TRAIN.v;
-    ENV.night = NIGHT.v; ENV.height = PLAYER.pos.y - TOWN_Y; ENV.windy = 0.3 + Math.max(0, Math.sin(T * 0.11)) * 0.5;
+    ENV.night = NIGHT.v; ENV.height = PLAYER.pos.y - TOWN_Y; ENV.windy = (0.3 + Math.max(0, Math.sin(T * 0.11)) * 0.5) * WX.wind;
+    ENV.rain = WEATHER.rain * (inside ? 0.3 : 1);
   }
-  PETAL_U.density.value += (petalNear - PETAL_U.density.value) * Math.min(1, dt * 2);
+  PETAL_U.density.value += (petalNear * (1 - WEATHER.rain * 0.9) - PETAL_U.density.value) * Math.min(1, dt * 2);
   if (GAME.started) AUDIO.update(dt, ENV);
   renderFrame();
 }

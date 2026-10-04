@@ -19,6 +19,7 @@ AUDIO.init = function () {
   AUDIO.waves = noise('lowpass', 700);
   AUDIO.rumble = noise('lowpass', 180);
   AUDIO.leaves = noise('highpass', 3500);
+  AUDIO.rain = noise('bandpass', 2400, 0.4);
   // 虫鸣
   const cr = ctx.createOscillator(); cr.frequency.value = 4600; const crG = ctx.createGain(); crG.gain.value = 0; const crL = ctx.createOscillator(); crL.frequency.value = 18; const crLG = ctx.createGain(); crLG.gain.value = 1; crL.connect(crLG); const am = ctx.createGain(); am.gain.value = 0; crLG.connect(am.gain); cr.connect(am); am.connect(crG); crG.connect(master); cr.start(); crL.start(); AUDIO.cricket = crG;
   AUDIO.nextBird = 1; AUDIO.nextBell = 0; AUDIO.bellSide = 0; AUDIO.nextClack = 0; AUDIO.musicT = ctx.currentTime + 1; AUDIO.noteI = 0;
@@ -75,11 +76,12 @@ AUDIO.update = function (dt, env) {
   const day = 1 - env.night;
   AUDIO.wind.g.gain.setTargetAtTime(0.05 + env.windy * 0.06 + (env.height > 10 ? 0.05 : 0), now, k);
   AUDIO.wind.f.frequency.setTargetAtTime(380 + Math.sin(now * 0.3) * 120, now, k);
-  AUDIO.waves.g.gain.setTargetAtTime(env.sea * (0.22 + Math.sin(now * 0.5) * 0.08), now, k);
+  if (AUDIO.rain) { AUDIO.rain.g.gain.setTargetAtTime(env.rain * 0.09, now, 0.6); AUDIO.rain.f.frequency.setTargetAtTime(2000 + Math.sin(now * 0.23) * 500, now, k); }
+  AUDIO.waves.g.gain.setTargetAtTime(env.sea * (0.22 + Math.sin(now * 0.5) * 0.08) * (1 + env.rain * 0.4), now, k);
   AUDIO.leaves.g.gain.setTargetAtTime(env.trees * 0.012 * (0.6 + Math.sin(now * 0.7) * 0.4), now, k);
   AUDIO.cricket.gain.setTargetAtTime(env.night * 0.012 * (1 - env.sea * 0.5), now, 0.5);
   // 鸟鸣
-  AUDIO.nextBird -= dt; if (AUDIO.nextBird < 0) { AUDIO.nextBird = R(1.5, 6); if (day > 0.4 && env.trees > 0.1) chirp(now + 0.05, 0.035 * env.trees * day); if (env.sea > 0.4 && day > 0.5 && chance(0.35)) { tone(R(900, 1200), now, 0.35, 0.03 * env.sea, 'sawtooth'); } }
+  AUDIO.nextBird -= dt; if (AUDIO.nextBird < 0) { AUDIO.nextBird = R(1.5, 6); if (day > 0.4 && env.trees > 0.1 && env.rain < 0.4) chirp(now + 0.05, 0.035 * env.trees * day); if (env.sea > 0.4 && day > 0.5 && chance(0.35)) { tone(R(900, 1200), now, 0.35, 0.03 * env.sea, 'sawtooth'); } }
   // 道口铃
   const bell = env.crossing; if (bell > 0.01) { AUDIO.nextBell -= dt; if (AUDIO.nextBell < 0) { AUDIO.nextBell = 0.42; AUDIO.bellSide ^= 1; const f = AUDIO.bellSide ? 760 : 860; const o = tone(f, now, 0.28, 0.06 * bell, 'square'); tone(f * 2.76, now, 0.18, 0.02 * bell, 'sine'); } }
   // 列车

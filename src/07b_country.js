@@ -26,13 +26,29 @@ function buildCountryside() {
         const g = new THREE.CylinderGeometry(2.8, 2.8, 15, 16, 1, true, -Math.PI / 2, Math.PI); g.rotateZ(Math.PI / 2);
         WK.geo('vinyl', g, cx, y, cz + oz, 0xffffff);
         for (let i = 0; i <= 5; i++) WK.geo('rail', new THREE.TorusGeometry(2.8, 0.03, 4, 16, Math.PI), cx - 7.5 + i * 3, y, cz + oz, 0xb0b4b8, { ry: Math.PI / 2 });
-        for (let i = 0; i < 3; i++) WK.box('vcNoShadow', cx, y + 0.3, cz + oz - 1.6 + i * 1.6, 14, 0.4, 0.6, 0x4f7a3a, { noCol: true });
+        // 温室垄行：土垄 + 叶簇（不再是实心绿盒）
+        for (let i = 0; i < 3; i++) {
+          const rz = cz + oz - 1.6 + i * 1.6;
+          WK.box('dirt', cx, y + 0.18, rz, 14, 0.3, 0.55, 0x8a7250, { wuv: 0.4, noCol: true });
+          const gb = cardBucket('leaf', cx, rz);
+          for (let k = 0; k < 40; k++) {
+            const px = cx - 6.7 + k * 0.34 + R(-0.1, 0.1), pz = rz + R(-0.2, 0.2), a = R(0, TAU);
+            _cB.setHSL(R(0.24, 0.3), R(0.4, 0.55), R(0.28, 0.4));
+            addCard(gb, px, y + 0.48 + R(-0.05, 0.05), pz, Math.cos(a), R(0.15, 0.5), Math.sin(a), R(0.34, 0.5), RI(0, 3), _cB, 0.12, 0, 1, 0, 1, a + Math.PI / 2, CROP4[RI(0, 3)]);
+          }
+        }
         addCollider(cx, cz + oz, 7.5, 2.8, 0, y, y + 2.8, 'wall');
       }
       WK.box('dirt', cx, y + 0.05, cz, W, 0.1, D, 0xa89878, { wuv: 0.4, noCol: true });
       c.gh = true; continue;
     }
-    WK.box('paddyMat', cx, y + 0.07, cz, W, 0.02, D, 0xffffff, { wuv: 0.18, noCol: true });
+    WK.box('paddyMat', cx, y + 0.07, cz, W, 0.02, D, 0xaccadb, { wuv: 0.18, noCol: true });
+    // 秧苗行：网格状的新绿苗撮
+    { const pb = cardBucket('grass', cx, cz);
+      for (let rx = cx - W / 2 + 1.0; rx < cx + W / 2 - 0.6; rx += 1.1) for (let rz2 = cz - D / 2 + 0.9; rz2 < cz + D / 2 - 0.6; rz2 += 0.85) {
+        const a = R(0, TAU); _cB.setHSL(R(0.22, 0.26), R(0.5, 0.62), R(0.4, 0.55));
+        addCard(pb, rx + R(-0.12, 0.12), y + 0.3, rz2 + R(-0.1, 0.1), Math.cos(a), R(0.6, 1), Math.sin(a), R(0.26, 0.4), 0, _cB, 0.3, 0, 1, 0, 1, a + Math.PI / 2);
+      } }
     addCollider(cx, cz, W / 2, D / 2, 0, y - 1, y + 0.08, { walk: true });
   }
   FARM.cells = FARM.cells.filter(c => !c.gh);
@@ -77,7 +93,7 @@ function buildGasStation() {
   // 雨棚
   for (const [px, pz] of [[-6, 2], [6, 2], [-6, 8], [6, 8]]) { K.box('paint', px, 2.6, pz, 0.4, 5.2, 0.4, 0xf2f2f0, { solid: true }); }
   K.box('paint', 0, 5.45, 5, 18, 0.6, 11, 0xf4f4f2); K.box('paint', 0, 5.2, 5, 18.2, 0.12, 11.2, 0xe03a2e);
-  K.box('glow', 0, 5.1, 5, 14, 0.04, 8, 0xfff8ec); for (const px of [-5, 0, 5]) { const hp = K.w(px, 4.9, 5); addHalo(hp[0], hp[1], hp[2], 7, 0xf4f6ff); addLightPool(hp[0], y, hp[2], 8, 0xf0f4ff); }
+  K.box('glow', 0, 5.1, 5, 14, 0.04, 8, 0xfff8ec); for (const px of [-5, 0, 5]) { const hp = K.w(px, 4.9, 5); addHalo(hp[0], hp[1], hp[2], 7, 0xf4f6ff); addLightPool(hp[0], y, hp[2], 5.5, 0xf0f4ff); }
   const lUV = allocSign(900, 120, (g, w, h) => { g.fillStyle = '#e03a2e'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.font = `900 70px ${FONT.sans}`; g.textAlign = 'center'; g.fillText('海风石油  HAIFU OIL', w / 2, 86); });
   K.plane('sign', 0, 5.45, 10.52, 13, 0.55, 0xffffff, { uvr: lUV });
   // 加油机

@@ -80,6 +80,7 @@ function splitWheels(M, r) {
 
 /* ---------------- 载具实例 ---------------- */
 const VEHICLES = [];
+let PLATE_GEO = null, PLATE_MAT = null;
 const _hl = new THREE.SpriteMaterial({ map: TEX_HALO, color: 0xfff2d8, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
 const _tl = new THREE.SpriteMaterial({ map: TEX_HALO, color: 0xff3020, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
 function spawnVehicle(type, x, z, yaw, o = {}) {
@@ -91,6 +92,14 @@ function spawnVehicle(type, x, z, yaw, o = {}) {
   if (!T.bike && type !== 'boat') for (const s of [-1, 1]) {
     const h = new THREE.Sprite(_hl); h.scale.setScalar(1.4); h.position.set(s * M.halfW * 0.7, M.H * 0.42, M.L / 2 + 0.05); g.add(h);
     const t = new THREE.Sprite(_tl); t.scale.setScalar(0.8); t.position.set(s * M.halfW * 0.75, M.H * 0.45, -M.L / 2 - 0.05); g.add(t); lights.push(h, t);
+  }
+  // 车牌（前后各一，图集取一张）
+  if (!T.bike && type !== 'boat') {
+    if (!PLATE_MAT) { PLATE_GEO = new THREE.PlaneGeometry(0.34, 0.17); PLATE_MAT = new THREE.MeshStandardMaterial({ map: TEX.plate, roughness: 0.5, metalness: 0 }); }
+    const cell = RI(0, 7), pg = PLATE_GEO.clone(), puv = pg.attributes.uv;
+    for (let i = 0; i < puv.count; i++) puv.setXY(i, (cell + puv.getX(i)) / 8, puv.getY(i));
+    const py = Math.max(0.32, M.H * 0.3);
+    for (const e of [1, -1]) { const pm2 = new THREE.Mesh(pg, PLATE_MAT); pm2.position.set(0, py, e * (M.L / 2 + 0.02)); if (e < 0) pm2.rotation.y = Math.PI; g.add(pm2); }
   }
   scene.add(g);
   const v = { type, T, M, g, body, wheels, lights, x, z, y: groundAt(x, z, TOWN_Y + 3), yaw, v: 0, steer: 0, pitch: 0, roll: 0, ai: o.ai || null, s: o.s || 0, vmax: o.vmax || R(8, 11), parked: !o.ai, brake: 0, honked: false, driver: null };
@@ -153,6 +162,7 @@ function updateTraffic(dt, ppos) {
     { const dx = ppos.x - v.x, dz = ppos.z - v.z; const ah = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx); if (!DRIVE.v && ah > 0 && ah < 11 && lat < 1.9 && Math.abs(ppos.y - v.y) < 3) { target = Math.min(target, Math.max(0, (ah - v.M.L / 2 - 1.5) * 1.5)); if (ah < v.M.L / 2 + 2.5 && !v.honked) { v.honked = true; AUDIO.horn && AUDIO.horn(0.6); } } else if (ah > 14) v.honked = false; }
     // 道口
     for (const st of CAR_STOPS) { const C = CROSSINGS.find(k => k.id === st.cx); if (!C) continue; const dx = st.x - v.x, dz = st.z - v.z; const ah = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx); if (lat < 2 && ah > -0.5 && ah < 32 && (C.active || C.arm > 0.02)) target = Math.min(target, Math.max(0, (ah - v.M.L / 2 - 0.3) * 1.2)); }
+    if (v.busHook) target = Math.min(target, v.busHook(v, dt));
     const prevV = v.v; v.v += clamp(target - v.v, -7 * dt, 2.2 * dt); v.v = Math.max(0, v.v); v.brake = prevV - v.v > 0.02 ? 1 : 0;
     v.s = (v.s + v.v * dt) % L;
     const q = pathAt(P, v.s); v.x = q[0]; v.z = q[1];

@@ -46,10 +46,31 @@ const TEX = {
 };
 const N = (t) => t._entry && t._entry.normal;
 TEX.tactile = canvasTex(128, 128, (g, w, h) => {
-  g.fillStyle = '#e9b800'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#d9a716'; g.fillRect(0, 0, w, h);
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 0, w, 2); g.fillRect(0, 0, 2, h);
-  for (let i = 0; i < 4; i++) { g.fillStyle = '#ffd21f'; g.fillRect(i * 32 + 12, 8, 8, h - 16); g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(i * 32 + 20, 8, 2, h - 16); }
+  for (let i = 0; i < 4; i++) { g.fillStyle = '#efc53c'; g.fillRect(i * 32 + 12, 8, 8, h - 16); g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(i * 32 + 20, 8, 2, h - 16); }
 }, { repeat: true });
+/* 车牌图集：8 张小车号「星見 NN-NN」 */
+TEX.plate = canvasTex(512, 64, (g, w, h) => {
+  for (let i = 0; i < 8; i++) {
+    const x = i * 64;
+    g.fillStyle = '#f2f2ea'; g.fillRect(x + 2, 4, 60, 56);
+    g.fillStyle = '#2f7d3f'; g.fillRect(x + 2, 4, 60, 12);
+    g.fillStyle = '#1a3a1f'; g.font = '700 11px sans-serif'; g.textAlign = 'center'; g.fillText('星見', x + 32, 15);
+    g.font = '900 28px sans-serif'; g.fillStyle = '#222'; g.fillText(String(RI(10, 99)) + '-' + String(RI(10, 99)), x + 32, 48);
+    g.strokeStyle = '#4a7a4f'; g.lineWidth = 2; g.strokeRect(x + 3, 5, 58, 54);
+  }
+});
+/* 林下落叶层：枯叶碎屑图集 */
+TEX.litter = canvasTex(256, 256, (g, w, h) => {
+  g.clearRect(0, 0, w, h);
+  const cols = ['#7a5a30', '#8a6a38', '#6a4a28', '#a07840', '#5d6b35', '#8f7a45'];
+  for (let i = 0; i < 130; i++) {
+    g.fillStyle = pick(cols); const x = R(0, w), y = R(0, h), a = R(0, TAU);
+    g.save(); g.translate(x, y); g.rotate(a);
+    g.beginPath(); g.ellipse(0, 0, R(3, 9), R(1.5, 3.5), 0, 0, TAU); g.fill(); g.restore();
+  }
+});
 const pm = (map, o = {}) => { const { ns = 0.8, ...rest } = o; const m = stdMat(Object.assign({ map, normalScale: new THREE.Vector2(ns, ns) }, rest)); if (N(map)) m.normalMap = N(map); return m; };
 
 regMat('vc', stdMat({ roughness: 0.85 }));
@@ -67,15 +88,24 @@ regMat('roof', pm(TEX.roof, { roughness: 0.5, envMapIntensity: 1.1 }), { tint: 0
 regMat('metal', pm(TEX.metal, { roughness: 0.45, metalness: 0.45 }), { tint: 0.6 });
 regMat('concrete', pm(TEX.concrete, { roughness: 0.92 }), { tint: 0.35 });
 regMat('asphalt', pm(TEX.asphalt, { roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }), { cast: false, tint: 0 });
-regMat('paving', pm(TEX.paving, { roughness: 0.9 }), { cast: false, tint: 0.25 });
+// 铺砖：在材质里加格子级色调抖动，每 ~0.55m 一块砖色略异（破掉整面同砖的塑料感）
+{
+  const pm2 = pm(TEX.paving, { roughness: 0.9 });
+  pm2.onBeforeCompile = (sh) => {
+    sh.vertexShader = 'varying vec3 vWP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvWP = (modelMatrix * vec4(position, 1.0)).xyz;');
+    sh.fragmentShader = 'varying vec3 vWP;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\nvec2 bc = floor(vWP.xz / 0.55); float bh = fract(sin(dot(bc, vec2(127.1, 311.7))) * 43758.5453); diffuseColor.rgb *= mix(0.88, 1.09, bh);');
+  };
+  regMat('paving', pm2, { cast: false, tint: 0.25 });
+}
 regMat('tactile', stdMat({ map: TEX.tactile, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), { cast: false });
 regMat('gravel', pm(TEX.gravel, { roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }), { cast: false, tint: 0.2 });
 regMat('ballast', pm(TEX.ballast, { roughness: 1 }), { cast: false, tint: 0 });
 regMat('stone', pm(TEX.stone, { roughness: 0.92 }), { tint: 0.3 });
 regMat('sandMat', pm(TEX.sand, { roughness: 1 }), { cast: false, tint: 0.2 });
+regMat('ground', pm(TEX.ground, { roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), { cast: false, tint: 0.4 });
 regMat('rockMat', pm(TEX.rock, { roughness: 0.95 }), { tint: 0.3 });
-regMat('paddyMat', stdMat({ map: TEX.paddy, roughness: 0.25, envMapIntensity: 1.4 }), { cast: false, tint: 0 });
-regMat('glass', new THREE.MeshStandardMaterial({ color: lin(0xa9c4cf), roughness: 0.03, metalness: 0.1, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 1.6 }), { cast: false, receive: false });
+regMat('paddyMat', stdMat({ map: TEX.paddy, roughness: 0.15, envMapIntensity: 1.9 }), { cast: false, tint: 0 });
+regMat('glass', new THREE.MeshStandardMaterial({ color: lin(0x9db8c4), roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 0.65 }), { cast: false, receive: false });
 /* 发光体（灯泡、灯笼）：夜里亮度超过 1，交给辉光 */
 const glowMat = regMat('glow', new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xcfcfcf }), { cast: false, receive: false });
 /* 道路标线 */
@@ -88,7 +118,7 @@ const winDay = makeCanvas(1024, 1024), winNight = makeCanvas(1024, 1024);
   const gd = winDay.getContext('2d'), gn = winNight.getContext('2d');
   gn.fillStyle = '#000'; gn.fillRect(0, 0, 1024, 1024);
   for (let i = 0; i < 16; i++) {
-    const cx = (i % 4) * 256, cy = Math.floor(i / 4) * 256; const kind = i % 8; const lit = i < 12;
+    const cx = (i % 4) * 256, cy = Math.floor(i / 4) * 256; const kind = i % 8; const lit = i < 10;
     // 白天：天空反射
     const gr = gd.createLinearGradient(cx, cy, cx + 256, cy + 256);
     gr.addColorStop(0, '#3b4650'); gr.addColorStop(0.5, '#2a333b'); gr.addColorStop(1, '#1d242a');
@@ -191,6 +221,140 @@ function buildPools() {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
   POOLS.mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, fog: true });
   const m = new THREE.Mesh(g, POOLS.mat); m.renderOrder = 3; m.frustumCulled = false; scene.add(m);
+}
+/* --- 路灯光锥（夜间廉价体积光：顶点色上亮下灭 + 加色混合） --- */
+const CONES = { pos: [], mat: null };
+function addLampCone(x, y, z, gy) { CONES.pos.push([x, y, z, gy]); }
+function buildLampCones() {
+  if (!CONES.pos.length) return;
+  const pos = [], col = [], idx = []; const SEG = 10;
+  for (const [x, y, z, gy] of CONES.pos) {
+    const b = pos.length / 3;
+    for (const [yy, rr] of [[y, 0.24], [lerp(y, gy, 0.3), 1.0], [lerp(y, gy, 0.72), 2.0], [gy, 2.8]]) {
+      const a = clamp((y - yy) / Math.max(y - gy, 0.001), 0, 1), fade = 1.0 - a * 0.92;
+      for (let i = 0; i < SEG; i++) { const t = i / SEG * TAU; pos.push(x + Math.cos(t) * rr, yy, z + Math.sin(t) * rr); col.push(fade, fade, fade); }
+    }
+    for (let j = 0; j < 3; j++) for (let i = 0; i < SEG; i++) { const q = b + j * SEG + i, q2 = b + j * SEG + (i + 1) % SEG, q3 = b + (j + 1) * SEG + i, q4 = b + (j + 1) * SEG + (i + 1) % SEG; idx.push(q, q3, q2, q2, q3, q4); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+  CONES.mat = new THREE.MeshBasicMaterial({ color: 0xffd9a8, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: true });
+  const m = new THREE.Mesh(g, CONES.mat); m.renderOrder = 4; m.frustumCulled = false; scene.add(m);
+}
+/* --- 接地阴影（廉价的接触 AO，让建筑「长」在地里而不是浮在上面） ---
+   与 buildPools 同套路：所有调用先攒进 GSH.pos，建完场景后一次性铺成贴地网格。
+   顶点色通道复用为「强度」：col 里存 a，材质基色是暗绿黑，vColor 相乘即阴影深浅。 */
+const GSH = { pos: [], U: { uDir: { value: new THREE.Vector2(1, 0) }, uLen: { value: 1 } } };
+function addGroundShadow(x, z, w, d, ry = 0, a = 0.8, h = 0.7) { GSH.pos.push([x, z, w, d, ry, a, h]); }
+function buildGroundShadows() {
+  if (!GSH.pos.length) return;
+  const tex = canvasTex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,0.9)'); gr.addColorStop(0.5, 'rgba(0,0,0,0.42)'); gr.addColorStop(0.8, 'rgba(0,0,0,0.12)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); }, { data: true });
+  const pos = [], uv = [], col = [], ac = [], as2 = [], idx = []; const N = 5; // 细分成网格，逐顶点贴地
+  for (const [x, z, w, d, ry, a, hs] of GSH.pos) {
+    const b = pos.length / 3, c = Math.cos(ry), s = Math.sin(ry);
+    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+      const lx = (i / N - 0.5) * w, lz = (j / N - 0.5) * d;
+      const px = x + lx * c + lz * s, pz = z - lx * s + lz * c;
+      pos.push(px, terrainH(px, pz) + 0.05, pz); uv.push(i / N, j / N); col.push(a, a, a); ac.push(x, z); as2.push(hs);
+    }
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = b + j * (N + 1) + i; idx.push(q, q + N + 1, q + 1, q + 1, q + N + 1, q + N + 2); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('aC', new THREE.Float32BufferAttribute(ac, 2)); g.setAttribute('aS', new THREE.Float32BufferAttribute(as2, 1)); g.setIndex(idx);
+  const mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, color: 0x2a3226, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, fog: true });
+  // 方向性假影：顶点沿太阳方位剪切拉伸，uLen=1 时回到圆形（夜晚）
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, GSH.U);
+    sh.vertexShader = 'attribute vec2 aC; attribute float aS; uniform vec2 uDir; uniform float uLen;\n' +
+      sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nvec2 gshOff = transformed.xz - aC; transformed.xz += uDir * (uLen - 1.0) * (dot(gshOff, uDir) + 0.45) * aS;`);
+  };
+  const m = new THREE.Mesh(g, mat);
+  m.renderOrder = 2; m.frustumCulled = false; scene.add(m); GSH.mat = mat;
+}
+/* --- 墙面过渡贴片（潮气带/檐口阴带/窗下水痕） ---
+   贴到墙面上的竖向渐变脏贴，消除「盒子直接对接」的拼接感。
+   mode 0 = 底部脏向上渐隐（墙脚潮气）；mode 1 = 顶部脏向下渐隐（檐下阴带/水痕）。 */
+const WFADE = { list: [] }; // [x,y,z,w,h,ry,a,mode]
+function addWallFade(x, y, z, w, h, ry, a, mode) { WFADE.list.push([x, y, z, w, h, ry, a, mode]); }
+function buildWallFades() {
+  if (!WFADE.list.length) return;
+  const tex = canvasTex(256, 256, (g, w, h) => {
+    const gr = g.createLinearGradient(0, h, 0, 0); // v=0（底）最强
+    gr.addColorStop(0, 'rgba(255,255,255,0.8)'); gr.addColorStop(0.55, 'rgba(255,255,255,0.3)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    // 斑驳的水渍块，避免干净的直线边界
+    for (let i = 0; i < 90; i++) { const x = Math.random() * w, y = h - Math.random() * Math.random() * h * 0.75, r = 3 + Math.random() * 14; const gg = g.createRadialGradient(x, y, 0, x, y, r); gg.addColorStop(0, 'rgba(255,255,255,0.5)'); gg.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gg; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }
+  }, { data: true });
+  const pos = [], uv = [], col = [], idx = [];
+  for (const [x, y, z, w, h, ry, a, mode] of WFADE.list) {
+    const c = Math.cos(ry), s = Math.sin(ry), b = pos.length / 3;
+    const v0 = mode === 0 ? 0 : 1, v1 = mode === 0 ? 1 : 0;
+    pos.push(x - c * w / 2, y - h / 2, z + s * w / 2, x + c * w / 2, y - h / 2, z - s * w / 2, x + c * w / 2, y + h / 2, z - s * w / 2, x - c * w / 2, y + h / 2, z + s * w / 2);
+    uv.push(0, v0, 1, v0, 1, v1, 0, v1);
+    for (let k = 0; k < 4; k++) col.push(a, a, a);
+    idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, color: 0x3c3f38, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -7, polygonOffsetUnits: -7, fog: true }));
+  m.renderOrder = 2; m.frustumCulled = false; scene.add(m);
+}
+/* --- 路面贴花（井盖/雨水篦/裂缝/补丁）与雨后水洼 --- */
+const DCAL = { list: [] }; // [x,z,w,d,ry,u0,v0,u1,v1,a]
+function addDecal(x, z, w, d, ry, uvr, a = 1) { DCAL.list.push([x, z, w, d, ry, uvr[0], uvr[1], uvr[2], uvr[3], a]); }
+const DC = { manhole: [0, 0, 0.25, 1], grate: [0.25, 0, 0.5, 1], crack: [0.5, 0, 0.75, 1], patch: [0.75, 0, 1, 1] };
+const DCAL_TEX = canvasTex(512, 128, (g) => {
+  // A 井盖：深灰圆盖 + 亮环 + 防滑纹
+  g.save(); g.translate(64, 64);
+  g.fillStyle = 'rgba(46,48,52,0.95)'; g.beginPath(); g.arc(0, 0, 58, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(120,124,130,0.9)'; g.lineWidth = 5; g.beginPath(); g.arc(0, 0, 52, 0, TAU); g.stroke();
+  g.strokeStyle = 'rgba(90,94,100,0.7)'; g.lineWidth = 3; for (let i = -3; i <= 3; i++) { g.beginPath(); g.moveTo(i * 14, -48); g.lineTo(i * 14, 48); g.stroke(); }
+  g.restore();
+  // B 雨水篦：暗槽 + 亮栅条
+  g.fillStyle = 'rgba(30,32,36,0.9)'; g.fillRect(140, 14, 96, 100);
+  g.fillStyle = 'rgba(130,134,140,0.9)'; for (let i = 0; i < 6; i++) g.fillRect(146 + i * 15, 18, 7, 92);
+  g.strokeStyle = 'rgba(90,94,100,0.8)'; g.lineWidth = 4; g.strokeRect(140, 14, 96, 100);
+  // C 裂缝：不规则分叉暗线
+  g.strokeStyle = 'rgba(35,37,40,0.85)'; g.lineWidth = 3; g.lineCap = 'round';
+  let px = 268, py = 64; g.beginPath(); g.moveTo(px, py);
+  for (let i = 0; i < 8; i++) { px += 10 + Math.random() * 14; py += (Math.random() - 0.5) * 34; g.lineTo(px, py); }
+  g.stroke();
+  for (const [sx, sy] of [[300, 60], [330, 70]]) { g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx + 18 + Math.random() * 12, sy + (Math.random() - 0.5) * 26); g.stroke(); }
+  // D 补丁：更深的方块软边（新沥青）
+  const pg = g.createRadialGradient(448, 64, 20, 448, 64, 62); pg.addColorStop(0, 'rgba(24,26,30,0.95)'); pg.addColorStop(0.85, 'rgba(24,26,30,0.9)'); pg.addColorStop(1, 'rgba(24,26,30,0)');
+  g.fillStyle = pg; g.fillRect(384, 0, 128, 128);
+});
+function buildDecals() {
+  if (!DCAL.list.length) return;
+  const pos = [], uv = [], col = [], idx = [];
+  for (const [x, z, w, d, ry, u0, v0, u1, v1, a] of DCAL.list) {
+    const c = Math.cos(ry), s = Math.sin(ry), b = pos.length / 3;
+    for (const [lx, lz] of [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]]) {
+      const px = x + lx * w * c + lz * d * s, pz = z - lx * w * s + lz * d * c;
+      pos.push(px, terrainH(px, pz) + 0.075, pz); col.push(a, a, a);
+    }
+    uv.push(u0, v0, u1, v0, u1, v1, u0, v1);
+    idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: DCAL_TEX, vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5, fog: true }));
+  m.renderOrder = 2; m.frustumCulled = false; scene.add(m);
+}
+/* 水洼：干燥时完全隐藏，雨后 WEATHER.wet 越大越亮（低粗糙度吃环境反射） */
+const PUDDLE = { list: [], mat: null };
+function addPuddle(x, z, w, d, ry) { PUDDLE.list.push([x, z, w, d, ry]); }
+function buildPuddles() {
+  if (!PUDDLE.list.length) return;
+  const tex = canvasTex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 6, 64, 64, 62); gr.addColorStop(0, 'rgba(255,255,255,0.95)'); gr.addColorStop(0.7, 'rgba(255,255,255,0.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); }, { data: true });
+  const pos = [], uv = [], idx = [];
+  for (const [x, z, w, d, ry] of PUDDLE.list) {
+    const c = Math.cos(ry), s = Math.sin(ry), b = pos.length / 3;
+    for (const [lx, lz] of [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]]) {
+      const px = x + lx * w * c + lz * d * s, pz = z - lx * w * s + lz * d * c;
+      pos.push(px, terrainH(px, pz) + 0.085, pz); uv.push(lx + 0.5, lz + 0.5);
+    }
+    idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+  PUDDLE.mat = new THREE.MeshStandardMaterial({ map: tex, color: 0xa8bfce, roughness: 0.05, metalness: 0.05, envMapIntensity: 2.4, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5, fog: true });
+  const m = new THREE.Mesh(g, PUDDLE.mat); m.renderOrder = 2; m.frustumCulled = false; scene.add(m);
 }
 /* --- 电线 --- */
 const wirePos = [];

@@ -63,7 +63,7 @@ function streetLampPlaza(x, z) {
   const K = new Kit(x, TOWN_Y + 0.12, z, 0);
   K.cyl('paint', 0, 1.9, 0, 0.07, 3.8, 0x2f4a4a, { rt: 0.75, seg: 10 }); K.cyl('paint', 0, 0.2, 0, 0.14, 0.4, 0x2f4a4a, { seg: 10 });
   K.sph('glow', 0, 4.05, 0, 0.3, 0.32, 0.3, 0xfff2d8); K.cyl('paint', 0, 4.42, 0, 0.32, 0.1, 0x2f4a4a, { rt: 0.3, seg: 12 });
-  addHalo(x, TOWN_Y + 4.1, z, 4.5, 0xffe6b8); addLightPool(x, TOWN_Y, z, 7, 0xffdcae);
+  addHalo(x, TOWN_Y + 4.1, z, 4.5, 0xffe6b8); addLightPool(x, TOWN_Y, z, 5, 0xffdcae);
   addCollider(x, z, 0.15, 0.15, 0, TOWN_Y, TOWN_Y + 4, 'wall');
 }
 
@@ -133,7 +133,7 @@ function bankLantern(x, z) {
   K.box('wood', 0, 1.0, 0, 0.1, 2.0, 0.1, 0x5a3a20);
   K.box('wood', 0.25, 2.0, 0, 0.6, 0.06, 0.06, 0x5a3a20);
   K.cyl('glow', 0.45, 1.72, 0, 0.16, 0.42, 0xfff0d8, { seg: 12 }); K.cyl('vc', 0.45, 1.95, 0, 0.12, 0.05, 0x222222, { seg: 12 }); K.cyl('vc', 0.45, 1.49, 0, 0.12, 0.05, 0x222222, { seg: 12 });
-  const p = K.w(0.45, 1.72, 0); addHalo(p[0], p[1], p[2], 2.6, 0xffd8a8); addLightPool(p[0], y, p[2], 3.5, 0xffc890);
+  const p = K.w(0.45, 1.72, 0); addHalo(p[0], p[1], p[2], 2.6, 0xffd8a8); addLightPool(p[0], y, p[2], 2.8, 0xffc890);
 }
 function bridge(z, width) {
   const rx = riverAtZ(z); const span = 19;
@@ -164,8 +164,9 @@ function buildShrine() {
   for (const s of [-1, 1]) WK.box('stone', -40 + s * 2.55, (TOWN_Y + SHRINE.y) / 2 - 0.2, -98, 0.4, 1, 24.5, 0xbdb6a8, { rx: Math.atan2(SHRINE.y - TOWN_Y, 24), wuv: 0.5 });
   // 大鸟居（参道下）
   torii(-40, -85, TOWN_Y, 1.35, 0xd8432f);
+  crowAt(-40 + 1.5, TOWN_Y + 7.05, -85, 0.4);
   // 千本鸟居
-  for (let i = 0; i < 11; i++) { const z = -88.5 - i * 2.1; torii(-40, z, groundAt(-40, z) - 0.05, 0.62, 0xe0502f, true); }
+  for (let i = 0; i < 11; i++) { const z = -88.5 - i * 2.1; torii(-40, z, groundAt(-40, z) - 0.05, 0.62, new THREE.Color(0xe0502f).multiplyScalar(R(0.82, 1.06)).getHex(), true); }
   // 台地：砂石、石灯笼、狐狸像
   WK.box('gravel', sx, sy + 0.02, sz + 4, 44, 0.04, 40, 0xe8e1d4, { wuv: 0.3 });
   WK.box('stone', sx, sy + 0.04, sz + 6, 3.2, 0.06, 26, 0xd9d2c4, { wuv: 0.5 });
@@ -234,6 +235,13 @@ function torii(x, z, y, s, col, small) {
   K.box('vc', 0, h + 0.3 * s, 0, w + 1.9 * s, 0.18 * s, 0.5 * s, 0x2a2a2a);
   if (!small) { K.box('vc', 0, h - 0.45 * s, 0.17 * s, 0.6 * s, 0.75 * s, 0.05, 0x2a2a2a); const uv = allocSign(60, 80, (g, w2, h2) => { g.fillStyle = '#2a2a2a'; g.fillRect(0, 0, w2, h2); g.fillStyle = '#d9b45a'; g.font = `400 28px ${FONT.brush}`; g.textAlign = 'center'; g.fillText('狐', w2 / 2, 34); g.fillText('守', w2 / 2, 68); }); K.plane('sign', 0, h - 0.45 * s, 0.2 * s, 0.5 * s, 0.66 * s, 0xffffff, { uvr: uv }); }
 }
+function crowAt(x, y, z, ry) { // 停栖的乌鸦（电线、鸟居上）
+  const k = new Kit(x, y, z, ry);
+  k.sph('vcNoShadow', 0, 0.09, 0, 0.09, 0.11, 0.13, 0x1c1c22, { lo: true });
+  k.sph('vcNoShadow', 0, 0.19, 0.06, 0.06, 0.07, 0.07, 0x1c1c22, { lo: true });
+  k.box('vcNoShadow', 0, 0.19, 0.13, 0.03, 0.03, 0.07, 0xe8b040);
+  k.box('vcNoShadow', 0, 0.07, -0.15, 0.06, 0.03, 0.16, 0x1c1c22);
+}
 function stoneLantern(x, z, y) {
   const K = new Kit(x, y, z, 0);
   K.box('stone', 0, 0.15, 0, 0.8, 0.3, 0.8, 0xc9c2b4); K.cyl('stone', 0, 0.8, 0, 0.16, 1.0, 0xc9c2b4, { seg: 8 });
@@ -284,6 +292,15 @@ function buildHarbor() {
   addHalo(171, TOWN_Y + 7.0, -25.5, 6, 0xff8870); addCollider(171, -25.5, 1, 1, 0, TOWN_Y, TOWN_Y + 7, 'wall');
   // 渔船
   for (const [x, z, ry] of [[134, 22, 0], [138, 8, Math.PI], [145, 30, 0.2], [156, 4, Math.PI - 0.1], [142, 44, 0.1], [160, 26, -0.15]]) BOATS.push(fishingBoat(x, z, ry));
+  // 外海锚泊船与航道浮标
+  for (const [bx, bz, bry] of [[64, 168, 0.7], [-48, 172, 2.5], [208, 58, -0.8], [98, 185, 1.9]]) BOATS.push(fishingBoat(bx, bz, bry));
+  for (const [bx, bz] of [[156, 60], [170, 76], [190, 42], [74, 148], [-28, 152], [198, 26], [120, 152]]) {
+    const K2 = new Kit(bx, -0.15, bz, R(0, TAU));
+    K2.cyl('paint', 0, 0.5, 0, 0.55, 1.0, pick([0xd8432f, 0x2f7d5b, 0xe8c33a]), { rt: 0.72, seg: 10 });
+    K2.cyl('paint', 0, 1.12, 0, 0.4, 0.3, 0xffffff, { seg: 10 });
+    K2.cyl('vc', 0, 1.55, 0, 0.06, 0.85, 0x555555, { seg: 6 });
+    K2.sph('glow', 0, 1.95, 0, 0.13, 0.13, 0.13, 0xffd8a0, { lo: true });
+  }
   // 渔协市场棚
   const M = new Kit(116, TOWN_Y, 30, Math.PI / 2);
   for (const px of [-7, -2.3, 2.3, 7]) for (const pz of [-3, 3]) M.cyl('paint', px, 2.3, pz, 0.12, 4.6, 0x8a9aa8, { seg: 8 });
@@ -299,6 +316,17 @@ function buildHarbor() {
   for (let i = 0; i < 10; i++) WK.sph('paint', R(132, 175), 0.1, R(-15, 50), 0.35, 0.35, 0.35, pick([0xf39a3d, 0xd9483b, 0xffffff]));
   for (let i = 0; i < 8; i++) WK.box('wood', R(118, 125), TOWN_Y + 0.3, R(-20, 50), 0.9, 0.6, 0.6, 0xa07850, { ry: R(0, 1), solid: true });
   for (let i = 0; i < 3; i++) WK.sph('vc', R(118, 124), TOWN_Y + 0.2, R(0, 40), 1.2, 0.3, 0.9, 0x3d6b5a, { lo: true });
+  // 堆场作业面：集装箱垛、蟹笼、缆绳盘、托盘——码头不是空场
+  { const CS = new Kit(124, TOWN_Y, 44, 0.06);
+    for (const [cx, cz, lv, c] of [[0, 0, 0, 0x3a6ea8], [0, 0, 1, 0xb8443a], [6.4, 0.3, 0, 0x3f7d5a], [3.2, 0.15, 1, 0x8a9096]]) CS.box('vc', cx, 1.3 + lv * 2.6, cz, 6, 2.6, 2.4, c);
+    addCollider(124, 44, 5, 2, 0.05, TOWN_Y, TOWN_Y + 5.2, 'wall'); }
+  for (let i = 0; i < 6; i++) { const px = 120 + (i % 3) * 1.5, pz = -16 + Math.floor(i / 3) * 1.5;
+    WK.box('wood', px, TOWN_Y + 0.45, pz, 1.3, 0.9, 1.3, 0x4a3c2a, { wuv: 1.2 });
+    WK.box('vcNoShadow', px, TOWN_Y + 0.45, pz, 1.34, 0.1, 1.34, 0x2a2018); }
+  for (const [rx, rz] of [[126, 20], [125, 22.2], [109, 46]]) { WK.geo('wood', new THREE.TorusGeometry(0.7, 0.28, 8, 18), rx, TOWN_Y + 0.28, rz, 0x7a6a4a, { rx: Math.PI / 2 }); }
+  for (const [px, pz] of [[112, 52], [113.2, 52], [112.6, 53.4]]) { WK.box('wood', px, TOWN_Y + 0.12, pz, 1.1, 0.12, 1.3, 0xb0956a); WK.box('wood', px, TOWN_Y + 0.3, pz, 1.1, 0.12, 1.3, 0xa08858); }
+  // 码头面轮胎痕与压痕（深色长条贴片，两处转弯位）
+  for (const [tx, tz, tl, ta] of [[115, 8, 14, 0.15], [113, 36, 10, -0.2]]) WK.plane('vcNoShadow', tx, TOWN_Y + 0.045, tz, 0.9, tl, 0x3c3a38, { rx: -Math.PI / 2, ry: ta });
   addPlace('星见港', 122, 15, -Math.PI / 2, 'harbor');
 }
 const HARBOR = {};
@@ -309,6 +337,10 @@ function warehouse(x, z, col, label) {
   K.box('vc', 0, 2.5, 0.05, 6, 5, 0.1, 0x55606a);
   const uv = allocSign(400, 70, (g, W, H) => { g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, W, H); g.fillStyle = '#26375e'; g.font = `400 40px ${FONT.wei}`; g.textAlign = 'center'; g.fillText(label, W / 2, 50); });
   K.plane('sign', 0, 5.8, 0.06, 5, 0.9, 0xffffff, { uvr: uv });
+  // 背立面（朝街的一面）：人员门/百叶/雨水管，免得整面光板
+  for (const lx of [-6.5, 5.5]) { K.box('vc', lx, 1.35, -d - 0.04, 1.5, 2.7, 0.08, 0x4a545e); K.box('paint', lx, 2.9, -d - 0.05, 1.9, 0.28, 0.1, 0x8a959e); }
+  for (const lx of [-2, 8]) K.box('vc', lx, 5.2, -d - 0.05, 1.3, 1.3, 0.1, 0x39424c);
+  for (const lx of [-8.9, 8.9]) K.cyl('metal', lx, h / 2, -d - 0.14, 0.07, h, 0x9aa4ac, { seg: 6 });
 }
 function fishingBoat(x, z, ry) {
   if (MODELS.boat) { const M = MODELS.boat; if (!M.toon) M.toon = animeToon(M.mat, false); const g = new THREE.Mesh(M.geo, M.toon); addOutline(g, 0.02); g.castShadow = true; g.receiveShadow = true; g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g); return { g, x, z, ry, ph: R(0, TAU), sink: 0.75 }; }
@@ -445,6 +477,15 @@ function buildBeach() {
 const BEACH = {};
 
 /* ---------------- 民居区 ---------------- */
+function resLamp(x, z, ry) {
+  const k = new Kit(x, SW_Y, z, ry);
+  k.cyl('paint', 0, 2.5, 0, 0.06, 5.0, 0x4a5454, { rt: 0.7, seg: 8 });
+  k.cyl('paint', 0, 0.22, 0, 0.11, 0.44, 0x4a5454, { seg: 8 });
+  k.rod('paint', [0, 4.7, 0], [-0.6, 5.0, 0], 0.03, 0x4a5454);
+  k.cyl('glow', -0.62, 4.82, 0, 0.15, 0.3, 0xfff1d0, { rt: 1.2, seg: 10 });
+  const p = k.w(-0.62, 4.8, 0); addHalo(p[0], p[1], p[2], 3.4, 0xffe2b0); addLightPool(p[0], SW_Y, p[2], 3.6, 0xffd8a8); addLampCone(p[0], p[1] - 0.05, p[2], SW_Y + 0.05);
+  addCollider(x, z, 0.1, 0.1, 0, SW_Y, SW_Y + 4.5, 'wall');
+}
 function buildResidential() {
   // 主街西侧（学校以南）
   const westLots = [[-46, -8], [-34, -8], [-46, 8], [-34, 8], [-46, 24], [-34, 24]];
@@ -457,4 +498,6 @@ function buildResidential() {
   far.forEach(([x, z, ry], i) => buildHouse(x, z, ry, { w: 9, d: 8, yard: 2.6, tree: i % 2 ? 'sakura' : 'green' }));
   // 河西的小路
   WK.box('paving', -96, TOWN_Y + 0.03, 10, 4, 0.06, 110, 0xe5dccd, { wuv: 0.45 });
+  // 住宅巷稀疏路灯（主街商店街以外夜里不再全黑）
+  for (const [lx, lz, lry] of [[26.5, -36, 0], [21.5, -8, Math.PI], [26.5, 16, 0], [21.5, 30, Math.PI], [-26.5, -6, Math.PI], [-21.5, 12, 0], [-26.5, 28, Math.PI]]) resLamp(lx, lz, lry);
 }

@@ -94,6 +94,19 @@ function buildRoadMeshes() {
     ribbon(road, hw + 1.4, hw, 0.0, 'gravel', 0xc8c2b6, { wuv: 0.4, only: grd }); ribbon(road, -hw, -hw - 1.4, 0.0, 'gravel', 0xc8c2b6, { wuv: 0.4, only: grd });
     ribbon(road, hw - 0.2, hw - 0.35, 0.06, 'marking', 0xf2f2ee); ribbon(road, -hw + 0.35, -hw + 0.2, 0.06, 'marking', 0xf2f2ee);
     ribbon(road, 0.08, -0.08, 0.06, 'marking', 0xf2f2ee, { dash: [3, 3] });
+    // 轮胎磨黑的双带：车道中央偏亮、轮迹偏暗（比贴花便宜）
+    for (const s of [-1, 1]) ribbon(road, s * hw * 0.66, s * hw * 0.34, 0.055, 'marking', 0x4a4e52);
+    // 病害贴花与水洼：井盖 ~40m、雨水篦 ~55m、裂缝/补丁随机、水洼待雨
+    let lastMH = -20, lastDR = -30, lastCK = 0, lastPT = 0, lastPD = -5;
+    for (let i = 4; i < road.pts.length - 4; i++) {
+      const p = road.pts[i]; if (!(p[6] === 'grd' || p[6] == null)) continue;
+      const s = p[5], lx = p[4], lz = -p[3], ry = Math.atan2(-p[4], p[3]);
+      if (s - lastMH > 40) { lastMH = s; const o = (R() < 0.5 ? -1 : 1) * hw * 0.45; addDecal(p[0] + lx * o, p[2] + lz * o, 0.9, 0.9, ry, DC.manhole, 0.9); }
+      if (s - lastDR > 55) { lastDR = s; const o = (R() < 0.5 ? -1 : 1) * (hw - 0.55); addDecal(p[0] + lx * o, p[2] + lz * o, 1.5, 0.55, ry, DC.grate, 0.85); }
+      if (s - lastCK > 14 + R(0, 14)) { lastCK = s; const o = R(-hw * 0.5, hw * 0.5); addDecal(p[0] + lx * o, p[2] + lz * o, R(2, 5), R(1, 2.5), ry + R(-0.4, 0.4), DC.crack, R(0.4, 0.7)); }
+      if (s - lastPT > 80 + R(0, 60)) { lastPT = s; const o = R(-1, 1); addDecal(p[0] + lx * o, p[2] + lz * o, R(3, 5), R(1.6, 3), ry, DC.patch, 0.85); }
+      if (s - lastPD > 22 + R(0, 16) && chance(0.5)) { lastPD = s; const o = R(-hw * 0.55, hw * 0.55); addPuddle(p[0] + lx * o, p[2] + lz * o, R(1, 2.6), R(0.6, 1.4), ry); }
+    }
     // 护栏、路灯、电线杆、视线诱导标
     const P = road.pts; let lastLamp = -99, lastPole = -99, poles = []; const needRail = [new Uint8Array(P.length), new Uint8Array(P.length)];
     for (let i = 4; i < P.length - 4; i++) {
@@ -102,15 +115,17 @@ function buildRoadMeshes() {
       if (!grd(p)) continue;
       const dl = terrainNatural(p[0] + lx * (hw + 5), p[2] + lz * (hw + 5)) - p[1], dr = terrainNatural(p[0] - lx * (hw + 5), p[2] - lz * (hw + 5)) - p[1];
       const seaSide = islandC(p[0] + lx * 30, p[2] + lz * 30) < islandC(p[0] - lx * 30, p[2] - lz * 30) ? 1 : -1;
-      // 护栏：低的一侧或靠海一侧
-      for (const side of [1, -1]) { const drop = side > 0 ? dl : dr; if (drop < -1.0 || side === seaSide) needRail[side > 0 ? 0 : 1][i] = 1; }
+      // 护栏：有落差的一侧，或靠海且有明显落差的一侧（平直海侧留作滩涂/便道开口，不挡路）
+      for (const side of [1, -1]) { const drop = side > 0 ? dl : dr; if (drop < -1.0 || (side === seaSide && drop < -0.55)) needRail[side > 0 ? 0 : 1][i] = 1; }
+      // 铁路道口铺面开口处不设护栏（梁端不横穿道口）
+      if (RAIL.cross && Math.hypot(p[0] - RAIL.cross.x, p[2] - RAIL.cross.z) < 14) { needRail[0][i] = needRail[1][i] = 0; }
       if (s - lastLamp >= 42) {
         lastLamp = s; const side = -seaSide; const ox = p[0] + lx * side * (hw + 1.2), oz = p[2] + lz * side * (hw + 1.2);
         const K = new Kit(ox, p[1], oz, Math.atan2(lx * side, lz * side));
         K.cyl('paint', 0, 4.2, 0, 0.09, 8.4, 0x8a9096, { rt: 0.6, seg: 10 });
         K.rod('paint', [0, 8.2, 0], [0, 8.5, -1.8], 0.05, 0x8a9096);
         K.box('paint', 0, 8.45, -2.0, 0.35, 0.12, 0.7, 0x6a7076); K.box('glow', 0, 8.38, -2.0, 0.26, 0.03, 0.55, 0xfff1d6);
-        const hp = K.w(0, 8.2, -2.0); addHalo(hp[0], hp[1], hp[2], 6, 0xffe2b8); ROAD_LIGHTS.push(hp); addLightPool(hp[0], p[1], hp[2], 9, 0xffd29a);
+        const hp = K.w(0, 8.2, -2.0); addHalo(hp[0], hp[1], hp[2], 6, 0xffe2b8); ROAD_LIGHTS.push(hp); addLightPool(hp[0], p[1], hp[2], 6.5, 0xffd29a); addLampCone(hp[0], hp[1] - 0.1, hp[2], p[1] + 0.05);
         addCollider(ox, oz, 0.15, 0.15, 0, p[1], p[1] + 8, 'wall');
       }
       if (s - lastPole >= 36) {
@@ -118,6 +133,10 @@ function buildRoadMeshes() {
         const gy = terrainH(ox, oz);
         WK.cyl('concrete', ox, gy + 5, oz, 0.16, 10, 0xc9c9c4, { rt: 0.7, seg: 8 });
         WK.box('vc', ox, gy + 9.1, oz, 1.4, 0.1, 0.1, 0x707478, { ry: Math.atan2(p[3], p[4]) });
+        WK.cyl('vc', ox, gy + 8.55, oz, 0.175, 0.55, 0xe8e6de, { seg: 8 }); // 白环带
+        if (chance(0.4)) WK.box('vc', ox, gy + 7.2, oz, 0.55, 0.85, 0.5, 0x8a8f94, { ry: R(0, TAU) }); // 变压器
+        if (chance(0.75)) WK.box('vcNoShadow', ox - lx * side * 0.15, gy + 2.6, oz - lz * side * 0.15, 0.3, 0.5, 0.02, 0xf2f2ee, { ry: Math.atan2(p[3], p[4]) }); // 住号牌
+        if (chance(0.2)) { const pry = Math.atan2(p[3], p[4]); crowAt(ox + Math.cos(pry) * 0.6, gy + 9.2, oz - Math.sin(pry) * 0.6, R(0, TAU)); } // 横担上的乌鸦
         poles.push([ox, gy + 9.15, oz]);
         addCollider(ox, oz, 0.2, 0.2, 0, gy, gy + 10, 'wall');
       }

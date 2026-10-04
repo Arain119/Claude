@@ -75,7 +75,7 @@ function buildGrass() {
   const field = new THREE.DataTexture(G.data, G.nx, G.nz, THREE.RGBAFormat, THREE.FloatType);
   field.minFilter = field.magFilter = THREE.NearestFilter; field.generateMipmaps = false; field.needsUpdate = true;
   const cover = renderGrassCover(Q.grass >= 1 ? 2048 : 1024);
-  const S = GRASS.size = Q.grass >= 1 ? 56 : 42, n = Math.round((Q.grass >= 1 ? 190000 : 80000));
+  const S = GRASS.size = Q.grass >= 1 ? 72 : 54, n = Math.round((Q.grass >= 1 ? 300000 : 130000));
   // 草叶模板：两节 + 尖（5 顶点 3 三角形）
   const TV = [[-1, 0], [1, 0], [-0.75, 0.45], [0.75, 0.45], [0, 1]], TI = [0, 1, 2, 2, 1, 3, 2, 3, 4];
   const pos = new Float32Array(n * 15), bl = new Float32Array(n * 20), idx = new Uint32Array(n * 9);
@@ -91,13 +91,14 @@ function buildGrass() {
   const U = GRASS.U = {
     gCam: { value: new THREE.Vector2() }, gSize: { value: S }, gField: { value: field }, gFieldBox: { value: new THREE.Vector4(G.x0, G.z0, G.dx, G.dz) }, gFieldN: { value: new THREE.Vector2(G.nx, G.nz) },
     gCover: { value: cover }, gCoverBox: { value: new THREE.Vector4(WORLD.x0, WORLD.z0, WORLD.x1 - WORLD.x0, WORLD.z1 - WORLD.z0) },
-    gH: { value: 0.36 }, gW: { value: 0.028 }, uTime: WIND.uTime, uWind: WIND.uWind, gTex: TERRAIN_U.tGrass
+    gH: { value: 0.5 }, gW: { value: 0.045 }, uTime: WIND.uTime, uWind: WIND.uWind, gTex: TERRAIN_U.tGrass,
+    gPlayer: { value: new THREE.Vector3(1e6, 0, 1e6) }, gNPC: { value: new THREE.Vector3(1e6, 0, 1e6) }
   };
   const m = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = `attribute vec4 aBlade;
-      uniform vec2 gCam; uniform float gSize, gH, gW, uTime, uWind; uniform sampler2D gField, gCover; uniform vec4 gFieldBox, gCoverBox; uniform vec2 gFieldN;
+      uniform vec2 gCam; uniform float gSize, gH, gW, uTime, uWind; uniform sampler2D gField, gCover; uniform vec4 gFieldBox, gCoverBox; uniform vec2 gFieldN; uniform vec3 gPlayer, gNPC;
       varying float vGT, vGust, vGRand, vGMacro, vFlower; varying vec2 vGXZ;
       vec4 gTexel(vec2 i){ return texture2D(gField, (clamp(i, vec2(0.0), gFieldN - 1.0) + 0.5) / gFieldN); }
       vec4 fieldAt(vec2 p){ vec2 u = (p - gFieldBox.xy) / gFieldBox.zw; vec2 i = floor(u), f = u - i;
@@ -113,8 +114,10 @@ function buildGrass() {
         float covered = cv.g > 0.5 && cv.r > gf.x - 0.5 ? 1.0 : 0.0;
         float gd = length(gwp - gCam);
         float macro = gNoise(gwp * 0.07) * 0.7 + gNoise(gwp * 0.31) * 0.3;
-        float dens = smoothstep(0.4, 0.8, gf.y) * (1.0 - covered) * (1.0 - smoothstep(gSize * 0.3, gSize * 0.5, gd));
-        float keep = step(aBlade.z, dens * mix(0.45, 1.0, macro));
+        float dens = smoothstep(0.4, 0.8, gf.y) * (1.0 - covered) * (1.0 - smoothstep(gSize * 0.2, gSize * 0.5, gd));
+        // 草丛成簇：再加一层中频噪声，让密度一丛一丛而不是均匀撒点
+        float clump = 0.45 + 0.8 * gNoise(gwp * 0.55);
+        float keep = step(aBlade.z, dens * mix(0.45, 1.0, macro) * clump);
         float meadow = smoothstep(0.45, 0.75, gNoise(gwp * 0.018 + 7.0));
         float hgt = gH * mix(0.55, 1.35, aBlade.w) * mix(0.65, 1.3, macro) * mix(1.0, 1.6, meadow * smoothstep(0.75, 1.0, gf.w)) * gf.w * keep;
         vFlower = step(0.985, fract(aBlade.w * 91.7)) * step(0.3, macro) * step(0.5, gf.w);
@@ -127,17 +130,28 @@ function buildGrass() {
         float wn = gNoise(gwp * 0.045 - vec2(uTime * 0.35, uTime * 0.22));
         float gust = clamp(wave * 0.55 + wn * 0.75 - 0.3, 0.0, 1.0) * uWind;
         vec2 wdir = vec2(0.85, 0.53);
+        vec2 bld = vec2(cos(ang * 3.1), sin(ang * 3.1));
         float flutter = sin(uTime * 4.3 + aBlade.z * 40.0) * 0.06;
-        vec2 lean = (wdir * (0.12 + gust * 0.8) + vec2(cos(ang * 1.7), sin(ang * 1.7)) * 0.2 + flutter) * t * t * hgt;
+        vec2 lean = (wdir * (0.05 + gust * 0.8) + bld * (0.13 + aBlade.z * 0.12) + vec2(cos(ang * 1.7), sin(ang * 1.7)) * 0.2 + flutter) * t * t * hgt;
         vec3 transformed = vec3(gwp.x, gf.x - 0.03, gwp.y) + sideV * position.x * w * mix(1.0 - t * 0.9, 1.0 + t * 2.2, vFlower) + vec3(lean.x, t * hgt * (1.0 - 0.3 * gust * t), lean.y);
+        // 踩倒：玩家与最近 NPC 脚下的草叶向外压倒
+        for (int gi = 0; gi < 2; gi++) {
+          vec3 gp = gi == 0 ? gPlayer : gNPC;
+          vec2 away = gwp - gp.xz; float pd = length(away);
+          float press = (1.0 - smoothstep(0.1, 0.75, pd)) * step(abs(gp.y - gf.x), 2.5);
+          transformed.xz += normalize(away + vec2(0.001)) * press * 0.3 * t * t;
+          transformed.y -= press * hgt * 0.55 * t * t;
+        }
         vGT = t; vGust = gust; vGRand = aBlade.w; vGMacro = macro; vGXZ = gwp;`);
     sh.fragmentShader = `uniform sampler2D gTex; varying float vGT, vGust, vGRand, vGMacro, vFlower; varying vec2 vGXZ;
       ` + sh.fragmentShader.replace('#include <color_fragment>', `
         // 根部取地面草色，向上提亮并偏黄绿；阵风经过的草叶翻出亮面
         vec3 gb = pow(mix(texture2D(gTex, vGXZ / 4.5).rgb, texture2D(gTex, vGXZ / 13.0).rgb, 0.35), vec3(2.2));
-        vec3 gc = gb * mix(0.38, 1.28, smoothstep(0.0, 0.9, vGT)) * mix(0.82, 1.15, vGRand) * mix(0.85, 1.12, vGMacro);
-        gc = mix(gc, gc * vec3(1.22, 1.12, 0.62), vGT * vGT * 0.55);
-        gc = mix(gc, gc * vec3(1.3, 1.25, 0.9), vGust * vGT * 0.7);
+        vec3 gc = gb * mix(0.42, 1.18, smoothstep(0.0, 0.9, vGT)) * mix(0.82, 1.15, vGRand) * mix(0.85, 1.12, vGMacro);
+        // 每根草的色相微抖（青黄↔草绿↔偏褐），消除同色的塑料感
+        gc *= mix(vec3(0.86, 1.0, 0.78), vec3(1.04, 0.93, 0.8), fract(vGRand * 6.7));
+        gc = mix(gc, gc * vec3(1.16, 1.08, 0.68), vGT * vGT * 0.4);
+        gc = mix(gc, gc * vec3(1.22, 1.16, 0.9), vGust * vGT * 0.6);
         // 零星野花：白、黄、淡紫
         vec3 fc = vGRand < 0.33 ? vec3(0.95, 0.95, 0.9) : vGRand < 0.66 ? vec3(1.0, 0.82, 0.2) : vec3(0.75, 0.6, 0.95);
         gc = mix(gc, fc, vFlower * smoothstep(0.5, 0.7, vGT));
@@ -151,5 +165,8 @@ function updateGrass() {
   if (!GRASS.mesh) return;
   camera.getWorldDirection(_gFwd); const k = Math.hypot(_gFwd.x, _gFwd.z) || 1; const a = GRASS.size * 0.22;
   GRASS.U.gCam.value.set(camera.position.x + _gFwd.x / k * a, camera.position.z + _gFwd.z / k * a);
+  if (typeof PLAYER !== 'undefined' && PLAYER.pos) GRASS.U.gPlayer.value.copy(PLAYER.pos); else GRASS.U.gPlayer.value.set(1e6, 0, 1e6);
+  let np = null, nd = 1e9; for (const n of NPCS) { if (!n.g || !n.g.visible) continue; const d = (n.pos.x - PLAYER.pos.x) ** 2 + (n.pos.z - PLAYER.pos.z) ** 2; if (d < nd) { nd = d; np = n; } }
+  if (np && nd < 900) GRASS.U.gNPC.value.copy(np.pos); else GRASS.U.gNPC.value.set(1e6, 0, 1e6);
   GRASS.mesh.visible = camera.position.y - groundAt(camera.position.x, camera.position.z) < 60;
 }

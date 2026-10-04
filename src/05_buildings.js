@@ -21,15 +21,46 @@ function buildHouse(x, z, ry, o = {}) {
   let y = -1e9; for (const [a, b] of [[-w / 2, 0], [w / 2, 0], [-w / 2, -d], [w / 2, -d], [0, -d / 2]]) { const p = K0.w(a, 0, b); y = Math.max(y, terrainH(p[0], p[2])); }
   const K = new Kit(x, y, z, ry);
   const wallMat = o.wall || pick(['siding', 'plaster', 'siding', 'tile']);
-  const wc = new THREE.Color(o.wc || pick([0xf2ede2, 0xe6ddd0, 0xdfe6e8, 0xf0e6dc, 0xe9eedf, 0xf6efe8, 0xd8d0c4]));
+  // 外墙色系：白/米为主，混入蓝灰、苔痕旧宅与深色木造（破掉全镇同款）
+  const wc = new THREE.Color(o.wc || pick([0xf2ede2, 0xe6ddd0, 0xdfe6e8, 0xf0e6dc, 0xe9eedf, 0xf6efe8, 0xd8d0c4, 0x9aa8b0, 0xb8b0a0, 0xa8a294, 0x8a9096, 0x6a5a48, 0x5a4a3a, 0x4a3c30]));
+  if (!o.wc && chance(0.25)) wc.multiplyScalar(R(0.82, 0.94)); // 老化褪色的墙色更沉一档
   const fam = o.fam || pick(FAMILY);
-  K.box('concrete', 0, -0.6, -d / 2, w + 0.2, 1.5, d + 0.2, 0xb8b4ac, { wuv: 0.5 });
+  K.box('concrete', 0, -1.15, -d / 2, w + 0.3, 2.7, d + 0.3, 0xaca89e, { wuv: 0.5 });
   K.box(wallMat, 0, F, -d / 2, w, F * 2, d, wc, { solid: true, wuv: 0.45 });
   K.box('vc', 0, F + 0.02, -d / 2, w + 0.06, 0.12, d + 0.06, wc.clone().multiplyScalar(0.85));
-  const roofCol = o.roof || pick([0x4a5568, 0x5a4a44, 0x3f5a5a, 0x6b4f45, 0x2f3a4a, 0x7a3b33, 0x556b5a]);
-  if (chance(0.7)) gableRoof(K, 0, F * 2, -d / 2, w, d, R(1.6, 2.2), roofCol, 0, 0.5);
+  const roofCol = o.roof || pick([0x4a5568, 0x5a4a44, 0x3f5a5a, 0x6b4f45, 0x2f3a4a, 0x7a3b33, 0x556b5a, 0x8a9299, 0x6a4a38, 0x4a4a52, 0x5f6e7a]);
+  const rh = R(1.6, 2.2);
+  const gable = chance(0.7);
+  if (gable) gableRoof(K, 0, F * 2, -d / 2, w, d, rh, roofCol, 0, 0.5);
   else { K.geo('roof', PRISM, 0, F * 2, -d / 2, roofCol, { sx: w + 1, sy: 1.6, sz: d + 1, wuv: 1 }); }
+  // 前坡太阳能板（约三成斜顶房）
+  if (gable && chance(0.32)) { const sl = Math.atan2(rh, d / 2); K.box('vc', R(-w / 6, w / 6), F * 2 + rh * 0.52, -d / 4, R(2.0, 2.8), 0.07, R(1.3, 1.6), 0x1c2f52, { rx: sl }); }
+  // 烟囱（少数人家有炊烟，生活感）
+  if (chance(0.2) && SMOKE.list.length < 8) {
+    const chx = R(-w / 4, w / 4);
+    K.box('vc', chx, F * 2 + rh * 0.6 + 0.5, -d * 0.72, 0.42, 1.0, 0.42, 0x8a8078);
+    const sp2 = K.w(chx, F * 2 + rh * 0.6 + 1.05, -d * 0.72); smokeStack(sp2[0], sp2[1], sp2[2], R(0.8, 1.15));
+  }
+  // 山墙封檐板：两个山墙面的斜边包一条板，遮掉墙-屋顶的裸几何边
+  {
+    const slope = Math.atan2(rh, d / 2), rl = Math.hypot(d / 2, rh) + 0.5, bc = new THREE.Color(roofCol).multiplyScalar(0.72);
+    for (const sx of [-1, 1]) {
+      K.box('roof', sx * (w / 2 + 0.03), F * 2 + rh / 2 + 0.04, -d / 4, 0.1, 0.22, rl, bc, { rx: slope });
+      K.box('roof', sx * (w / 2 + 0.03), F * 2 + rh / 2 + 0.04, -d * 3 / 4, 0.1, 0.22, rl, bc, { rx: -slope });
+    }
+    // 檐沟 + 一角下水管（70% 的宅子有）
+    if (chance(0.7)) {
+      const gc = 0x9aa2a8;
+      K.box('metal', 0, F * 2 - 0.04, 0.42, w + 0.35, 0.09, 0.13, gc);
+      const gx = (chance(0.5) ? 1 : -1) * (w / 2 - 0.12);
+      K.box('metal', gx, F, 0.42, 0.1, F * 2 - 0.4, 0.1, gc);
+      K.box('metal', gx, F * 2 - 0.14, 0.37, 0.1, 0.08, 0.18, gc);
+    }
+  }
   antenna(K, R(-w / 4, w / 4), F * 2 + 1.4, -d / 2, R(0, 1));
+  // 墙角包边：四个转角各一条浅于墙色的立板，破掉盒子的硬转角
+  const trim = wc.clone().multiplyScalar(1.12);
+  for (const cx of [-1, 1]) for (const cz of [0, -d]) K.box('vc', cx * (w / 2 + 0.02), F, cz, 0.14, F * 2, 0.14, trim);
   // 门与雨棚
   const dx = o.doorX != null ? o.doorX : (chance(0.5) ? -w / 4 : w / 4);
   K.box('wood', dx, 1.05, 0.03, 0.95, 2.1, 0.08, pick([0x6b4a35, 0x8a6a4a, 0x3d4a55, 0xb08560]));
@@ -40,12 +71,12 @@ function buildHouse(x, z, ry, o = {}) {
   // 窗
   const nw = Math.max(1, Math.floor(w / 2.6));
   for (let f = 0; f < 2; f++) for (let i = 0; i < nw; i++) {
-    const wx = -w / 2 + (i + 0.5) * w / nw; if (f === 0 && Math.abs(wx - dx) < 1.2) continue;
-    windowAt(K, wx, f * F + 1.5, 0, 1.3, 1.2);
+    const wx = -w / 2 + (i + 0.5) * w / nw + R(-0.25, 0.25); if (f === 0 && Math.abs(wx - dx) < 1.2) continue;
+    windowAt(K, wx, f * F + 1.5 + R(-0.1, 0.1), 0, R(1.05, 1.45), R(1.05, 1.3));
     if (f === 1 && chance(0.3)) acUnit(K, wx + 0.4, F + 0.55, 0.2);
   }
-  for (let f = 0; f < 2; f++) { windowAt(K, -w / 2 - 0.0, f * F + 1.5, -d / 2, 1.0, 1.0, 0xe6e3dc, { ry: -Math.PI / 2 }); windowAt(K, w / 2, f * F + 1.5, -d / 2 + R(-1, 1), 1.0, 1.0, 0xe6e3dc, { ry: Math.PI / 2 }); }
-  for (let i = 0; i < nw; i++) windowAt(K, -w / 2 + (i + 0.5) * w / nw, F + 1.5, -d, 1.2, 1.1, 0xe6e3dc, { ry: Math.PI });
+  for (let f = 0; f < 2; f++) { windowAt(K, -w / 2 - 0.0, f * F + 1.5, -d / 2 + R(-0.8, 0.8), 1.0, 1.0, 0xe6e3dc, { ry: -Math.PI / 2 }); windowAt(K, w / 2, f * F + 1.5, -d / 2 + R(-1, 1), 1.0, 1.0, 0xe6e3dc, { ry: Math.PI / 2 }); }
+  for (let i = 0; i < nw; i++) windowAt(K, -w / 2 + (i + 0.5) * w / nw + R(-0.3, 0.3), F + 1.5 + R(-0.08, 0.08), -d, R(1.0, 1.4), R(1.0, 1.2), 0xe6e3dc, { ry: Math.PI });
   // 二楼阳台
   if (o.balcony !== false && chance(0.6)) { balcony(K, -dx * 0.6, F + 0.05, 0, Math.min(3.4, w - 2.5)); if (chance(0.75)) laundry(K, -dx * 0.6, F + 1.95, 0.5, Math.min(3.0, w - 2.8)); }
   // 院墙与绿篱
@@ -53,10 +84,12 @@ function buildHouse(x, z, ry, o = {}) {
   if (yard > 0) {
     const fz = yard; const gw = 1.6;
     const wallCol = pick([0xcfc8bc, 0xd8d2c8, 0xbdb6aa]);
-    const seg = (x0, x1, zz) => { if (x1 - x0 > 0.1) K.box('concrete', (x0 + x1) / 2, 0.55, zz, x1 - x0, 1.1, 0.15, wallCol, { solid: true, wuv: 0.5 }); };
+    const capCol = 0x8f887c;
+    const seg = (x0, x1, zz) => { if (x1 - x0 > 0.1) { K.box('concrete', (x0 + x1) / 2, 0.55, zz, x1 - x0, 1.1, 0.15, wallCol, { solid: true, wuv: 0.5 }); K.box('concrete', (x0 + x1) / 2, 1.16, zz, x1 - x0 + 0.04, 0.12, 0.24, capCol, { wuv: 0.5 }); } };
     seg(-w / 2 - 0.6, dx - gw / 2, fz); seg(dx + gw / 2, w / 2 + 0.6, fz);
-    for (const s of [-1, 1]) K.box('concrete', s * (w / 2 + 0.6), 0.55, (fz - d - 0.6) / 2, 0.15, 1.1, fz + d + 0.6, wallCol, { solid: true, wuv: 0.5 });
+    for (const s of [-1, 1]) { K.box('concrete', s * (w / 2 + 0.6), 0.55, (fz - d - 0.6) / 2, 0.15, 1.1, fz + d + 0.6, wallCol, { solid: true, wuv: 0.5 }); K.box('concrete', s * (w / 2 + 0.6), 1.16, (fz - d - 0.6) / 2, 0.24, 0.12, fz + d + 0.6, capCol, { wuv: 0.5 }); }
     K.box('concrete', 0, 0.55, -d - 0.6, w + 1.2, 1.1, 0.15, wallCol, { solid: true, wuv: 0.5 });
+    K.box('concrete', 0, 1.16, -d - 0.6, w + 1.24, 0.12, 0.24, capCol, { wuv: 0.5 });
     for (const s of [-1, 1]) K.box('concrete', dx + s * gw / 2, 0.7, fz, 0.3, 1.4, 0.3, 0xb8b0a4);
     K.box('paving', dx, 0.03, fz / 2 + 0.6, 1.4, 0.06, fz - 0.9, 0xe0d8cc, { wuv: 0.5 });
     houseMailbox(K, dx + gw / 2 + 0.35, fz + 0.15, fam);
@@ -69,13 +102,20 @@ function buildHouse(x, z, ry, o = {}) {
   }
   const glowP = K.w(dx, 2.2, 0.6); addHalo(glowP[0], glowP[1], glowP[2], 1.5, 0xffe2b0);
   K.box('glow', dx, 2.25, 0.25, 0.25, 0.12, 0.1, 0xfff0cf);
+  // 接地阴影：房子 + 院墙范围贴一块软性 AO，消除浮感
+  const sp = K.w(0, 0, (2.8 - d) / 2 - 0.2); addGroundShadow(sp[0], sp[2], w + 3.2, d + 4.4, ry, 0.85, 1.15);
+  // 墙面过渡：四面墙脚潮气带 + 前后檐口阴带
+  for (const [lx, lz, wry, ww] of [[0, 0.03, 0, w], [0, -d - 0.03, 0, w], [-w / 2 - 0.03, -d / 2, Math.PI / 2, d], [w / 2 + 0.03, -d / 2, Math.PI / 2, d]]) {
+    const p = K.w(lx, 0.5, lz); addWallFade(p[0], p[1], p[2], ww * 0.98, 1.0, ry + wry, 0.5, 0);
+  }
+  for (const lz of [0.03, -d - 0.03]) { const p = K.w(0, F * 2 - 0.35, lz); addWallFade(p[0], p[1], p[2], w * 0.98, 0.85, ry, 0.4, 1); }
   return { y, fam, K };
 }
 
 /* ---------------- 小信使的家（可进入） ---------------- */
 const HOME = { x: 0, z: 0 };
 let homeBoardTex, homeBoardCanvas, homeDoor, homeLight;
-function buildHome() {
+function buildHome() { // 自宅也用 buildHouse 同款接地阴影（在 buildHome 末尾贴）
   const x = 27.6, z = -20, ry = -Math.PI / 2; const y = TOWN_Y;
   const K = new Kit(x, y, z, ry); const w = 8, d = 7, F = 2.9, fl = 0.35;
   const wc = new THREE.Color(0xf6efe2), trim = 0x7d5c45;
@@ -159,6 +199,7 @@ function buildHome() {
   HOME.bed = bed; HOME.desk = desk; HOME.inside = inside; HOME.door = door; HOME.doorIn = K.w(dx, 0, -0.9); HOME.ry = ry;
   HOME.box = { K, hw: w / 2 - 0.2, d };
   addPlace('小信使的家', door[0] - 1.2, door[2], Math.PI / 2, 'home');
+  const sp = K.w(0, 0, -d / 2 + 0.4); addGroundShadow(sp[0], sp[2], w + 2.6, d + 3.0, ry, 0.8, 1.0);
 }
 function insideHome(x, z) { if (!HOME.K) return false; const K = HOME.K; const dx = x - K.x, dz = z - K.z; const lx = dx * K.c - dz * K.s, lz = dx * K.s + dz * K.c; return Math.abs(lx) < HOME.box.hw && lz < -0.1 && lz > -HOME.box.d; }
 function drawHomeBoard(day, stamps) {
@@ -192,10 +233,11 @@ function buildSchool() {
   K.set(-42, TOWN_Y, -34, 0);
   const w = 24, d = 9, F = 3.4, n = 3;
   K.box('plaster', 0, F * n / 2, -d / 2, w, F * n, d, 0xf3efe6, { solid: true, wuv: 0.4 });
-  for (let f = 0; f < n; f++) { K.box('vc', 0, f * F + 0.05, 0.05, w + 0.1, 0.12, 0.2, 0xe2ddd2); for (let i = 0; i < 8; i++) windowAt(K, -w / 2 + 1.5 + i * 3, f * F + 1.8, 0, 2.2, 1.6, 0xd9dde0, { v: [1, 5, 3, 7][(i + f) % 4] }); }
+  for (let f = 0; f < n; f++) { K.box('vc', 0, f * F + 0.05, 0.05, w + 0.1, 0.12, 0.2, 0xe2ddd2); for (let i = 0; i < 8; i++) windowAt(K, -w / 2 + 1.5 + i * 3, f * F + 1.8, 0, 2.2, 1.6, 0xd9dde0, { v: [13, 11, 5, 14][(i + f) % 4] }); }
   K.box('concrete', 0, F * n + 0.4, -d / 2, w, 0.8, d, 0xdcd8d0, { wuv: 0.5 });
   // 中央钟楼
   K.box('plaster', 0, F * n + 1.6, -1.0, 4, 3.2, 2.4, 0xf3efe6, { wuv: 0.4 });
+  addGroundShadow(-42, -34 - 4.5, w + 3.5, d + 3.5, 0, 0.75, 0.9);
   const cUV = allocSignAlpha(160, 160, (g) => { g.fillStyle = '#fffdf6'; g.beginPath(); g.arc(80, 80, 76, 0, TAU); g.fill(); g.strokeStyle = '#26375e'; g.lineWidth = 8; g.stroke(); g.fillStyle = '#26375e'; for (let i = 0; i < 12; i++) { const a = i * TAU / 12; g.fillRect(80 + Math.cos(a) * 60 - 4, 80 + Math.sin(a) * 60 - 4, 8, 8); } });
   K.plane('signCut', 0, F * n + 1.9, 0.22, 1.8, 1.8, 0xffffff, { uvr: cUV });
   const hands = new THREE.Group(); const hp = K.w(0, F * n + 1.9, 0.26); hands.position.set(hp[0], hp[1], hp[2]);

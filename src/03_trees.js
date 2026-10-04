@@ -109,7 +109,7 @@ const TEX_PINE_ATLAS = paintAtlas((g, C) => {
     for (let i = 0; i < 46; i++) { const a = -Math.PI / 2 + R(-1.5, 1.5), L = R(0.09, 0.16) * C, k = R(0.6, 1); g.strokeStyle = `rgb(${170 * k | 0},${215 * k | 0},${190 * k | 0})`; g.lineWidth = R(2, 3.4); g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx + Math.cos(a) * L, ty + Math.sin(a) * L); g.stroke(); }
   }
 });
-const SAK_M = foliageMat(TEX_SAK_ATLAS, { emissive: 0x150a0c });
+const SAK_M = foliageMat(TEX_SAK_ATLAS, { emissive: 0x050304 });
 const LEAF_M = foliageMat(TEX_LEAF_ATLAS);
 const PINE_M = foliageMat(TEX_PINE_ATLAS);
 const GRASS_M = foliageMat(TEX_GRASS);
@@ -123,6 +123,7 @@ const TEX_PINE_MASS = paintMass('#4c6658', (g, draw) => { g.lineCap = 'round'; f
 const BODY_S = foliageMat(TEX_SAK_MASS, { body: true }), BODY_L = foliageMat(TEX_LEAF_MASS, { body: true }), BODY_P = foliageMat(TEX_PINE_MASS, { body: true });
 regMat('leafBodyS', BODY_S.m); regMat('leafBodyL', BODY_L.m); regMat('leafBodyP', BODY_P.m);
 regMat('petalGround', new THREE.MeshStandardMaterial({ map: TEX_PETALS_GROUND, transparent: true, alphaTest: 0.35, depthWrite: false, roughness: 1, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), { cast: false });
+regMat('litter', new THREE.MeshStandardMaterial({ map: TEX.litter, transparent: true, alphaTest: 0.35, depthWrite: false, roughness: 1, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), { cast: false });
 
 /* --- 卡片累加器（带 sway 属性与乱序索引，便于按画质截断） --- */
 const CARD_BUCKETS = new Map();
@@ -222,7 +223,7 @@ function canopy(kit, ox, oy, oz, clumps, o) {
     // 环境遮蔽：树冠内部、底部与朝内的面更暗
     const out = clamp(Math.hypot(px - cx, pz - cz) / ext, 0, 1), h = clamp((py - y0) / (y1 - y0 + 1e-3), 0, 1);
     const face = (dx * gx + dy * gy + dz * gz) / gl;
-    return clamp(0.32 + 0.38 * h + 0.2 * out + 0.22 * face, 0.22, 1);
+    return clamp(0.42 + 0.34 * h + 0.18 * out + 0.22 * face, 0.38, 1);
   };
   const sh = o.shade || o.base;
   for (const c of clumps) {
@@ -272,8 +273,8 @@ function sakuraTree(x, z, s = 1, o = {}) {
   const trunkH = (o.trunkH || 1.7) * s, r0 = (o.r0 || 0.2) * s;
   const lean = R(-0.12, 0.12), leanA = R(0, TAU);
   const top = [Math.cos(leanA) * lean * trunkH, trunkH, Math.sin(leanA) * lean * trunkH];
-  kit.rod('bark', [0, -0.3, 0], [top[0] * 0.5, trunkH * 0.5, top[2] * 0.5], r0 * 1.15, P.bark, { rt: 0.92, seg: 10 });
-  kit.rod('bark', [top[0] * 0.5, trunkH * 0.5, top[2] * 0.5], top, r0 * 1.05, P.bark, { rt: 0.9, seg: 10 });
+  kit.rod('bark', [0, -0.3, 0], [top[0] * 0.5, trunkH * 0.5, top[2] * 0.5], r0 * 1.15, P.bark, { rt: 0.8, seg: 10 });
+  kit.rod('bark', [top[0] * 0.5, trunkH * 0.5, top[2] * 0.5], top, r0 * 1.05, P.bark, { rt: 0.75, seg: 10 });
   for (let i = 0; i < 4; i++) { const a = i * TAU / 4 + R(-0.3, 0.3); kit.rod('bark', [0, 0.25 * s, 0], [Math.cos(a) * r0 * 2.6, -0.05, Math.sin(a) * r0 * 2.6], r0 * 0.45, P.bark, { rt: 0.4, seg: 5 }); }
   const tips = [];
   const nMain = o.main || RI(3, 4); const a0 = R(0, TAU);
@@ -281,14 +282,15 @@ function sakuraTree(x, z, s = 1, o = {}) {
   const cl = clusterTips(tips.map(t => [t.p[0] + Math.cos(t.az) * 0.3 * s, t.p[1] + 0.25 * s, t.p[2] + Math.sin(t.az) * 0.3 * s]), 1.05 * s);
   const clumps = cl.map(c => ({ x: c.x, y: c.y, z: c.z, r: (0.85 + 0.12 * Math.min(c.n, 4)) * s, sq: R(0.55, 0.68) }));
   const tint = R(-0.02, 0.02); const base = SAK_BASE.clone().offsetHSL(tint, 0, 0);
-  const C = canopy(kit, x, y, z, clumps, { kind: 'sakura', base, lite: SAK_LITE, shade: SAK_SHADE, card: 0.4 * Math.sqrt(s) * (o.cardK || 1), dens: 2.1 * (o.cards || 1400) / 1400, crop: true, body: 0.74, bodyMin: 0.7, inner: 0.3, local: 0.4, sway: 0.7 });
+  const C = canopy(kit, x, y, z, clumps, { kind: 'sakura', base, lite: SAK_LITE, shade: SAK_SHADE, card: 0.4 * Math.sqrt(s) * (o.cardK || 1), dens: 3.0 * (o.cards || 1400) / 1400, crop: true, body: 0.7, bodyMin: 0.7, inner: 0.3, local: 0.4, sway: 0.7 });
   let crown = C.ext;
-  // 落花地毯
+  // 落花地毯：树冠下密、向外渐稀
   const rr = crown + 1.2 * s;
-  for (let i = 0; i < Math.round(10 + rr * rr * 0.25); i++) {
-    const a = R(0, TAU), d = Math.sqrt(R()) * rr; const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
+  for (let i = 0; i < Math.round(18 + rr * rr * 0.5); i++) {
+    const a = R(0, TAU), d = Math.pow(R(), 0.62) * rr; const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
     const gy = o.flatY != null ? o.flatY : groundAt(px, pz, y + 2);
-    WK.plane('petalGround', px, gy + 0.035, pz, R(1.4, 2.4), R(1.4, 2.4), 0xffffff, { rx: -Math.PI / 2, ry: R(0, TAU), uvr: [R(0, 0.5), R(0, 0.5), R(0.5, 1), R(0.5, 1)] });
+    const sz = R(0.9, 2.2);
+    WK.plane('petalGround', px, gy + 0.035, pz, sz, sz, 0xffffff, { rx: -Math.PI / 2, ry: R(0, TAU), uvr: [R(0, 0.5), R(0, 0.5), R(0.5, 1), R(0.5, 1)] });
   }
   TREES.push({ x, z, r: crown + 0.8 * s, kind: 'sakura', y });
   return { crown, cc: [x + C.cx, y + C.cy, z + C.cz] };
@@ -300,7 +302,7 @@ function greenTree(x, z, s = 1, o = {}) {
   const kit = new Kit(x, y, z, 0);
   const P = { droop: 0.02, spread: 0.7, flatten: 0.85, lenK: 0.68, depth: 2, bark: new THREE.Color(0x6e6150) };
   const trunkH = 2.2 * s, r0 = 0.22 * s;
-  kit.rod('bark', [0, -0.3, 0], [0, trunkH, 0], r0, P.bark, { rt: 0.75, seg: 8 });
+  kit.rod('bark', [0, -0.3, 0], [0, trunkH, 0], r0, P.bark, { rt: 0.62, seg: 8 });
   const tips = []; const n = RI(3, 4); const a0 = R(0, TAU);
   for (let i = 0; i < n; i++) growBranches(kit, [0, trunkH, 0], a0 + i * TAU / n, R(0.8, 1.1), 2.2 * s, r0 * 0.6, 0, P, tips);
   const cl = clusterTips(tips.map(t => [t.p[0], t.p[1] + 0.45 * s, t.p[2]]), 1.5 * s);
@@ -309,7 +311,7 @@ function greenTree(x, z, s = 1, o = {}) {
   let tx = 0, tz = 0, ty = 0; for (const c of clumps) { tx += c.x; tz += c.z; ty = Math.max(ty, c.y); } clumps.push({ x: tx / clumps.length, y: ty + 0.7 * s, z: tz / clumps.length, r: 1.3 * s, sq: 0.75 });
   const hue = o.hue != null ? o.hue : R(0, 1);
   const base = new THREE.Color().setHSL(lerp(0.24, 0.3, hue), 0.42, 0.36), lite = new THREE.Color().setHSL(lerp(0.17, 0.22, hue), 0.55, 0.62), shade = new THREE.Color().setHSL(0.42, 0.3, 0.2);
-  const C = canopy(kit, x, y, z, clumps, { kind: 'leaf', base, lite, shade, card: (o.proto ? 0.85 : 0.62) * Math.sqrt(s), dens: 1.5 * (o.cards || 700) / 700, crop: true, body: 0.86, inner: o.proto ? 0 : 0.12, local: 0.45, sway: 0.5, lo: o.proto });
+  const C = canopy(kit, x, y, z, clumps, { kind: 'leaf', base, lite, shade, card: (o.proto ? 0.85 : 0.62) * Math.sqrt(s), dens: 2.4 * (o.cards || 700) / 700, crop: true, body: 0.72, inner: o.proto ? 0 : 0.12, local: 0.45, sway: 0.5, lo: o.proto });
   TREES.push({ x, z, r: C.ext, kind: 'green', y });
 }
 
@@ -318,18 +320,18 @@ function pineTree(x, z, s = 1, o = {}) {
   const y = o.y != null ? o.y : groundAt(x, z);
   const kit = new Kit(x, y, z, 0); const bark = new THREE.Color(0x5e4b3c);
   let p = [0, -0.3, 0]; let a = R(0, TAU); const pts = [p];
-  for (let i = 0; i < 4; i++) { const np = [p[0] + Math.cos(a) * 0.6 * s, p[1] + 1.4 * s, p[2] + Math.sin(a) * 0.6 * s]; kit.rod('bark', p, np, 0.2 * s * (1 - i * 0.18), bark, { rt: 0.85, seg: 7 }); p = np; pts.push(np); a += R(-1.2, 1.2); }
+  for (let i = 0; i < 4; i++) { const np = [p[0] + Math.cos(a) * 0.6 * s, p[1] + 1.4 * s, p[2] + Math.sin(a) * 0.6 * s]; kit.rod('bark', p, np, 0.2 * s * (1 - i * 0.18), bark, { rt: 0.7, seg: 7 }); p = np; pts.push(np); a += R(-1.2, 1.2); }
   const clumps = [];
   for (let i = 1; i < pts.length; i++) {
     const nb = i === pts.length - 1 ? 1 : 2;
     for (let k = 0; k < nb; k++) {
       const ba = R(0, TAU), bl = (i === pts.length - 1 ? 0.3 : R(1.2, 2.2)) * s * (1 - i * 0.1);
       const e = [pts[i][0] + Math.cos(ba) * bl, pts[i][1] + R(-0.2, 0.3), pts[i][2] + Math.sin(ba) * bl];
-      if (bl > 0.5) kit.rod('bark', pts[i], e, 0.07 * s, bark, { rt: 0.5, seg: 5 });
-      clumps.push({ x: e[0], y: e[1] + 0.25 * s, z: e[2], r: R(1.0, 1.4) * s * (1 - i * 0.06), sq: 0.36 });
+      if (bl > 0.5) kit.rod('bark', pts[i], e, 0.07 * s, bark, { rt: 0.4, seg: 5 });
+      clumps.push({ x: e[0], y: e[1] + 0.25 * s, z: e[2], r: R(1.15, 1.55) * s * (1 - i * 0.06), sq: 0.55 });
     }
   }
-  canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3f5c48), lite: new THREE.Color(0x8aa874), shade: new THREE.Color(0x1f3436), card: (o.proto ? 0.8 : 0.6) * Math.sqrt(s), dens: o.proto ? 1.0 : 1.6, crop: true, body: 0.8, inner: o.proto ? 0 : 0.1, local: 0.6, sway: 0.3, lo: o.proto });
+  canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3f5c48), lite: new THREE.Color(0x8aa874), shade: new THREE.Color(0x1f3436), card: (o.proto ? 0.8 : 0.6) * Math.sqrt(s), dens: o.proto ? 1.0 : 2.4, crop: true, body: 0.7, inner: o.proto ? 0 : 0.1, local: 0.6, sway: 0.3, lo: o.proto });
   TREES.push({ x, z, r: 2.5 * s, kind: 'pine', y });
 }
 
@@ -391,11 +393,11 @@ function sugiTree(x, z, s = 1, o = {}) {
   kit.cyl('bark', 0, H * 0.45, 0, 0.32 * s, H * 0.9, 0x8a7060, { rt: 0.25, seg: 8 });
   // 杉：沿主干一层层的锥形针叶团
   const clumps = [];
-  for (let h = 4.4 * s; h < H; h += 1.7 * s) {
-    const t = (h - 4.4 * s) / (H - 4.4 * s); const r = lerp(2.5, 0.6, Math.pow(t, 0.9)) * s; const n = t > 0.6 ? 1 : 2; const a0 = R(0, TAU);
-    for (let k = 0; k < n; k++) { const a = a0 + k * Math.PI, d = n > 1 ? r * 0.3 : 0; clumps.push({ x: Math.cos(a) * d, y: h, z: Math.sin(a) * d, r: n > 1 ? r * 0.82 : r, sq: 0.62 }); }
+  for (let h = 4.4 * s; h < H; h += 1.15 * s) {
+    const t = (h - 4.4 * s) / (H - 4.4 * s); const r = lerp(2.7, 0.7, Math.pow(t, 0.9)) * s; const n = t > 0.6 ? 1 : 2; const a0 = R(0, TAU);
+    for (let k = 0; k < n; k++) { const a = a0 + k * Math.PI, d = n > 1 ? r * 0.3 : 0; clumps.push({ x: Math.cos(a) * d, y: h, z: Math.sin(a) * d, r: n > 1 ? r * 0.82 : r, sq: 0.72 }); }
   }
-  canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3c5a40), lite: new THREE.Color(0x7d9c64), shade: new THREE.Color(0x1c3032), card: 1.2 * s, dens: 0.8, crop: true, body: 0.86, local: 0.5, sway: 0.25, lo: o.proto });
+  canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3c5a40), lite: new THREE.Color(0x7d9c64), shade: new THREE.Color(0x1c3032), card: 1.2 * s, dens: 1.4, crop: true, body: 0.72, local: 0.5, sway: 0.25, lo: o.proto });
   if (!o.proto) TREES.push({ x, z, r: 3 * s, kind: 'sugi', y });
 }
 const FOREST = { meshes: [] };
@@ -432,6 +434,7 @@ function buildForest() {
   for (let i = 0; i < 40000 && placed < 2400; i++) {
     const x = R(WORLD.x0 + 10, WORLD.x1 - 10), z = R(WORLD.z0 + 10, WORLD.z1 - 10); const c = islandC(x, z); if (c < 0.035) continue;
     if (x > -116 && x < 132 && z > -92 && z < 96) continue; // 镇区
+    if (x > 126 && x < 168 && z > -64 && z < -24) continue; // 港区作业面（码头背场、防波堤走道外侧不长树）
     if (Math.abs(x + 40) < 25 && z < -100 && z > -151) continue; // 神社台地
     if (Math.hypot(x - CAPE.x, z - CAPE.z) < 20 || polyDist(CAPE_PATH, x, z) < 4.5) continue;
     if (FARM.paddy(x, z) || (x < -112 && x > -158 && z > -50 && z < 92)) continue;
@@ -443,6 +446,14 @@ function buildForest() {
     const kind = coast ? 'pine' : (h > 16 ? (chance(0.6) ? 'sugi' : 'broad') : (chance(0.25) ? 'sugi' : 'broad'));
     const sc = R(0.8, 1.2) * (coast ? R(0.85, 1.1) : 1); const arr = lists[kind]; arr[RI(0, arr.length - 1)].push([x, h - 0.2, z, R(0, TAU), sc]);
     addCollider(x, z, (kind === 'sugi' ? 0.3 : 0.24) * sc, (kind === 'sugi' ? 0.3 : 0.24) * sc, 0, h - 0.5, h + 4, { round: true, noFloor: true });
+    // 林下落叶层：每棵树脚下一两片枯叶碎屑
+    if (!coast && chance(0.8)) {
+      const la = R(0, TAU), ld = R(0.6, 2.6) * sc;
+      const lx = x + Math.cos(la) * ld, lz = z + Math.sin(la) * ld;
+      _cB.setHSL(R(0.07, 0.12), R(0.35, 0.55), R(0.5, 0.7));
+      const lsz = R(1.6, 3.4);
+      WK.plane('litter', lx, terrainH(lx, lz) + 0.035, lz, lsz, lsz, _cB, { rx: -Math.PI / 2, ry: R(0, TAU) });
+    }
     placed++;
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
