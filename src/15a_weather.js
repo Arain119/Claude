@@ -44,6 +44,7 @@ function updateWeather(dt) {
   // 地面湿度：下雨时快速变湿，停后慢慢晒干
   WEATHER.wet += (clamp(WEATHER.rain * 1.5, 0, 1) - WEATHER.wet) * Math.min(1, dt * (WEATHER.rain > 0.03 ? 0.5 : 0.035));
   applyWet();
+  if (typeof PUDDLE !== 'undefined' && PUDDLE.mat) PUDDLE.mat.opacity = WEATHER.wet * 0.62;
 }
 /* 雨点：相机周围盒子里的粒子雨（细长雨丝，随风倾斜） */
 const RAIN_U = { time: { value: 0 }, camPos: { value: new THREE.Vector3() }, amt: { value: 0 }, tilt: { value: new THREE.Vector2(0.18, 0) } };

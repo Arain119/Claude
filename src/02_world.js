@@ -172,10 +172,16 @@ function buildTerrain() {
     const rd = riverDist(x, z); if (rd < 9.5) { ro = Math.max(ro, smooth(9.5, 6, rd)); }
     const rw = roadSample(x, z); di = Math.max(di, rw * 0.8);
     if (h > 25) { di = Math.max(di, smooth(0.4, 0.8, n) * 0.6); }
+    // 斑状裸土：草丛里露出的泥地块（~10m 尺度斑块）
+    di = Math.max(di, smooth(0.63, 0.8, fbm(x * 0.09 + 3.3, z * 0.09 - 7.7, 3)) * 0.55);
     gr = Math.max(0, 1 - di - ro - sa);
     spl.set([gr, di, ro, sa], i * 4);
     // 色调：高处偏暗绿、低处偏黄绿
     tmp.setRGB(1, 1, 1).lerp(new THREE.Color(0.8, 0.88, 0.75), smooth(10, 60, h)).lerp(new THREE.Color(1.05, 1.0, 0.85), smooth(0.65, 0.8, fbm(x * 0.01 + 5, z * 0.01, 2)) * 0.5);
+    // 枯草斑：偏黄褐的大片色块
+    tmp.lerp(new THREE.Color(0.95, 0.86, 0.58), smooth(0.55, 0.78, fbm(x * 0.055 - 4.1, z * 0.055 + 2.6, 2)) * 0.5 * gr);
+    // 城镇草坪的割草条纹（~3m 交替明暗带）
+    tmp.multiplyScalar(1 + flatW(x, z, -112, 130, -90, 94, 6) * 0.045 * (Math.sin(x * 1.9) + Math.sin(z * 1.6)));
     tmp.multiplyScalar(lerp(1, 0.55, smooth(0.3, -2.5, h)));
     // 微色斑块：打破大片匀色的塑料感
     tmp.multiplyScalar(0.9 + 0.15 * fbm(x * 0.11 + 9.7, z * 0.11 - 4.2, 2) + 0.07 * fbm(x * 0.55, z * 0.55, 1));

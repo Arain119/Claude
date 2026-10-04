@@ -115,7 +115,9 @@ function buildGrass() {
         float gd = length(gwp - gCam);
         float macro = gNoise(gwp * 0.07) * 0.7 + gNoise(gwp * 0.31) * 0.3;
         float dens = smoothstep(0.4, 0.8, gf.y) * (1.0 - covered) * (1.0 - smoothstep(gSize * 0.3, gSize * 0.5, gd));
-        float keep = step(aBlade.z, dens * mix(0.45, 1.0, macro));
+        // 草丛成簇：再加一层中频噪声，让密度一丛一丛而不是均匀撒点
+        float clump = 0.45 + 0.8 * gNoise(gwp * 0.55);
+        float keep = step(aBlade.z, dens * mix(0.45, 1.0, macro) * clump);
         float meadow = smoothstep(0.45, 0.75, gNoise(gwp * 0.018 + 7.0));
         float hgt = gH * mix(0.55, 1.35, aBlade.w) * mix(0.65, 1.3, macro) * mix(1.0, 1.6, meadow * smoothstep(0.75, 1.0, gf.w)) * gf.w * keep;
         vFlower = step(0.985, fract(aBlade.w * 91.7)) * step(0.3, macro) * step(0.5, gf.w);

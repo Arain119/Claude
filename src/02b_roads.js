@@ -94,6 +94,19 @@ function buildRoadMeshes() {
     ribbon(road, hw + 1.4, hw, 0.0, 'gravel', 0xc8c2b6, { wuv: 0.4, only: grd }); ribbon(road, -hw, -hw - 1.4, 0.0, 'gravel', 0xc8c2b6, { wuv: 0.4, only: grd });
     ribbon(road, hw - 0.2, hw - 0.35, 0.06, 'marking', 0xf2f2ee); ribbon(road, -hw + 0.35, -hw + 0.2, 0.06, 'marking', 0xf2f2ee);
     ribbon(road, 0.08, -0.08, 0.06, 'marking', 0xf2f2ee, { dash: [3, 3] });
+    // 轮胎磨黑的双带：车道中央偏亮、轮迹偏暗（比贴花便宜）
+    for (const s of [-1, 1]) ribbon(road, s * hw * 0.66, s * hw * 0.34, 0.055, 'marking', 0x4a4e52);
+    // 病害贴花与水洼：井盖 ~40m、雨水篦 ~55m、裂缝/补丁随机、水洼待雨
+    let lastMH = -20, lastDR = -30, lastCK = 0, lastPT = 0, lastPD = -5;
+    for (let i = 4; i < road.pts.length - 4; i++) {
+      const p = road.pts[i]; if (!(p[6] === 'grd' || p[6] == null)) continue;
+      const s = p[5], lx = p[4], lz = -p[3], ry = Math.atan2(-p[4], p[3]);
+      if (s - lastMH > 40) { lastMH = s; const o = (R() < 0.5 ? -1 : 1) * hw * 0.45; addDecal(p[0] + lx * o, p[2] + lz * o, 0.9, 0.9, ry, DC.manhole, 0.9); }
+      if (s - lastDR > 55) { lastDR = s; const o = (R() < 0.5 ? -1 : 1) * (hw - 0.55); addDecal(p[0] + lx * o, p[2] + lz * o, 1.5, 0.55, ry, DC.grate, 0.85); }
+      if (s - lastCK > 14 + R(0, 14)) { lastCK = s; const o = R(-hw * 0.5, hw * 0.5); addDecal(p[0] + lx * o, p[2] + lz * o, R(2, 5), R(1, 2.5), ry + R(-0.4, 0.4), DC.crack, R(0.4, 0.7)); }
+      if (s - lastPT > 80 + R(0, 60)) { lastPT = s; const o = R(-1, 1); addDecal(p[0] + lx * o, p[2] + lz * o, R(3, 5), R(1.6, 3), ry, DC.patch, 0.85); }
+      if (s - lastPD > 22 + R(0, 16) && chance(0.5)) { lastPD = s; const o = R(-hw * 0.55, hw * 0.55); addPuddle(p[0] + lx * o, p[2] + lz * o, R(1, 2.6), R(0.6, 1.4), ry); }
+    }
     // 护栏、路灯、电线杆、视线诱导标
     const P = road.pts; let lastLamp = -99, lastPole = -99, poles = []; const needRail = [new Uint8Array(P.length), new Uint8Array(P.length)];
     for (let i = 4; i < P.length - 4; i++) {

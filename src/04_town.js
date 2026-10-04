@@ -99,6 +99,7 @@ function acUnit(kit, x, y, z, ry = 0) {
   kit.box('vc', x, y, z, 0.8, 0.6, 0.3, 0xe8e6df, { ry });
   kit.cyl('vc', x - 0.1, y, z + 0.16, 0.2, 0.02, 0x6a6e72, { rx: Math.PI / 2, ry, seg: 12 });
   kit.box('vc', x + 0.38, y - 0.55, z, 0.05, 0.6, 0.05, 0xd6d3c8, { ry });
+  const sp = kit.w(x, y - 0.85, z + 0.03); addWallFade(sp[0], sp[1], sp[2], 0.55, 1.1, kit.ry + ry, 0.3, 1); // 冷凝水痕
 }
 function antenna(kit, x, y, z, ry = 0) {
   kit.box('vc', x, y + 1.2, z, 0.05, 2.4, 0.05, 0x8d9096);
@@ -127,6 +128,9 @@ function windowAt(kit, x, y, z, w, h, frame = 0xe6e3dc, o = {}) {
   const f = 0.07;
   kit.box('vc', x, y + h / 2, z + 0.04, w + f * 2, f, 0.08, frame); kit.box('vc', x, y - h / 2, z + 0.06, w + f * 2 + 0.1, f, 0.14, frame);
   kit.box('vc', x - w / 2, y, z + 0.04, f, h, 0.08, frame); kit.box('vc', x + w / 2, y, z + 0.04, f, h, 0.08, frame);
+  // 窗台下沿的水痕（沿该面墙的外法向贴出）
+  const or_ = o.ry || 0, nx = Math.sin(or_) * 0.028, nz = Math.cos(or_) * 0.028;
+  const sp = kit.w(x + nx, y - h / 2 - 0.4, z + nz); addWallFade(sp[0], sp[1], sp[2], w * 0.5, 0.75, kit.ry + or_, 0.26, 1);
 }
 /* 三棱柱屋顶（单位：宽 1 × 高 1 × 深 1，屋脊沿 x） */
 const PRISM = (() => {
@@ -186,6 +190,8 @@ function buildShop(d) {
   // 招牌
   // 接地阴影：沿街立面的落地感
   const sp = K.w(0, 0, -D / 2 - 0.4); addGroundShadow(sp[0], sp[2], w + 1.8, D + 2.2, ry, 0.55);
+  // 墙面过渡：后墙与山墙的墙脚潮气带
+  for (const [lx, lz, wry, ww] of [[0, -D - 0.03, 0, w - 1], [-w / 2 - 0.53, -D / 2, Math.PI / 2, D], [w / 2 + 0.53, -D / 2, Math.PI / 2, D]]) { const p = K.w(lx, 0.45, lz); addWallFade(p[0], p[1], p[2], ww, 0.9, ry + wry, 0.45, 0); }
   const sW = w - 0.3; const sUV = drawShopSign(d, sW * 110, 1.05 * 110);
   K.box('vc', 0, F0 + 0.35, 0.1, sW + 0.1, 1.15, 0.2, 0x3a3a3e);
   K.plane('sign', 0, F0 + 0.35, 0.205, sW, 1.05, 0xffffff, { uvr: sUV });

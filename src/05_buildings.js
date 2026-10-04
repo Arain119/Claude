@@ -27,9 +27,29 @@ function buildHouse(x, z, ry, o = {}) {
   K.box(wallMat, 0, F, -d / 2, w, F * 2, d, wc, { solid: true, wuv: 0.45 });
   K.box('vc', 0, F + 0.02, -d / 2, w + 0.06, 0.12, d + 0.06, wc.clone().multiplyScalar(0.85));
   const roofCol = o.roof || pick([0x4a5568, 0x5a4a44, 0x3f5a5a, 0x6b4f45, 0x2f3a4a, 0x7a3b33, 0x556b5a]);
-  if (chance(0.7)) gableRoof(K, 0, F * 2, -d / 2, w, d, R(1.6, 2.2), roofCol, 0, 0.5);
+  const rh = R(1.6, 2.2);
+  if (chance(0.7)) gableRoof(K, 0, F * 2, -d / 2, w, d, rh, roofCol, 0, 0.5);
   else { K.geo('roof', PRISM, 0, F * 2, -d / 2, roofCol, { sx: w + 1, sy: 1.6, sz: d + 1, wuv: 1 }); }
+  // 山墙封檐板：两个山墙面的斜边包一条板，遮掉墙-屋顶的裸几何边
+  {
+    const slope = Math.atan2(rh, d / 2), rl = Math.hypot(d / 2, rh) + 0.5, bc = new THREE.Color(roofCol).multiplyScalar(0.72);
+    for (const sx of [-1, 1]) {
+      K.box('roof', sx * (w / 2 + 0.03), F * 2 + rh / 2 + 0.04, -d / 4, 0.1, 0.22, rl, bc, { rx: slope });
+      K.box('roof', sx * (w / 2 + 0.03), F * 2 + rh / 2 + 0.04, -d * 3 / 4, 0.1, 0.22, rl, bc, { rx: -slope });
+    }
+    // 檐沟 + 一角下水管（70% 的宅子有）
+    if (chance(0.7)) {
+      const gc = 0x9aa2a8;
+      K.box('metal', 0, F * 2 - 0.04, 0.42, w + 0.35, 0.09, 0.13, gc);
+      const gx = (chance(0.5) ? 1 : -1) * (w / 2 - 0.12);
+      K.box('metal', gx, F, 0.42, 0.1, F * 2 - 0.4, 0.1, gc);
+      K.box('metal', gx, F * 2 - 0.14, 0.37, 0.1, 0.08, 0.18, gc);
+    }
+  }
   antenna(K, R(-w / 4, w / 4), F * 2 + 1.4, -d / 2, R(0, 1));
+  // 墙角包边：四个转角各一条浅于墙色的立板，破掉盒子的硬转角
+  const trim = wc.clone().multiplyScalar(1.12);
+  for (const cx of [-1, 1]) for (const cz of [0, -d]) K.box('vc', cx * (w / 2 + 0.02), F, cz, 0.14, F * 2, 0.14, trim);
   // 门与雨棚
   const dx = o.doorX != null ? o.doorX : (chance(0.5) ? -w / 4 : w / 4);
   K.box('wood', dx, 1.05, 0.03, 0.95, 2.1, 0.08, pick([0x6b4a35, 0x8a6a4a, 0x3d4a55, 0xb08560]));
@@ -71,6 +91,11 @@ function buildHouse(x, z, ry, o = {}) {
   K.box('glow', dx, 2.25, 0.25, 0.25, 0.12, 0.1, 0xfff0cf);
   // 接地阴影：房子 + 院墙范围贴一块软性 AO，消除浮感
   const sp = K.w(0, 0, (2.8 - d) / 2 - 0.2); addGroundShadow(sp[0], sp[2], w + 3.2, d + 4.4, ry, 0.85);
+  // 墙面过渡：四面墙脚潮气带 + 前后檐口阴带
+  for (const [lx, lz, wry, ww] of [[0, 0.03, 0, w], [0, -d - 0.03, 0, w], [-w / 2 - 0.03, -d / 2, Math.PI / 2, d], [w / 2 + 0.03, -d / 2, Math.PI / 2, d]]) {
+    const p = K.w(lx, 0.5, lz); addWallFade(p[0], p[1], p[2], ww * 0.98, 1.0, ry + wry, 0.5, 0);
+  }
+  for (const lz of [0.03, -d - 0.03]) { const p = K.w(0, F * 2 - 0.35, lz); addWallFade(p[0], p[1], p[2], w * 0.98, 0.85, ry, 0.4, 1); }
   return { y, fam, K };
 }
 
