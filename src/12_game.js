@@ -57,6 +57,7 @@ const KEYS_T = [
   [24, 0x9fb4e0, 0.5, 0x405890, 0x161620, 0.55, 0x101a2c, 0.0015, 0x2a3450, 0x10141f, 1, 1.0, 4],
 ];
 const _ca = new THREE.Color(), _cb = new THREE.Color();
+const _duskWarm = new THREE.Color(1.0, 0.5, 0.24);
 function lerpHex(a, b, t, out) { _ca.setHex(a).convertSRGBToLinear(); _cb.setHex(b).convertSRGBToLinear(); return out.copy(_ca).lerp(_cb, t); }
 const LT = { sun: new THREE.Color(), hs: new THREE.Color(), hg: new THREE.Color(), fog: new THREE.Color(), cl: new THREE.Color(), cs: new THREE.Color() };
 const LIGHT_DIR = new THREE.Vector3(0.4, 0.7, 0.3);
@@ -77,7 +78,9 @@ function applyTimeOfDay(h) {
   if (GSH.U) { const el = Math.max(sd.y, 0.05), n2 = Math.hypot(sd.x, sd.z) || 1; GSH.U.uDir.value.set(-sd.x / n2, -sd.z / n2); GSH.U.uLen.value = lerp(clamp(0.55 / el, 1.0, 2.4), 1.0, night); }
   if (SKY.sky) { const u = SKY.sky.material.uniforms; u.sunPosition.value.copy(sd).multiplyScalar(4000); u.turbidity.value = turb * 0.7 + WX.grey * 6; u.rayleigh.value = lerp(1.1, 2.2, smooth(16.5, 18.6, h) * (1 - night)); u.skyGain.value = lerp(0.42, 0.6, smooth(16.5, 18.8, h)) * (1 - WX.grey * 0.4); }
   SKY_U.cloudLit.value.copy(LT.cl).multiplyScalar(lerp(1.4, 0.25, night) * (1 - WX.grey * 0.35)); SKY_U.cloudShade.value.copy(LT.cs).multiplyScalar(lerp(1.0, 0.3, night) * (1 - WX.grey * 0.4)); SKY_U.cover.value = WX.cover;
-  sun.color.copy(LT.sun); sun.intensity = sunI * WX.sun; LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);
+  // 低日角暖光：接近日落/日出时平行光偏橙金，地面与立面染夕色
+  const lowSun = isDay ? 1 - smooth(0.12, 0.62, sd.y) : 0;
+  sun.color.copy(LT.sun).lerp(_duskWarm, lowSun * 0.7); sun.intensity = sunI * WX.sun * (1 - lowSun * 0.3); LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);
   hemi.color.copy(LT.hs); hemi.groundColor.copy(LT.hg); hemi.intensity = hemiI * (1 - WX.dark * 0.45);
   scene.fog.color.copy(LT.fog).lerp(_grey503, WX.grey * 0.5); scene.fog.density = fogD * WX.fog * (Q === QUALITY.low ? 1.5 : 1);
   SEA_U.sunCol.value.copy(LT.sun).multiplyScalar(isDay ? 1 : 0.3); SEA_U.light.value = lerp(1.0, 0.18, night);

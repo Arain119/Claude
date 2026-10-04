@@ -316,6 +316,17 @@ function buildHarbor() {
   for (let i = 0; i < 10; i++) WK.sph('paint', R(132, 175), 0.1, R(-15, 50), 0.35, 0.35, 0.35, pick([0xf39a3d, 0xd9483b, 0xffffff]));
   for (let i = 0; i < 8; i++) WK.box('wood', R(118, 125), TOWN_Y + 0.3, R(-20, 50), 0.9, 0.6, 0.6, 0xa07850, { ry: R(0, 1), solid: true });
   for (let i = 0; i < 3; i++) WK.sph('vc', R(118, 124), TOWN_Y + 0.2, R(0, 40), 1.2, 0.3, 0.9, 0x3d6b5a, { lo: true });
+  // 堆场作业面：集装箱垛、蟹笼、缆绳盘、托盘——码头不是空场
+  { const CS = new Kit(124, TOWN_Y, 44, 0.06);
+    for (const [cx, cz, lv, c] of [[0, 0, 0, 0x3a6ea8], [0, 0, 1, 0xb8443a], [6.4, 0.3, 0, 0x3f7d5a], [3.2, 0.15, 1, 0x8a9096]]) CS.box('vc', cx, 1.3 + lv * 2.6, cz, 6, 2.6, 2.4, c);
+    addCollider(124, 44, 5, 2, 0.05, TOWN_Y, TOWN_Y + 5.2, 'wall'); }
+  for (let i = 0; i < 6; i++) { const px = 120 + (i % 3) * 1.5, pz = -16 + Math.floor(i / 3) * 1.5;
+    WK.box('wood', px, TOWN_Y + 0.45, pz, 1.3, 0.9, 1.3, 0x4a3c2a, { wuv: 1.2 });
+    WK.box('vcNoShadow', px, TOWN_Y + 0.45, pz, 1.34, 0.1, 1.34, 0x2a2018); }
+  for (const [rx, rz] of [[126, 20], [125, 22.2], [109, 46]]) { WK.geo('wood', new THREE.TorusGeometry(0.7, 0.28, 8, 18), rx, TOWN_Y + 0.28, rz, 0x7a6a4a, { rx: Math.PI / 2 }); }
+  for (const [px, pz] of [[112, 52], [113.2, 52], [112.6, 53.4]]) { WK.box('wood', px, TOWN_Y + 0.12, pz, 1.1, 0.12, 1.3, 0xb0956a); WK.box('wood', px, TOWN_Y + 0.3, pz, 1.1, 0.12, 1.3, 0xa08858); }
+  // 码头面轮胎痕与压痕（深色长条贴片，两处转弯位）
+  for (const [tx, tz, tl, ta] of [[115, 8, 14, 0.15], [113, 36, 10, -0.2]]) WK.plane('vcNoShadow', tx, TOWN_Y + 0.045, tz, 0.9, tl, 0x3c3a38, { rx: -Math.PI / 2, ry: ta });
   addPlace('星见港', 122, 15, -Math.PI / 2, 'harbor');
 }
 const HARBOR = {};
@@ -462,6 +473,15 @@ function buildBeach() {
 const BEACH = {};
 
 /* ---------------- 民居区 ---------------- */
+function resLamp(x, z, ry) {
+  const k = new Kit(x, SW_Y, z, ry);
+  k.cyl('paint', 0, 2.5, 0, 0.06, 5.0, 0x4a5454, { rt: 0.7, seg: 8 });
+  k.cyl('paint', 0, 0.22, 0, 0.11, 0.44, 0x4a5454, { seg: 8 });
+  k.rod('paint', [0, 4.7, 0], [-0.6, 5.0, 0], 0.03, 0x4a5454);
+  k.cyl('glow', -0.62, 4.82, 0, 0.15, 0.3, 0xfff1d0, { rt: 1.2, seg: 10 });
+  const p = k.w(-0.62, 4.8, 0); addHalo(p[0], p[1], p[2], 3.4, 0xffe2b0); addLightPool(p[0], SW_Y, p[2], 3.6, 0xffd8a8); addLampCone(p[0], p[1] - 0.05, p[2], SW_Y + 0.05);
+  addCollider(x, z, 0.1, 0.1, 0, SW_Y, SW_Y + 4.5, 'wall');
+}
 function buildResidential() {
   // 主街西侧（学校以南）
   const westLots = [[-46, -8], [-34, -8], [-46, 8], [-34, 8], [-46, 24], [-34, 24]];
@@ -474,4 +494,6 @@ function buildResidential() {
   far.forEach(([x, z, ry], i) => buildHouse(x, z, ry, { w: 9, d: 8, yard: 2.6, tree: i % 2 ? 'sakura' : 'green' }));
   // 河西的小路
   WK.box('paving', -96, TOWN_Y + 0.03, 10, 4, 0.06, 110, 0xe5dccd, { wuv: 0.45 });
+  // 住宅巷稀疏路灯（主街商店街以外夜里不再全黑）
+  for (const [lx, lz, lry] of [[26.5, -36, 0], [21.5, -8, Math.PI], [26.5, 16, 0], [21.5, 30, Math.PI], [-26.5, -6, Math.PI], [-21.5, 12, 0], [-26.5, 28, Math.PI]]) resLamp(lx, lz, lry);
 }

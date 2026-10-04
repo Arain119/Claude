@@ -21,12 +21,14 @@ function buildHouse(x, z, ry, o = {}) {
   let y = -1e9; for (const [a, b] of [[-w / 2, 0], [w / 2, 0], [-w / 2, -d], [w / 2, -d], [0, -d / 2]]) { const p = K0.w(a, 0, b); y = Math.max(y, terrainH(p[0], p[2])); }
   const K = new Kit(x, y, z, ry);
   const wallMat = o.wall || pick(['siding', 'plaster', 'siding', 'tile']);
-  const wc = new THREE.Color(o.wc || pick([0xf2ede2, 0xe6ddd0, 0xdfe6e8, 0xf0e6dc, 0xe9eedf, 0xf6efe8, 0xd8d0c4]));
+  // 外墙色系：白/米为主，混入蓝灰、苔痕旧宅与深色木造（破掉全镇同款）
+  const wc = new THREE.Color(o.wc || pick([0xf2ede2, 0xe6ddd0, 0xdfe6e8, 0xf0e6dc, 0xe9eedf, 0xf6efe8, 0xd8d0c4, 0x9aa8b0, 0xb8b0a0, 0xa8a294, 0x8a9096, 0x6a5a48, 0x5a4a3a, 0x4a3c30]));
+  if (!o.wc && chance(0.25)) wc.multiplyScalar(R(0.82, 0.94)); // 老化褪色的墙色更沉一档
   const fam = o.fam || pick(FAMILY);
   K.box('concrete', 0, -1.15, -d / 2, w + 0.3, 2.7, d + 0.3, 0xaca89e, { wuv: 0.5 });
   K.box(wallMat, 0, F, -d / 2, w, F * 2, d, wc, { solid: true, wuv: 0.45 });
   K.box('vc', 0, F + 0.02, -d / 2, w + 0.06, 0.12, d + 0.06, wc.clone().multiplyScalar(0.85));
-  const roofCol = o.roof || pick([0x4a5568, 0x5a4a44, 0x3f5a5a, 0x6b4f45, 0x2f3a4a, 0x7a3b33, 0x556b5a]);
+  const roofCol = o.roof || pick([0x4a5568, 0x5a4a44, 0x3f5a5a, 0x6b4f45, 0x2f3a4a, 0x7a3b33, 0x556b5a, 0x8a9299, 0x6a4a38, 0x4a4a52, 0x5f6e7a]);
   const rh = R(1.6, 2.2);
   const gable = chance(0.7);
   if (gable) gableRoof(K, 0, F * 2, -d / 2, w, d, rh, roofCol, 0, 0.5);

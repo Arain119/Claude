@@ -2818,12 +2818,14 @@ function buildHouse(x, z, ry, o = {}) {
   let y = -1e9; for (const [a, b] of [[-w / 2, 0], [w / 2, 0], [-w / 2, -d], [w / 2, -d], [0, -d / 2]]) { const p = K0.w(a, 0, b); y = Math.max(y, terrainH(p[0], p[2])); }
   const K = new Kit(x, y, z, ry);
   const wallMat = o.wall || pick(['siding', 'plaster', 'siding', 'tile']);
-  const wc = new THREE.Color(o.wc || pick([0xf2ede2, 0xe6ddd0, 0xdfe6e8, 0xf0e6dc, 0xe9eedf, 0xf6efe8, 0xd8d0c4]));
+  // 外墙色系：白/米为主，混入蓝灰、苔痕旧宅与深色木造（破掉全镇同款）
+  const wc = new THREE.Color(o.wc || pick([0xf2ede2, 0xe6ddd0, 0xdfe6e8, 0xf0e6dc, 0xe9eedf, 0xf6efe8, 0xd8d0c4, 0x9aa8b0, 0xb8b0a0, 0xa8a294, 0x8a9096, 0x6a5a48, 0x5a4a3a, 0x4a3c30]));
+  if (!o.wc && chance(0.25)) wc.multiplyScalar(R(0.82, 0.94)); // 老化褪色的墙色更沉一档
   const fam = o.fam || pick(FAMILY);
   K.box('concrete', 0, -1.15, -d / 2, w + 0.3, 2.7, d + 0.3, 0xaca89e, { wuv: 0.5 });
   K.box(wallMat, 0, F, -d / 2, w, F * 2, d, wc, { solid: true, wuv: 0.45 });
   K.box('vc', 0, F + 0.02, -d / 2, w + 0.06, 0.12, d + 0.06, wc.clone().multiplyScalar(0.85));
-  const roofCol = o.roof || pick([0x4a5568, 0x5a4a44, 0x3f5a5a, 0x6b4f45, 0x2f3a4a, 0x7a3b33, 0x556b5a]);
+  const roofCol = o.roof || pick([0x4a5568, 0x5a4a44, 0x3f5a5a, 0x6b4f45, 0x2f3a4a, 0x7a3b33, 0x556b5a, 0x8a9299, 0x6a4a38, 0x4a4a52, 0x5f6e7a]);
   const rh = R(1.6, 2.2);
   const gable = chance(0.7);
   if (gable) gableRoof(K, 0, F * 2, -d / 2, w, d, rh, roofCol, 0, 0.5);
@@ -4041,6 +4043,17 @@ function buildHarbor() {
   for (let i = 0; i < 10; i++) WK.sph('paint', R(132, 175), 0.1, R(-15, 50), 0.35, 0.35, 0.35, pick([0xf39a3d, 0xd9483b, 0xffffff]));
   for (let i = 0; i < 8; i++) WK.box('wood', R(118, 125), TOWN_Y + 0.3, R(-20, 50), 0.9, 0.6, 0.6, 0xa07850, { ry: R(0, 1), solid: true });
   for (let i = 0; i < 3; i++) WK.sph('vc', R(118, 124), TOWN_Y + 0.2, R(0, 40), 1.2, 0.3, 0.9, 0x3d6b5a, { lo: true });
+  // 堆场作业面：集装箱垛、蟹笼、缆绳盘、托盘——码头不是空场
+  { const CS = new Kit(124, TOWN_Y, 44, 0.06);
+    for (const [cx, cz, lv, c] of [[0, 0, 0, 0x3a6ea8], [0, 0, 1, 0xb8443a], [6.4, 0.3, 0, 0x3f7d5a], [3.2, 0.15, 1, 0x8a9096]]) CS.box('vc', cx, 1.3 + lv * 2.6, cz, 6, 2.6, 2.4, c);
+    addCollider(124, 44, 5, 2, 0.05, TOWN_Y, TOWN_Y + 5.2, 'wall'); }
+  for (let i = 0; i < 6; i++) { const px = 120 + (i % 3) * 1.5, pz = -16 + Math.floor(i / 3) * 1.5;
+    WK.box('wood', px, TOWN_Y + 0.45, pz, 1.3, 0.9, 1.3, 0x4a3c2a, { wuv: 1.2 });
+    WK.box('vcNoShadow', px, TOWN_Y + 0.45, pz, 1.34, 0.1, 1.34, 0x2a2018); }
+  for (const [rx, rz] of [[126, 20], [125, 22.2], [109, 46]]) { WK.geo('wood', new THREE.TorusGeometry(0.7, 0.28, 8, 18), rx, TOWN_Y + 0.28, rz, 0x7a6a4a, { rx: Math.PI / 2 }); }
+  for (const [px, pz] of [[112, 52], [113.2, 52], [112.6, 53.4]]) { WK.box('wood', px, TOWN_Y + 0.12, pz, 1.1, 0.12, 1.3, 0xb0956a); WK.box('wood', px, TOWN_Y + 0.3, pz, 1.1, 0.12, 1.3, 0xa08858); }
+  // 码头面轮胎痕与压痕（深色长条贴片，两处转弯位）
+  for (const [tx, tz, tl, ta] of [[115, 8, 14, 0.15], [113, 36, 10, -0.2]]) WK.plane('vcNoShadow', tx, TOWN_Y + 0.045, tz, 0.9, tl, 0x3c3a38, { rx: -Math.PI / 2, ry: ta });
   addPlace('星见港', 122, 15, -Math.PI / 2, 'harbor');
 }
 const HARBOR = {};
@@ -4187,6 +4200,15 @@ function buildBeach() {
 const BEACH = {};
 
 /* ---------------- 民居区 ---------------- */
+function resLamp(x, z, ry) {
+  const k = new Kit(x, SW_Y, z, ry);
+  k.cyl('paint', 0, 2.5, 0, 0.06, 5.0, 0x4a5454, { rt: 0.7, seg: 8 });
+  k.cyl('paint', 0, 0.22, 0, 0.11, 0.44, 0x4a5454, { seg: 8 });
+  k.rod('paint', [0, 4.7, 0], [-0.6, 5.0, 0], 0.03, 0x4a5454);
+  k.cyl('glow', -0.62, 4.82, 0, 0.15, 0.3, 0xfff1d0, { rt: 1.2, seg: 10 });
+  const p = k.w(-0.62, 4.8, 0); addHalo(p[0], p[1], p[2], 3.4, 0xffe2b0); addLightPool(p[0], SW_Y, p[2], 3.6, 0xffd8a8); addLampCone(p[0], p[1] - 0.05, p[2], SW_Y + 0.05);
+  addCollider(x, z, 0.1, 0.1, 0, SW_Y, SW_Y + 4.5, 'wall');
+}
 function buildResidential() {
   // 主街西侧（学校以南）
   const westLots = [[-46, -8], [-34, -8], [-46, 8], [-34, 8], [-46, 24], [-34, 24]];
@@ -4199,6 +4221,8 @@ function buildResidential() {
   far.forEach(([x, z, ry], i) => buildHouse(x, z, ry, { w: 9, d: 8, yard: 2.6, tree: i % 2 ? 'sakura' : 'green' }));
   // 河西的小路
   WK.box('paving', -96, TOWN_Y + 0.03, 10, 4, 0.06, 110, 0xe5dccd, { wuv: 0.45 });
+  // 住宅巷稀疏路灯（主街商店街以外夜里不再全黑）
+  for (const [lx, lz, lry] of [[26.5, -36, 0], [21.5, -8, Math.PI], [26.5, 16, 0], [21.5, 30, Math.PI], [-26.5, -6, Math.PI], [-21.5, 12, 0], [-26.5, 28, Math.PI]]) resLamp(lx, lz, lry);
 }
 
 // ---- 07b_country.js ----
@@ -5592,6 +5616,7 @@ const KEYS_T = [
   [24, 0x9fb4e0, 0.5, 0x405890, 0x161620, 0.55, 0x101a2c, 0.0015, 0x2a3450, 0x10141f, 1, 1.0, 4],
 ];
 const _ca = new THREE.Color(), _cb = new THREE.Color();
+const _duskWarm = new THREE.Color(1.0, 0.5, 0.24);
 function lerpHex(a, b, t, out) { _ca.setHex(a).convertSRGBToLinear(); _cb.setHex(b).convertSRGBToLinear(); return out.copy(_ca).lerp(_cb, t); }
 const LT = { sun: new THREE.Color(), hs: new THREE.Color(), hg: new THREE.Color(), fog: new THREE.Color(), cl: new THREE.Color(), cs: new THREE.Color() };
 const LIGHT_DIR = new THREE.Vector3(0.4, 0.7, 0.3);
@@ -5612,7 +5637,9 @@ function applyTimeOfDay(h) {
   if (GSH.U) { const el = Math.max(sd.y, 0.05), n2 = Math.hypot(sd.x, sd.z) || 1; GSH.U.uDir.value.set(-sd.x / n2, -sd.z / n2); GSH.U.uLen.value = lerp(clamp(0.55 / el, 1.0, 2.4), 1.0, night); }
   if (SKY.sky) { const u = SKY.sky.material.uniforms; u.sunPosition.value.copy(sd).multiplyScalar(4000); u.turbidity.value = turb * 0.7 + WX.grey * 6; u.rayleigh.value = lerp(1.1, 2.2, smooth(16.5, 18.6, h) * (1 - night)); u.skyGain.value = lerp(0.42, 0.6, smooth(16.5, 18.8, h)) * (1 - WX.grey * 0.4); }
   SKY_U.cloudLit.value.copy(LT.cl).multiplyScalar(lerp(1.4, 0.25, night) * (1 - WX.grey * 0.35)); SKY_U.cloudShade.value.copy(LT.cs).multiplyScalar(lerp(1.0, 0.3, night) * (1 - WX.grey * 0.4)); SKY_U.cover.value = WX.cover;
-  sun.color.copy(LT.sun); sun.intensity = sunI * WX.sun; LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);
+  // 低日角暖光：接近日落/日出时平行光偏橙金，地面与立面染夕色
+  const lowSun = isDay ? 1 - smooth(0.12, 0.62, sd.y) : 0;
+  sun.color.copy(LT.sun).lerp(_duskWarm, lowSun * 0.7); sun.intensity = sunI * WX.sun * (1 - lowSun * 0.3); LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);
   hemi.color.copy(LT.hs); hemi.groundColor.copy(LT.hg); hemi.intensity = hemiI * (1 - WX.dark * 0.45);
   scene.fog.color.copy(LT.fog).lerp(_grey503, WX.grey * 0.5); scene.fog.density = fogD * WX.fog * (Q === QUALITY.low ? 1.5 : 1);
   SEA_U.sunCol.value.copy(LT.sun).multiplyScalar(isDay ? 1 : 0.3); SEA_U.light.value = lerp(1.0, 0.18, night);
