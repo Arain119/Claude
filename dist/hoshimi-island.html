@@ -6464,7 +6464,7 @@ function updateWeather(dt) {
   const w = weatherNow(st.min);
   if (w !== WEATHER.tgt) { WEATHER.from = Object.assign({}, WX); WEATHER.tgt = w; WEATHER.k = 0; UI.refreshHUD(); }
   WEATHER.k = Math.min(1, WEATHER.k + dt / 14);
-  const B = W_P[w], t = smooth(0, 1, WEATHER.k), A = WEATHER.from || B;
+  const B = W_P[w] || W_P.sun, t = smooth(0, 1, WEATHER.k), A = WEATHER.from || B;
   for (const kk of W_KEYS) WX[kk] = lerp(A[kk], B[kk], t);
   WEATHER.rain += (WX.rain - WEATHER.rain) * Math.min(1, dt * 0.5);
   // 地面湿度：下雨时快速变湿，停后慢慢晒干
