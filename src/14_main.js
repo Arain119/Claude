@@ -14,9 +14,8 @@ function scatterNature() {
   // 草丛与野花（镇外、河堤）
   for (let i = 0; i < 5200; i++) {
     const x = R(WORLD.x0, WORLD.x1), z = R(WORLD.z0, WORLD.z1); if (islandC(x, z) < 0.04) continue; const h = terrainH(x, z); if (h < 1.4) continue;
-    const town = (x > -114 && x < 110 && z > -86 && z < 74) || (x > 96 && x < 132 && z > -36 && z < 66) || (z > 84 && Math.abs(x - 10) < 120); if (town && !(riverDist(x, z) > 8.6 && riverDist(x, z) < 15)) continue;
-    if (Math.abs(z + 60) < 9 && x > -170 && x < 140) continue;
-    if (roadSample(x, z) > 0.3 || flatW(x, z, -320, -130, -40, 110, 0) > 0.5 && FARM.paddy(x, z)) continue;
+    const town = (x > -114 && x < 132 && z > -92 && z < 92) || (z > 100 && Math.abs(x - 10) < 120); if (town && !(riverDist(x, z) > 8.6 && riverDist(x, z) < 15)) continue;
+    if (roadSample(x, z) > 0.3 || FARM.paddy(x, z)) continue;
     if (polyDist(CAPE_PATH, x, z) < 2.2 || (Math.abs(x + 40) < 24 && z < -84 && z > -152 && h > 13)) continue;
     if (occNear(x, z, 1.4)) continue;
     grassPatch(x, z, null, RI(4, 8), 1.4);
@@ -47,7 +46,7 @@ async function build() {
   progress(0.62, '正在种樱花……'); await tick();
   buildPlaza(); buildRiverbanks(); buildShrine();
   progress(0.68, '正在修港口与灯塔……'); await tick();
-  buildHarbor(); buildCape(); buildBeach();
+  buildHarbor(); buildCape(); buildBeach(); buildInfill();
   progress(0.74, '正在长出森林……'); await tick();
   flushBatches(scene); buildOccupancy();
   scatterNature(); buildForest(); addTreeColliders();

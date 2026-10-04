@@ -116,12 +116,12 @@ function buildGrass() {
         float dens = smoothstep(0.4, 0.8, gf.y) * (1.0 - covered) * (1.0 - smoothstep(gSize * 0.3, gSize * 0.5, gd));
         float keep = step(aBlade.z, dens * mix(0.45, 1.0, macro));
         float meadow = smoothstep(0.45, 0.75, gNoise(gwp * 0.018 + 7.0));
-        float hgt = gH * mix(0.55, 1.35, aBlade.w) * mix(0.65, 1.3, macro) * mix(1.0, 1.6, meadow) * keep;
-        vFlower = step(0.985, fract(aBlade.w * 91.7)) * step(0.3, macro);
+        float hgt = gH * mix(0.55, 1.35, aBlade.w) * mix(0.65, 1.3, macro) * mix(1.0, 1.6, meadow * smoothstep(0.75, 1.0, gf.w)) * gf.w * keep;
+        vFlower = step(0.985, fract(aBlade.w * 91.7)) * step(0.3, macro) * step(0.5, gf.w);
         float t = position.y;
         float ang = aBlade.w * 6.2831 + aBlade.z * 3.0;
         vec3 sideV = vec3(cos(ang), 0.0, sin(ang));
-        float w = gW * mix(0.75, 1.3, fract(aBlade.z * 7.31)) * (1.0 + smoothstep(10.0, gSize * 0.5, gd) * 1.5);
+        float w = gW * mix(0.75, 1.3, fract(aBlade.z * 7.31)) * mix(0.62, 1.0, gf.w) * (1.0 + smoothstep(10.0, gSize * 0.5, gd) * 1.5);
         // 草浪：沿风向推进的阵风带 + 低频噪声
         float wave = sin(dot(gwp, vec2(0.13, 0.08)) - uTime * 1.7) * 0.5 + 0.5;
         float wn = gNoise(gwp * 0.045 - vec2(uTime * 0.35, uTime * 0.22));

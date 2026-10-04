@@ -117,7 +117,7 @@ function buildPaths() {
   const rv = []; for (let z = -40; z <= 82; z += 6) rv.push([riverAtZ(z) + 11.0, z]); PATHS.river = { loop: false, pts: rv };
   PATHS.harbor = { loop: false, pts: [[110, -22], [110, 56]] };
   PATHS.south = { loop: false, pts: [[-55, 45.6], [96, 45.6], [106, 45.6], [106, -60]] };
-  PATHS.beach = { loop: false, pts: [[-40, 112], [60, 116]] };
+  PATHS.beach = { loop: false, pts: [[-40, 120], [60, 124]] };
 }
 function pathLen(P) { let L = 0; const n = P.pts.length; for (let i = 0; i < (P.loop ? n : n - 1); i++) { const a = P.pts[i], b = P.pts[(i + 1) % n]; L += Math.hypot(b[0] - a[0], b[1] - a[1]); } return L; }
 function pathAt(P, s) {

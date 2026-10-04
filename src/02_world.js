@@ -2,18 +2,18 @@
    地形（扩展后的岛屿：北部星见山、西部田园、东部港口）· 海 · 河 · 天空
    ========================================================================== */
 const TOWN_Y = 2;
-const RIVER = [[-86, -112], [-82, -98], [-76, -70], [-72, -40], [-70, -5], [-73, 30], [-80, 70], [-92, 110], [-104, 150], [-114, 196]];
+const RIVER = [[-86, -112], [-82, -98], [-76, -70], [-72, -40], [-70, -5], [-73, 30], [-80, 70], [-92, 110], [-102, 146], [-108, 178]];
 const CAPE_PATH = [[100, -82, 2], [90, -96, 5.5], [95, -114, 10], [108, -122, 15], [116, -113, 18.5]];
 const CAPE = { x: 118, z: -110, y: 18.5 };
 const SHRINE = { x: -40, z: -130, y: 14 };
-const WORLD = { x0: -470, x1: 330, z0: -430, z1: 240 };
+const WORLD = { x0: -270, x1: 280, z0: -250, z1: 235 };
 
-/* --- 海岸线：保留原来的东侧与南侧，把西北方向向外扩展 --- */
+/* --- 海岸线：紧凑的椭圆小岛（东西约 430 m、南北约 360 m），镇子居中 --- */
 function oldR(th) { const c = Math.cos(th), s = Math.sin(th); const e = 1 / Math.sqrt((c / 215) ** 2 + (s / 178) ** 2); return e * (1 + 0.07 * Math.sin(3 * th + 0.8) + 0.05 * Math.sin(5 * th + 2.1) + 0.03 * Math.sin(9 * th + 0.3)); }
 function coastR(th) {
-  const d = Math.abs(Math.atan2(Math.sin(th + 3 * Math.PI / 4), Math.cos(th + 3 * Math.PI / 4)));
-  const w = d < 1.92 ? Math.cos(d / 1.92 * Math.PI / 2) ** 2 : 0;
-  return oldR(th) * (1 + 1.3 * w) + (vnoise(th * 5 + 10, 1.7) - 0.5) * 22 * w;
+  // 西北角略向外鼓，给神社后山与环线铁路留出海岸
+  const d = Math.abs(Math.atan2(Math.sin(th + 2.2), Math.cos(th + 2.2)));
+  return oldR(th) * (1 + 0.1 * smooth(1.0, 0, d)) + (vnoise(th * 7 + 10, 1.7) - 0.5) * 8;
 }
 /* 内陆距离（米）/ 200：沿用旧代码里的阈值习惯 */
 function islandC(x, z) { return (coastR(Math.atan2(z, x)) - Math.hypot(x, z)) / 200; }
@@ -39,22 +39,20 @@ function terrainNatural(x, z) {
   let h = lerp(-9, 2.2, smooth(-0.13, 0.09, c));
   const inl = smooth(0.02, 0.2, c);
   h += (fbm(x * 0.012 + 3, z * 0.012 - 7, 4) - 0.5) * 4.0 * inl;
-  // 原有丘陵
-  const hill = gauss(x, z, -60, -152, 62, 17) + gauss(x, z, 25, -165, 55, 13) + gauss(x, z, -140, -118, 55, 15) + gauss(x, z, -184, -58, 38, 13) + gauss(x, z, 152, -64, 34, 14) + gauss(x, z, 92, -142, 40, 9);
-  // 星见山与西北山地
-  const mtn = gauss(x, z, -205, -255, 105, 80) + gauss(x, z, -110, -290, 65, 26) + gauss(x, z, -285, -150, 85, 36) + gauss(x, z, -10, -250, 60, 22) + gauss(x, z, -310, -275, 70, 26);
-  const ridge = (fbm(x * 0.008 + 40, z * 0.008, 4) - 0.45) * 26 * smooth(20, 70, mtn);
-  h += (hill + mtn + Math.max(0, ridge)) * inl;
+  // 丘陵：神社后山（星见山）与灯塔岬
+  const hill = gauss(x, z, -60, -152, 62, 17) + gauss(x, z, 25, -165, 55, 13) + gauss(x, z, -140, -122, 46, 13) + gauss(x, z, 92, -142, 40, 9) + gauss(x, z, -8, -182, 34, 12);
+  const ridge = (fbm(x * 0.02 + 40, z * 0.02, 3) - 0.5) * 7 * smooth(6, 20, hill);
+  h += (hill + ridge) * inl;
   h += gauss(x, z, CAPE.x, CAPE.z, 34, 17) * smooth(-0.03, 0.05, c);
   // 河源：压低成一片缓坡谷地
   { const vw = smooth(70, 12, Math.hypot(x + 86, z + 112)) * inl; h = lerp(h, Math.min(h, 4 + Math.hypot(x + 86, z + 112) * 0.12), vw); }
-  // 西部田园（低平）
-  let w = flatW(x, z, -330, -120, -50, 120, 55) * smooth(0.04, 0.12, c); h = lerp(h, 3.2 + (fbm(x * 0.02, z * 0.02, 2) - 0.5) * 0.3, w);
+  // 西部水田（低平）
+  let w = flatW(x, z, -190, -112, -50, 84, 16) * smooth(0.03, 0.1, c); h = lerp(h, 2.3 + (fbm(x * 0.02, z * 0.02, 2) - 0.5) * 0.2, w);
   // 镇区
   w = flatW(x, z, -112, 108, -84, 72, 14); h = lerp(h, TOWN_Y, w);
   w = flatW(x, z, 100, 129, -34, 64, 6); h = lerp(h, TOWN_Y, w);
   h -= smooth(80, 150, z) * smooth(140, 70, Math.abs(x - 10)) * 1.5;
-  w = flatW(x, z, -166, 138, -71, -49, 5); h = lerp(h, TOWN_Y, w);
+  w = flatW(x, z, -128, 120, -71, -49, 5); h = lerp(h, TOWN_Y, w);
   // 神社
   w = flatW(x, z, -64, -16, -152, -110, 8); h = lerp(h, SHRINE.y, w);
   const rampY = lerp(TOWN_Y, SHRINE.y, clamp((-86 - z) / 24, 0, 1));
@@ -167,7 +165,7 @@ function buildTerrain() {
     let gr = 1, di = 0, ro = 0, sa = 0;
     di = smooth(0.35, 0.75, slope) * 0.9 + smooth(0.55, 0.8, n) * 0.35;
     ro = smooth(0.7, 1.15, slope);
-    const beach = Math.max(smooth(1.4, 0.5, h) * smooth(0.0, 0.2, 0.3 - c), smooth(84, 100, z) * smooth(150, 110, Math.abs(x - 10)));
+    const beach = Math.max(smooth(1.4, 0.5, h) * smooth(0.0, 0.2, 0.3 - c), smooth(104, 114, z) * smooth(150, 110, Math.abs(x - 10)));
     sa = clamp(beach, 0, 1) + smooth(0.2, -0.6, h);
     if (Math.hypot(x - SHRINE.x, z - SHRINE.z + 2) < 26 && Math.abs(h - SHRINE.y) < 0.4) di = 1;
     if (polyDist(CAPE_PATH, x, z) < 1.8) di = 1;
@@ -183,7 +181,9 @@ function buildTerrain() {
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('splat', new THREE.BufferAttribute(spl, 4));
   // 供草地着色器采样的高度 / 草量网格
-  { const F = new Float32Array(p.count * 4); for (let i = 0; i < p.count; i++) { F[i * 4] = H[i]; F[i * 4 + 1] = spl[i * 4]; F[i * 4 + 2] = col[i * 3 + 1]; F[i * 4 + 3] = 1; }
+  // 草高系数（第 4 通道）：镇内是修剪过的草坪，河堤与田埂中等，野地、山坡最高
+  const mow = (x, z) => { const town = flatW(x, z, -112, 130, -90, 94, 6); const rd = riverDist(x, z); const bank = smooth(7.5, 9.5, rd) * smooth(17, 13, rd); return lerp(1, lerp(0.3, 0.62, bank), town); };
+  { const F = new Float32Array(p.count * 4); for (let i = 0; i < p.count; i++) { F[i * 4] = H[i]; F[i * 4 + 1] = spl[i * 4]; F[i * 4 + 2] = col[i * 3 + 1]; F[i * 4 + 3] = mow(p.getX(i), p.getZ(i)); }
     const x0 = p.getX(0), z0 = p.getZ(0);
     TERRAIN_GRID = { nx: nx + 1, nz: nz + 1, x0, z0, dx: (p.getX(nx) - x0) / nx, dz: (p.getZ(row * nz) - z0) / nz, data: F }; }
   g.computeVertexNormals();
@@ -209,11 +209,11 @@ function buildTerrain() {
 }
 
 /* 深度贴图（供海面浅滩与泡沫） */
-let DEPTH_TEX;
+let DEPTH_TEX; const DEPTH_S = 640, DEPTH_O = [5, -8];
 function buildDepthTex() {
-  const N = 512, S = 960; const data = new Uint8Array(N * N * 4);
+  const N = 512, S = DEPTH_S; const data = new Uint8Array(N * N * 4);
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const x = -S / 2 - 70 + (i + 0.5) * S / N, z = -S / 2 - 90 + (j + 0.5) * S / N; const h = terrainNatural(x, z) - (smooth(127.6, 129, x) * smooth(-31, -27, z) * (1 - smooth(57, 61, z))) * 6;
+    const x = DEPTH_O[0] - S / 2 + (i + 0.5) * S / N, z = DEPTH_O[1] - S / 2 + (j + 0.5) * S / N; const h = terrainNatural(x, z) - (smooth(127.6, 129, x) * smooth(-31, -27, z) * (1 - smooth(57, 61, z))) * 6;
     const d = clamp(-h / 10, 0, 1); const k = (j * N + i) * 4; data[k] = d * 255; data[k + 1] = h > 0 ? 255 : 0; data[k + 2] = 0; data[k + 3] = 255;
   }
   DEPTH_TEX = new THREE.DataTexture(data, N, N, THREE.RGBAFormat); DEPTH_TEX.magFilter = THREE.LinearFilter; DEPTH_TEX.minFilter = THREE.LinearFilter; DEPTH_TEX.needsUpdate = true;
@@ -292,7 +292,7 @@ function updateSkyEnv(force) {
 
 /* ---------------- 海 ---------------- */
 const SEA_U = {
-  time: { value: 0 }, depthTex: { value: null }, depthS: { value: 960 }, depthO: { value: new THREE.Vector2(-70, -90) }, sunDir: SKY_U.sunDir,
+  time: { value: 0 }, depthTex: { value: null }, depthS: { value: DEPTH_S }, depthO: { value: new THREE.Vector2(DEPTH_O[0], DEPTH_O[1]) }, sunDir: SKY_U.sunDir,
   sunCol: { value: new THREE.Color(1, 0.95, 0.85) }, deepCol: { value: lin(0x0f3f63) }, shallowCol: { value: lin(0x2a9a9a) }, foamCol: { value: new THREE.Color(0.9, 0.95, 0.95) },
   light: { value: 1 }, waves: { value: 1 }, envCube: { value: null }, night: SKY_U.night,
   fogColor: { value: new THREE.Color() }, fogDensity: { value: 0.001 }

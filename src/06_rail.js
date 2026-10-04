@@ -5,12 +5,18 @@
    ========================================================================== */
 const TRACK_Z = [-65, -55]; // 镇区：0 = 外侧（北轨，顺 s 方向），1 = 内侧（南轨，逆 s 方向）
 const RAIL_Y = TOWN_Y + 0.2, PLAT_Y = TOWN_Y + 1.3;
-const RAIL_X0 = -178, RAIL_X1 = 150;
+const RAIL_X0 = -125, RAIL_X1 = 108;
 const CROSSINGS = []; // {id, x, z, s, active, arms:[], lamps:[], t}
 const STATION = { x: 61 };
-const RAIL_CTRL = [[-178, -60], [-120, -60], [-60, -60], [0, -60], [60, -60], [120, -60], [150, -60], [170, -64], [180, -80], [168, -102], [138, -118], [116, -142], [106, -170], [103, -197], [94, -225], [80, -252], [62, -278], [40, -300], [14, -318], [-16, -334], [-50, -348], [-88, -360], [-125, -366], [-162, -362], [-196, -350], [-230, -333], [-264, -316], [-300, -298], [-336, -276], [-366, -252], [-388, -220], [-400, -182], [-398, -140], [-382, -104], [-360, -78], [-330, -64], [-290, -60], [-240, -60]];
-const RAIL = { pts: [], len: 0, trk: [[], []], townS1: 0, cross: null, stops: [] };
-const RAIL_G = 0.025; // 最大坡度 2.5%
+const RAIL_CTRL = [[-125, -60], [-60, -60], [0, -60], [60, -60], [115, -60], [142, -58], [166, -50], [180, -33], [185, -8], [185, 22], [182, 52], [174, 74], [158, 90], [132, 100], [100, 101], [50, 101], [0, 101], [-50, 101], [-100, 101], [-134, 97], [-158, 82], [-174, 58], [-179, 25], [-178, -12], [-170, -38], [-153, -55]];
+const RAIL = { pts: [], len: 0, trk: [[], []], townS1: 0, cross: null, stops: [], xings: [] };
+// 镇外的人行道口（樱花广场 → 海滩）
+const RAIL_XINGS = [{ id: 'B', x: 0, z: 101, w: 6.4 }];
+// s 是否靠近镇外道口（公路平交道或人行道口）
+function railNearXing(s, d) { const L = RAIL.len; const near = (c) => { const ds = Math.abs(s - c); return Math.min(ds, L - ds) < d; }; return (RAIL.cross && near(RAIL.cross.s)) || RAIL.xings.some(x => near(x.s)); }
+const RAIL_G = 0.03; // 最大坡度 30‰（地方线常见）
+// 轨面最低高度：跨港口处抬高，让渔船能从桥下进出
+function railMinY(x, z) { return x > 124 && z > -40 && z < 66 ? 4.8 : 2.6; }
 
 function closedCatmull(P, spacing) {
   const out = []; const n = P.length;
@@ -34,10 +40,10 @@ function railSep(s) {
 /* 预规划（道路数据之前）：按自然地形求铁路纵断面，并找出与环岛公路的交点，让公路在交点处降到轨面高度 */
 function railPrep() {
   const xz = closedCatmull(RAIL_CTRL, 2); const n = xz.length;
-  const town = (i) => xz[i][0] > -182 && xz[i][0] < 152 && Math.abs(xz[i][1] + 60) < 0.8;
-  let y = xz.map(p => Math.max(2.6, terrainNatural(p[0], p[1])));
+  const town = (i) => xz[i][0] > RAIL_X0 - 2 && xz[i][0] < RAIL_X1 + 2 && Math.abs(xz[i][1] + 60) < 0.8;
+  let y = xz.map(p => Math.max(railMinY(p[0], p[1]), terrainNatural(p[0], p[1])));
   for (let pass = 0; pass < 4; pass++) { const ny = y.slice(); for (let i = 0; i < n; i++) { let a = 0; for (let k = -30; k <= 30; k++) a += y[(i + k + n) % n]; ny[i] = a / 61; } y = ny; }
-  for (let i = 0; i < n; i++) if (town(i)) y[i] = TOWN_Y;
+  for (let i = 0; i < n; i++) if (town(i)) y[i] = TOWN_Y; else if (railMinY(xz[i][0], xz[i][1]) > 3) y[i] = railMinY(xz[i][0], xz[i][1]);
   const seg = (i, j) => Math.hypot(xz[i][0] - xz[j][0], xz[i][1] - xz[j][1]);
   for (let it = 0; it < 12; it++) {
     for (let k = 1; k <= n; k++) { const i = k % n, j = k - 1; if (town(i)) continue; const d = seg(i, j) * RAIL_G; y[i] = clamp(y[i], y[j] - d, y[j] + d); }
@@ -51,11 +57,11 @@ function buildRailData() {
   const xz = closedCatmull(RAIL_CTRL, 2); const n = xz.length;
   const S = [0]; for (let i = 1; i < n; i++) S.push(S[i - 1] + Math.hypot(xz[i][0] - xz[i - 1][0], xz[i][1] - xz[i - 1][1]));
   const L = S[n - 1] + Math.hypot(xz[0][0] - xz[n - 1][0], xz[0][1] - xz[n - 1][1]);
-  const town = (i) => xz[i][0] > -182 && xz[i][0] < 152 && Math.abs(xz[i][1] + 60) < 0.8;
+  const town = (i) => xz[i][0] > RAIL_X0 - 2 && xz[i][0] < RAIL_X1 + 2 && Math.abs(xz[i][1] + 60) < 0.8;
   const gnd = (x, z) => terrainH(x, z); // 已包含道路填挖
-  let y = xz.map(p => Math.max(2.6, gnd(p[0], p[1])));
+  let y = xz.map(p => Math.max(railMinY(p[0], p[1]), gnd(p[0], p[1])));
   for (let pass = 0; pass < 4; pass++) { const ny = y.slice(); for (let i = 0; i < n; i++) { let a = 0; for (let k = -30; k <= 30; k++) a += y[(i + k + n) % n]; ny[i] = a / 61; } y = ny; }
-  const fix = new Map(); for (let i = 0; i < n; i++) if (town(i)) fix.set(i, TOWN_Y);
+  const fix = new Map(); for (let i = 0; i < n; i++) if (town(i)) fix.set(i, TOWN_Y); else if (railMinY(xz[i][0], xz[i][1]) > 3) fix.set(i, railMinY(xz[i][0], xz[i][1]));
   // 与环岛公路的平交道：轨面与路面同高
   const road = ROADS[0]; let best = 1e9, bi = -1, bp = null;
   for (let i = 0; i < n; i++) { if (town(i)) continue; for (const p of road.pts) { const d = Math.hypot(p[0] - xz[i][0], p[2] - xz[i][1]); if (d < best) { best = d; bi = i; bp = p; } } }
@@ -76,7 +82,7 @@ function buildRailData() {
     else sepType = diff > 0 ? 'tun' : 'bri';
   }
   // 结构判定
-  const f = []; for (let i = 0; i < n; i++) { const t = gnd(xz[i][0], xz[i][1]); f.push(town(i) ? 'town' : t - y[i] > 7 ? 'tun' : y[i] - t > 6 ? 'bri' : 'grd'); }
+  const f = []; for (let i = 0; i < n; i++) { const t = gnd(xz[i][0], xz[i][1]); f.push(town(i) ? 'town' : t - y[i] > 7 ? 'tun' : (y[i] - t > 6 || riverDist(xz[i][0], xz[i][1]) < 10) ? 'bri' : 'grd'); }
   const runs = (val, minLen, repl) => { let i = 0; while (i < n) { if (f[i] !== val) { i++; continue; } let j = i; while (j < n && f[j] === val) j++; if (j - i < minLen) for (let k = i; k < j; k++) f[k] = repl; i = j; } };
   if (sepType) { const span = sepType === 'tun' ? 14 : 10; for (let k = -span; k <= span; k++) f[(bi + k + n) % n] = sepType; RAIL.over = { i: bi, type: sepType }; }
   runs('tun', 16, 'grd'); runs('bri', 6, 'grd');
@@ -89,6 +95,7 @@ function buildRailData() {
   RAIL.len = L;
   { let i = 0; while (i < n && RAIL.pts[i].f === 'town') i++; RAIL.townS1 = RAIL.pts[Math.max(0, i - 1)].s; }
   if (RAIL.cross) RAIL.cross.s = S[RAIL.cross.i];
+  for (const x of RAIL_XINGS) { const s0 = railNearestS(x.x, x.z); const p = railAt(s0); RAIL.xings.push(Object.assign({}, x, { s: s0, x: p.x, z: p.z, y: p.y })); }
   // 铁路隧道覆土下限
   for (const p of RAIL.pts) if (p.f === 'tun') addTunnelCover(p.x, p.z, p.y + 9, 7);
   for (const p of RAIL.pts) if (p.f === 'grd') addClearance(p.x, p.z, p.y - 0.32, 5);
@@ -109,10 +116,10 @@ function buildRailData() {
   // 各轨道中心线（左手通行：0 号轨在 s 方向左侧）
   for (const p of RAIL.pts) { const o = railSep(p.s) / 2; RAIL.trk[0].push([p.x + p.lx * o, p.y, p.z + p.lz * o]); RAIL.trk[1].push([p.x - p.lx * o, p.y, p.z - p.lz * o]); }
 }
-/* 车站：镇区樱丘站（岛式站台）+ 北岸潮见崎站、西岸西浜站（相对式站台），选在平缓的路基段 */
+/* 车站：镇区樱丘站（岛式站台）+ 海边的汐见浜站、水田边的稻穗站（相对式站台），选在平缓的路基段 */
 function planRailStops() {
   RAIL.stops.push({ name: '樱丘', roman: 'SAKURAGAOKA', code: 'S07', s: railNearestS(STATION.x, -60), half: 31, island: true });
-  for (const [name, roman, code, tx, tz] of [['潮见崎', 'SHIOMISAKI', 'S08', -125, -366], ['西浜', 'NISHIHAMA', 'S09', -398, -140]]) {
+  for (const [name, roman, code, tx, tz] of [['汐见浜', 'SHIOMIHAMA', 'S08', 60, 101], ['稻穗', 'INAHO', 'S09', -178, 8]]) {
     const P = RAIL.pts, n = P.length; const s0 = railNearestS(tx, tz); let best = null;
     for (let i = 0; i < n; i++) {
       const c = P[i]; const ds = Math.abs(c.s - s0); if (ds > 220) continue;
@@ -157,7 +164,7 @@ function railRuns() { const P = RAIL.pts, out = []; let i = 0; while (i < P.leng
 function buildTracks() {
   const P = RAIL.pts, n = P.length;
   const townGaps = [[-4.6, 4.6], [95.4, 104.6], [22.6, 26.6]];
-  const inGap = (p) => (p.f === 'town' && townGaps.some(g => p.x > g[0] && p.x < g[1])) || (RAIL.cross && Math.abs(p.s - RAIL.cross.s) < 6.5);
+  const inGap = (p) => (p.f === 'town' && townGaps.some(g => p.x > g[0] && p.x < g[1])) || (RAIL.cross && Math.abs(p.s - RAIL.cross.s) < 6.5) || RAIL.xings.some(x => Math.abs(p.s - x.s) < x.w / 2 + 0.2);
   for (const k of [0, 1]) {
     const path = railPath(k, 0, n); // 闭合：多取一个点
     // 道砟（梯形截面）
@@ -195,6 +202,13 @@ function buildTracks() {
     K.box('concrete', 0, 0.1, 0, 12.5, 0.2, railSep(c.s) + 7, 0xb9b5ad, { wuv: 0.6, solid: { walk: true } });
     for (const sd of [-1, 1]) for (const r of [-0.62, 0.62]) K.box('vcNoShadow', 0, 0.205, sd * railSep(c.s) / 2 + r * 0.9, 12.5, 0.01, 0.12, 0x3a3a3a);
     buildCrossingAt('W', c.x, c.y, c.z, Math.atan2(-p.tz, p.tx), railSep(c.s) / 2 + 4.2, 4.6, c.s);
+  }
+  // 人行道口：铺板 + 警报器 + 栏杆
+  for (const c of RAIL.xings) {
+    const p = railAt(c.s); const ry = Math.atan2(-p.tz, p.tx); const K = new Kit(c.x, c.y, c.z, ry);
+    K.box('concrete', 0, 0.1, 0, c.w, 0.2, railSep(c.s) + 6, 0xb9b5ad, { wuv: 0.6, solid: { walk: true } });
+    for (const sd of [-1, 1]) for (const r of [-0.62, 0.62]) K.box('vcNoShadow', 0, 0.205, sd * railSep(c.s) / 2 + r * 0.9, c.w, 0.01, 0.12, 0x3a3a3a);
+    buildCrossingAt(c.id, c.x, c.y, c.z, ry, railSep(c.s) / 2 + 3.2, c.w / 2 + 0.3, c.s);
   }
   buildRailStations();
   buildCatenary();
@@ -243,7 +257,7 @@ function buildCatenary() {
     if (p.s - last < 42) continue;
     if (p.f === 'tun') { last = p.s; attach[0].push(null); attach[1].push(null); continue; }
     if (p.f === 'town' && (Math.abs(p.x) < 7 || Math.abs(p.x - 100) < 7 || Math.abs(p.x - 24.6) < 5 || Math.abs(p.x + 74.8) < 12)) continue;
-    if (RAIL.cross && Math.abs(p.s - RAIL.cross.s) < 10) continue;
+    if (railNearXing(p.s, 10)) continue;
     last = p.s;
     const half = railSep(p.s) / 2 + 2.6; const K = new Kit(p.x, p.y, p.z, Math.atan2(-p.tz, p.tx));
     for (const sd of [-1, 1]) { K.cyl('concrete', 0, 3.6, sd * half, 0.16, 7.2, 0xc9c9c4, { rt: 0.75, seg: 8 }); }
@@ -303,7 +317,8 @@ function buildRailStations() {
       for (const x of [-8, 8]) { for (const f of [-1, 1]) K.plane('sign', x, 2.0, f * 0.04, 2.4, 0.94, 0xffffff, { uvr: uv, ry: f > 0 ? 0 : Math.PI }); K.box('vc', x, 2.0, 0, 2.5, 1.04, 0.06, 0x5a6670); for (const r of [-1, 1]) K.box('vc', x + r * 1.1, 0.75, 0, 0.08, 1.5, 0.08, 0x5a6670); }
       for (const x of [-12, 0, 12]) { K.cyl('paint', x, 1.8, back, 0.06, 3.6, 0x5a6670, { seg: 8 }); K.box('glow', x, 3.55, back - sd * 0.3, 0.5, 0.06, 0.16, 0xfafafa); const hp = K.w(x, 3.4, back - sd * 0.3); addHalo(hp[0], hp[1], hp[2], 1.8, 0xf2f6ff); const lp = K.w(x, 0, back - sd * 0.6); addLightPool(lp[0], c.y + 1.3, lp[2], 3.5, 0xe8f0ff); }
     }
-    const pl = railAt(st.s); addPlace(st.name + '站', pl.x + pl.lx * (railSep(st.s) / 2 + 9), pl.z + pl.lz * (railSep(st.s) / 2 + 9), ry, 'station2');
+    const pl = railAt(st.s); const inl = islandC(pl.x + pl.lx * 20, pl.z + pl.lz * 20) > islandC(pl.x - pl.lx * 20, pl.z - pl.lz * 20) ? 1 : -1; // 放在岛内一侧
+    addPlace(st.name + '站', pl.x + pl.lx * inl * (railSep(st.s) / 2 + 6.5), pl.z + pl.lz * inl * (railSep(st.s) / 2 + 6.5), Math.atan2(-pl.lx * inl, -pl.lz * inl), 'station2');
   });
 }
 /* 线路两侧的防护栅栏（镇外、路基段），在道口与车站处断开 */
@@ -314,7 +329,7 @@ function buildRailFences() {
       let last = -99, prev = null;
       for (let i = i0; i <= i1; i++) {
         const p = RAIL.pts[i]; if (p.s - last < 3) continue;
-        if (RAIL.cross && Math.abs(p.s - RAIL.cross.s) < 12) { prev = null; continue; }
+        if (railNearXing(p.s, 12)) { prev = null; continue; }
         if (RAIL.stops.some(st => Math.abs(p.s - st.s) < st.half + 6)) { prev = null; continue; }
         last = p.s; const o = sd * (railSep(p.s) / 2 + 3.4); const x = p.x + p.lx * o, z = p.z + p.lz * o; const y = terrainH(x, z);
         WK.cyl('paint', x, y + 0.6, z, 0.035, 1.2, 0x6d7a72, { seg: 6 });

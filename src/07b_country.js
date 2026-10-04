@@ -6,43 +6,48 @@ regMat('dirt', pm(TEX.ground, { roughness: 1 }), { tint: 0.4 });
 regMat('vinyl', new THREE.MeshStandardMaterial({ color: lin(0xeef2f2), roughness: 0.3, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, envMapIntensity: 1.2 }), { cast: false });
 function buildCountryside() {
   seed(314);
-  // —— 水田格 ——
-  const W = 24, D = 17;
-  for (let x = -322; x < -140; x += W + 1.6) for (let z = -36; z < 112; z += D + 1.6) {
+  // —— 水田格：环岛公路与河西民居之间 ——
+  const W = 17, D = 13;
+  for (const x of [-152, -133.8]) for (let z = -46; z < 78; z += D + 1.6) {
     const cx = x + W / 2, cz = z + D / 2;
-    if (islandC(cx, cz) < 0.1 || riverDist(cx, cz) < 16) continue;
-    let ok = true; for (const [ox, oz] of [[0, 0], [-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2], [0, -D / 2], [0, D / 2]]) { if (roadSample(cx + ox, cz + oz) > 0.01) ok = false; }
-    if (!ok || chance(0.12)) continue;
+    if (islandC(cx, cz) < 0.06 || riverDist(cx, cz) < 16) continue;
+    let ok = true; for (const [ox, oz] of [[0, 0], [-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2], [0, -D / 2], [0, D / 2]]) { if (roadSample(cx + ox, cz + oz) > 0.3 || (x > -140 && (cz > 64 || cz < -34))) ok = false; }
+    if (!ok) continue;
     let y = -1e9; for (const [ox, oz] of [[0, 0], [-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2]]) y = Math.max(y, terrainH(cx + ox, cz + oz));
-    WK.box('paddyMat', cx, y + 0.07, cz, W, 0.02, D, 0xffffff, { wuv: 0.18 });
-    for (const s of [-1, 1]) { WK.box('dirt', cx, y + 0.12, cz + s * (D / 2 + 0.4), W + 1.6, 0.36, 0.8, 0xb0a080, { wuv: 0.4 }); WK.box('dirt', cx + s * (W / 2 + 0.4), y + 0.12, cz, 0.8, 0.36, D, 0xb0a080, { wuv: 0.4 }); }
+    FARM.cells.push({ x0: x, x1: x + W, z0: z, z1: z + D, y, cx, cz });
+  }
+  // 两格改成温室
+  const gh = [FARM.cells[2], FARM.cells[FARM.cells.length - 3]].filter(Boolean);
+  for (const c of FARM.cells) {
+    const { cx, cz, y } = c;
+    for (const sd of [-1, 1]) { WK.box('dirt', cx, y + 0.12, cz + sd * (D / 2 + 0.4), W + 1.6, 0.36, 0.8, 0xb0a080, { wuv: 0.4, noCol: true }); WK.box('dirt', cx + sd * (W / 2 + 0.4), y + 0.12, cz, 0.8, 0.36, D, 0xb0a080, { wuv: 0.4, noCol: true }); }
+    if (gh.includes(c)) {
+      for (const oz of [-3.2, 3.2]) {
+        const g = new THREE.CylinderGeometry(2.8, 2.8, 15, 16, 1, true, -Math.PI / 2, Math.PI); g.rotateZ(Math.PI / 2);
+        WK.geo('vinyl', g, cx, y, cz + oz, 0xffffff);
+        for (let i = 0; i <= 5; i++) WK.geo('rail', new THREE.TorusGeometry(2.8, 0.03, 4, 16, Math.PI), cx - 7.5 + i * 3, y, cz + oz, 0xb0b4b8, { ry: Math.PI / 2 });
+        for (let i = 0; i < 3; i++) WK.box('vcNoShadow', cx, y + 0.3, cz + oz - 1.6 + i * 1.6, 14, 0.4, 0.6, 0x4f7a3a, { noCol: true });
+        addCollider(cx, cz + oz, 7.5, 2.8, 0, y, y + 2.8, 'wall');
+      }
+      WK.box('dirt', cx, y + 0.05, cz, W, 0.1, D, 0xa89878, { wuv: 0.4, noCol: true });
+      c.gh = true; continue;
+    }
+    WK.box('paddyMat', cx, y + 0.07, cz, W, 0.02, D, 0xffffff, { wuv: 0.18, noCol: true });
     addCollider(cx, cz, W / 2, D / 2, 0, y - 1, y + 0.08, { walk: true });
-    FARM.cells.push({ x0: x, x1: x + W, z0: z, z1: z + D, y });
   }
+  FARM.cells = FARM.cells.filter(c => !c.gh);
+  // 田间小路（农用道）与水渠
+  WK.box('gravel', -135.2, 2.42, 16, 1.8, 0.06, 124, 0xd8c8a8, { wuv: 0.35, noCol: true });
+  WK.box('concrete', -114.6, 1.9, 16, 1.0, 0.6, 124, 0xb8b4ac, { wuv: 0.5, noCol: true }); WK.box('vcNoShadow', -114.6, 2.18, 16, 0.6, 0.02, 124, 0x5a7a7a, { noCol: true });
   // —— 农舍与仓房 ——
-  const farmHouses = [[-205, -52, Math.PI / 2], [-262, 6, 0], [-188, 60, -Math.PI / 2], [-300, -70, Math.PI / 2], [-236, 112, Math.PI]];
-  for (const [x, z, ry] of farmHouses) {
-    if (roadSample(x, z) > 0.05 || FARM.paddy(x, z)) continue;
-    buildHouse(x, z, ry, { w: 11, d: 9, yard: 3.0, wall: chance(0.5) ? 'woodwall' : 'plaster', wc: 0xe8e2d6, roof: 0x3a3f46, balcony: false, tree: 'green' });
-    const K = new Kit(x, terrainH(x, z), z, ry);
-    // 仓房
-    K.box('metal', 8.5, 2.2, -4, 6, 4.4, 5, 0xa8b0b6, { solid: true, wuv: 0.5 }); gableRoof(K, 8.5, 4.4, -4, 6, 5, 1.2, 0x6a7a86, Math.PI / 2, 0.3);
-    K.box('wood', 8.5, 1.5, -1.45, 3.5, 3, 0.1, 0x5a4636);
-    if (chance(0.7)) { const p = K.w(-6, 0, 3.5); spawnVehicleLater('keitruck', p[0], p[2], ry + Math.PI / 2); }
-  }
-  // —— 温室 ——
-  for (const [x, z] of [[-228, -58], [-228, -48], [-228, -38], [-292, 92], [-292, 102]]) {
-    if (roadSample(x, z) > 0.05) continue; const y = terrainH(x, z);
-    const g = new THREE.CylinderGeometry(3, 3, 22, 16, 1, true, -Math.PI / 2, Math.PI); g.rotateZ(Math.PI / 2);
-    WK.geo('vinyl', g, x, y, z, 0xffffff, { ry: Math.PI / 2 });
-    for (let i = 0; i <= 5; i++) WK.geo('rail', new THREE.TorusGeometry(3, 0.03, 4, 16, Math.PI), x - 11 + i * 4.4, y, z, 0xb0b4b8, { ry: Math.PI / 2 });
-    for (let i = 0; i < 3; i++) WK.box('vcNoShadow', x, y + 0.3, z - 2 + i * 2, 21, 0.4, 0.7, 0x4f7a3a);
-    addCollider(x, z, 11, 3, 0, y, y + 3, 'wall');
+  for (const [x, z, ry] of [[-125, 78, 0], [-125, -35, 0]]) {
+    if (roadSample(x, z) > 0.05) continue;
+    buildHouse(x, z, ry, { w: 10, d: 8, yard: 2.4, wall: 'woodwall', wc: 0xe8e2d6, roof: 0x3a3f46, balcony: false, tree: 'green' });
   }
   // 地藏小祠与稻草人
-  { const x = -170, z = 20; const y = terrainH(x, z); const K = new Kit(x, y, z, 0.3); K.box('wood', 0, 0.6, 0, 1.4, 1.2, 1.0, 0x6a4a2a); K.geo('roof', PRISM, 0, 1.2, 0, 0x3a3f46, { sx: 1.8, sy: 0.6, sz: 1.4 }); jizo(x, z + 0.1, y + 0.2); }
-  for (let i = 0; i < 4; i++) { const c = FARM.cells[RI(0, FARM.cells.length - 1)]; if (!c) break; const x = (c.x0 + c.x1) / 2 + R(-6, 6), z = (c.z0 + c.z1) / 2 + R(-4, 4); const K = new Kit(x, c.y, z, R(0, 3)); K.box('wood', 0, 0.8, 0, 0.08, 1.6, 0.08, 0x8a6a4a); K.box('wood', 0, 1.3, 0, 1.2, 0.07, 0.07, 0x8a6a4a); K.box('vc', 0, 1.15, 0, 0.5, 0.6, 0.25, pick([0x3a5a8a, 0xb84a3a, 0x6a7a4a])); K.sph('vc', 0, 1.62, 0, 0.16, 0.18, 0.16, 0xe8d8b0); K.cyl('vc', 0, 1.78, 0, 0.32, 0.12, 0xd8c890, { rt: 0.1, seg: 10 }); }
-  addPlace('西部田园', -205, 20, -Math.PI / 2, 'farm');
+  { const x = -116, z = 80; const y = terrainH(x, z); const K = new Kit(x, y, z, Math.PI); K.box('wood', 0, 0.6, 0, 1.4, 1.2, 1.0, 0x6a4a2a); K.geo('roof', PRISM, 0, 1.2, 0, 0x3a3f46, { sx: 1.8, sy: 0.6, sz: 1.4 }); jizo(x, z + 0.1, y + 0.2); }
+  for (let i = 0; i < 4; i++) { const c = FARM.cells[RI(0, FARM.cells.length - 1)]; if (!c) break; const x = (c.x0 + c.x1) / 2 + R(-5, 5), z = (c.z0 + c.z1) / 2 + R(-3, 3); const K = new Kit(x, c.y, z, R(0, 3)); K.box('wood', 0, 0.8, 0, 0.08, 1.6, 0.08, 0x8a6a4a); K.box('wood', 0, 1.3, 0, 1.2, 0.07, 0.07, 0x8a6a4a); K.box('vc', 0, 1.15, 0, 0.5, 0.6, 0.25, pick([0x3a5a8a, 0xb84a3a, 0x6a7a4a])); K.sph('vc', 0, 1.62, 0, 0.16, 0.18, 0.16, 0xe8d8b0); K.cyl('vc', 0, 1.78, 0, 0.32, 0.12, 0xd8c890, { rt: 0.1, seg: 10 }); }
+  addPlace('稻穗水田', -126, 20, -Math.PI / 2, 'farm');
   buildGasStation();
   buildViewpoint();
   // 环岛公路的巴士站与自动售货机
@@ -62,7 +67,7 @@ function spawnVehicleLater(t, x, z, yaw) { _laterVeh.push([t, x, z, yaw]); }
 function buildGasStation() {
   const ring = ROADS[0]; if (!ring) return;
   // 选在环岛路西南段、靠近镇子的一侧
-  let best = null; for (const p of ring.pts) { const d = Math.hypot(p[0] + 150, p[2] - 96); if (!best || d < best.d) best = { p, d }; }
+  let best = null; for (const p of ring.pts) { const d = Math.hypot(p[0] + 44, p[2] - 86); if (!best || d < best.d) best = { p, d }; }
   const p = best.p; const lx = p[4], lz = -p[3]; const side = islandC(p[0] + lx * 20, p[2] + lz * 20) > islandC(p[0] - lx * 20, p[2] - lz * 20) ? 1 : -1;
   const cx = p[0] + lx * side * (ring.hw + 14), cz = p[2] + lz * side * (ring.hw + 14); const y = p[1];
   const ry = Math.atan2(-lx * side, -lz * side); // 正面朝向道路
@@ -94,22 +99,30 @@ function buildGasStation() {
   const pv = K.w(-6, 0, 8.5); spawnVehicleLater('sedan', pv[0], pv[2], ry + Math.PI / 2);
   const pl = K.w(0, 0, 14); addPlace('海风石油加油站', pl[0], pl[2], ry + Math.PI, 'gas');
 }
+let VIEW_TRAIL = null;
 function buildViewpoint() {
-  const ring = ROADS[0]; if (!ring) return;
-  let top = ring.pts[0]; for (const p of ring.pts) if (p[6] === 'grd' && p[1] > top[1] && p[5] > 200 && p[5] < ring.len - 200) top = p;
-  const lx = top[4], lz = -top[3]; const side = islandC(top[0] + lx * 30, top[2] + lz * 30) < islandC(top[0] - lx * 30, top[2] - lz * 30) ? 1 : -1;
-  const cx = top[0] + lx * side * (ring.hw + 9), cz = top[2] + lz * side * (ring.hw + 9);
-  const K = new Kit(cx, top[1], cz, Math.atan2(lx * side, lz * side));
-  K.box('concrete', 0, -0.4, 0, 22, 0.9, 12, 0xc8c4bc, { solid: { walk: true }, wuv: 0.3 });
-  K.box('asphalt', 0, 0.06, -1, 22, 0.02, 9, 0xffffff, { wuv: 0.22 });
-  for (let i = -5; i <= 5; i++) K.box('marking', i * 2.2, 0.075, -1, 0.12, 0.01, 4.5, 0xf2f2ee);
-  K.box('wood', 0, 0.06, 4.6, 22, 0.12, 2.6, 0xb08a60, { wuv: 0.6 });
-  for (let i = 0; i <= 11; i++) K.box('rail', -11 + i * 2, 0.6, 5.9, 0.08, 1.2, 0.08, 0x9aa0a6);
-  K.box('rail', 0, 1.15, 5.9, 22, 0.08, 0.1, 0x9aa0a6); addCollider(...K.w(0, 0, 5.9).filter((_, i) => i !== 1), 11, 0.1, K.ry, top[1], top[1] + 1.2, 'wall');
-  const tp = K.w(3, 0, 5.0); const T = new Kit(tp[0], top[1], tp[2], K.ry); T.cyl('paint', 0, 0.6, 0, 0.08, 1.2, 0x3a6a4a, { seg: 8 }); T.cyl('paint', 0, 1.3, 0.1, 0.12, 0.5, 0x3a6a4a, { rx: 1.3, seg: 10 });
-  const b1 = K.w(-4, 0, 4.3); parkBench(b1[0], b1[2], K.ry, top[1] + 0.12);
+  // 神社东侧的山道：石阶沿等高线绕上星见山顶
+  let pk = [0, 0, -1]; for (let x = -60; x < 30; x += 2) for (let z = -190; z < -130; z += 2) { const h = terrainH(x, z); if (h > pk[2] && islandC(x, z) > 0.08) pk = [x, z, h]; }
+  const trail = [[-23, -126], [-12, -134], [-5, -146], [-9, -156], [pk[0] + 6, pk[1] + 4]];
+  const pts = catmull(trail, 0.7); let lastY = -1e9; VIEW_TRAIL = pts;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x, z] = pts[i], [x2, z2] = pts[i + 1]; const y = terrainH(x, z); const ry = Math.atan2(x2 - x, z2 - z);
+    WK.box('gravel', x, y + 0.02, z, 1.6, 0.05, 0.9, 0xd8cdb8, { ry, wuv: 0.4, noCol: true });
+    if (y - lastY > 0.32) { WK.box('wood', x, y + 0.06, z, 1.7, 0.14, 0.14, 0x6a4a2a, { ry, noCol: true }); lastY = y; }
+    if (i % 4 === 0) for (const sd of [-1, 1]) { const px = x + Math.cos(ry) * sd * 1.0, pz = z - Math.sin(ry) * sd * 1.0; WK.cyl('wood', px, terrainH(px, pz) + 0.3, pz, 0.05, 0.6, 0x7a5a3a, { seg: 6, noCol: true }); }
+  }
+  const top = [pk[0], pk[2], pk[1]];
+  const cx = pk[0], cz = pk[1]; const ry = Math.atan2(20 - cx, 10 - cz); // 面向镇子
+  const lx = Math.sin(ry), lz = Math.cos(ry);
+  const K = new Kit(cx, pk[2] + 0.1, cz, ry + Math.PI);
+  K.box('wood', 0, -0.2, 0, 9, 0.4, 6, 0xb08a60, { solid: { walk: true }, wuv: 0.6 });
+  for (let i = 0; i <= 9; i++) K.box('wood', -4.5 + i, 0.55, -2.95, 0.09, 1.1, 0.09, 0x6a4a2a);
+  K.box('wood', 0, 1.1, -2.95, 9, 0.09, 0.12, 0x6a4a2a, { noCol: true }); addCollider(...K.w(0, 0, -2.95).filter((_, i) => i !== 1), 4.5, 0.1, K.ry, pk[2], pk[2] + 1.2, 'wall');
+  for (const sd of [-1, 1]) { K.box('wood', sd * 4.45, 1.1, 0, 0.12, 0.09, 6, 0x6a4a2a, { noCol: true }); addCollider(...K.w(sd * 4.45, 0, 0).filter((_, i) => i !== 1), 0.1, 3, K.ry, pk[2], pk[2] + 1.2, 'wall'); }
+  const tp = K.w(2, 0, -2.2); const T = new Kit(tp[0], pk[2] + 0.1, tp[2], K.ry); T.cyl('paint', 0, 0.6, 0, 0.08, 1.2, 0x3a6a4a, { seg: 8 }); T.cyl('paint', 0, 1.3, 0.1, 0.12, 0.5, 0x3a6a4a, { rx: 1.3, seg: 10 });
+  const b1 = K.w(-2, 0, -1.6); parkBench(b1[0], b1[2], K.ry + Math.PI, pk[2] + 0.1);
   const sUV = allocSign(360, 140, (g, w, h) => { g.fillStyle = '#5a3a20'; g.fillRect(0, 0, w, h); g.fillStyle = '#f6efe0'; g.font = `400 52px ${FONT.wei}`; g.textAlign = 'center'; g.fillText('星见山观景台', w / 2, 70); g.font = `500 20px ${FONT.sans}`; g.fillText('海拔 ' + Math.round(top[1]) + ' m', w / 2, 112); });
-  K.box('wood', -8, 1.1, 3.4, 0.12, 2.2, 0.12, 0x5a3a20); K.plane('sign', -8, 2.0, 3.48, 1.6, 0.62, 0xffffff, { uvr: sUV });
-  const pl = K.w(0, 0, 1.5); addPlace('星见山观景台', pl[0], pl[2], K.ry, 'view');
-  addInteract({ x: tp[0], z: tp[2], r: 1.6, label: () => '看看投币望远镜', act: () => { if (S().coins < 1) { UI.toast('需要一枚贝壳币。'); return; } GAME.coins(-1); PLAYER.camDist = 9; PLAYER.camYaw = K.ry + Math.PI; PLAYER.camPitch = 0.05; UI.toast('镜头里，樱丘町的屋顶连成一片，电车正从隧道里钻出来。'); } });
+  K.box('wood', 3.6, 1.1, 2.4, 0.12, 2.2, 0.12, 0x5a3a20); K.plane('sign', 3.6, 2.0, 2.46, 1.6, 0.62, 0xffffff, { uvr: sUV });
+  const pl = K.w(0, 0, 1.2); addPlace('星见山观景台', pl[0], pl[2], K.ry + Math.PI, 'view');
+  addInteract({ x: tp[0], z: tp[2], r: 1.6, label: () => '看看投币望远镜', act: () => { if (S().coins < 1) { UI.toast('需要一枚贝壳币。'); return; } GAME.coins(-1); PLAYER.camDist = 9; PLAYER.camYaw = K.ry + Math.PI; PLAYER.camPitch = 0.05; UI.toast('镜头里，樱丘町的屋顶连成一片，电车正沿着海边慢慢开过。'); } });
 }

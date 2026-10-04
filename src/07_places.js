@@ -81,14 +81,24 @@ function buildRiverbanks() {
       const top = Math.min(terrainH(mx + nx * s * 9, mz + nz * s * 9), TOWN_Y);
       const hgt = top + 0.9;
       WK.box('stone', mx + nx * s * 6.9, -0.9 + hgt / 2, mz + nz * s * 6.9, 0.6, hgt, L + 0.6, 0xc9c2b4, { ry, rz: s * 0.32, wuv: 0.4 });
-      // 堤岸栏杆
+      // 堤岸栏杆与河堤步道：遇到公路桥、铁路桥处断开
       if (top > 1.5) {
-        for (let k = 0; k <= Math.floor(L / 2.5); k++) { const t = k / Math.floor(L / 2.5); const px = a[0] + dx * t + nx * s * 8.5, pz = a[1] + dz * t + nz * s * 8.5; WK.box('paint', px, top + 0.45, pz, 0.08, 0.9, 0.08, 0x5d6b58); }
-        WK.box('paint', mx + nx * s * 8.5, top + 0.88, mz + nz * s * 8.5, 0.07, 0.07, L, 0x5d6b58, { ry });
-        WK.box('paint', mx + nx * s * 8.5, top + 0.5, mz + nz * s * 8.5, 0.05, 0.05, L, 0x5d6b58, { ry });
-        addCollider(mx + nx * s * 8.5, mz + nz * s * 8.5, 0.08, L / 2 + 0.3, ry, top, top + 1, 'wall');
-        // 河堤步道
-        WK.box('gravel', mx + nx * s * 11, top + 0.02, mz + nz * s * 11, 4, 0.04, L + 0.3, 0xead9c0, { ry, wuv: 0.35 });
+        const N = Math.max(1, Math.floor(L / 2.5)); const runs = []; let cur = null;
+        for (let k = 0; k <= N; k++) {
+          const t = k / N; const px = a[0] + dx * t + nx * s * 8.5, pz = a[1] + dz * t + nz * s * 8.5;
+          if (crossBlocked(px, pz)) { cur = null; continue; }
+          if (!cur) { cur = []; runs.push(cur); } cur.push([px, pz, t]);
+        }
+        for (const r of runs) {
+          for (const q of r) WK.box('paint', q[0], top + 0.45, q[1], 0.08, 0.9, 0.08, 0x5d6b58);
+          if (r.length < 2) continue;
+          const q0 = r[0], q1 = r[r.length - 1]; const cx = (q0[0] + q1[0]) / 2, cz = (q0[1] + q1[1]) / 2, len = Math.hypot(q1[0] - q0[0], q1[1] - q0[1]);
+          WK.box('paint', cx, top + 0.88, cz, 0.07, 0.07, len, 0x5d6b58, { ry, noCol: true });
+          WK.box('paint', cx, top + 0.5, cz, 0.05, 0.05, len, 0x5d6b58, { ry, noCol: true });
+          addCollider(cx, cz, 0.08, len / 2 + 0.05, ry, top, top + 1, 'wall');
+          const t0 = q0[2], t1 = q1[2]; const wx = a[0] + dx * (t0 + t1) / 2 + nx * s * 11, wz = a[1] + dz * (t0 + t1) / 2 + nz * s * 11;
+          WK.box('gravel', wx, top + 0.02, wz, 4, 0.04, len + 2.5, 0xead9c0, { ry, wuv: 0.35, noCol: true });
+        }
       }
     }
   }
@@ -101,15 +111,22 @@ function buildRiverbanks() {
   // 樱花隧道：东岸两排、西岸一排
   for (let z = -42; z <= 82; z += 9.5) {
     const rx = riverAtZ(z); if (Math.abs(z + 20) < 4 || Math.abs(z - 40) < 4) continue;
-    sakuraTree(rx + 9.0, z + R(-1, 1), R(1.0, 1.15), { cards: 1500 });
-    sakuraTree(rx + 13.4, z + 4.5 + R(-1, 1), R(0.95, 1.1), { cards: 1500 });
-    sakuraTree(rx - 9.6, z + 2 + R(-1, 1), R(0.95, 1.1), { cards: 1400 });
+    for (const [ox, oz, sc] of [[9.0, R(-1, 1), R(1.0, 1.15)], [13.4, 4.5 + R(-1, 1), R(0.95, 1.1)], [-9.6, 2 + R(-1, 1), R(0.95, 1.1)]]) {
+      const tx = rx + ox, tz = z + oz; if (crossBlocked(tx, tz) || occNear(tx, tz, 2.5)) continue; sakuraTree(tx, tz, sc);
+    }
     // 灯笼
-    if (Math.round(z) % 2 === 0) for (const s of [1, -1]) { const lx = rx + s * 11.2, lz = z + 2.2; bankLantern(lx, lz); }
+    if (Math.round(z) % 2 === 0) for (const s of [1, -1]) { const lx = rx + s * 11.2, lz = z + 2.2; if (!crossBlocked(lx, lz)) bankLantern(lx, lz); }
   }
   // 桥
   bridge(-20, 6.0); bridge(40, 7.6);
   addPlace('樱川河堤', riverAtZ(10) + 11, 10, Math.PI, 'river');
+}
+// 河岸设施是否会挡住桥（公路桥面或铁路）
+function crossBlocked(x, z) {
+  if (roadSample(x, z) > 0.02) return true;
+  for (const r of ROADS) for (let i = 0; i < r.pts.length; i += 2) { const p = r.pts[i]; if (Math.hypot(p[0] - x, p[2] - z) < r.hw + 2.5) return true; }
+  for (let i = 0; i < RAIL.pts.length; i += 2) { const p = RAIL.pts[i]; if (Math.hypot(p.x - x, p.z - z) < railSep(p.s) / 2 + 4.5) return true; }
+  return false;
 }
 function bankLantern(x, z) {
   const y = groundAt(x, z); const K = new Kit(x, y, z, 0);
@@ -365,26 +382,41 @@ function buildCape() {
 const SHELLS = [];
 function buildBeach() {
   // 广场 → 沙滩台阶
-  for (let i = 0; i < 8; i++) { const z = 82 + i * 0.9; const y = groundAt(0, z + 0.45); WK.box('stone', 0, y - 0.2, z + 0.45, 6, 0.4, 0.9, 0xd8d2c6, { wuv: 0.5 }); }
+  for (let i = 0; i < 6; i++) { const z = 105.5 + i * 0.9; const y = groundAt(0, z + 0.45); WK.box('stone', 0, y - 0.2, z + 0.45, 6, 0.4, 0.9, 0xd8d2c6, { wuv: 0.5 }); }
   // 木栈道
-  for (let i = 0; i < 18; i++) { const x = -30 + i * 3.4; const z = 104; const y = groundAt(x, z) + 0.25; WK.box('wood', x, y, z, 3.3, 0.12, 2.0, 0xc9a06a, { wuv: 0.6, solid: { walk: true } }); WK.box('wood', x, y - 0.4, z + 0.9, 0.12, 0.8, 0.12, 0x8a6a4a); }
+  for (let i = 0; i < 18; i++) { const x = -30 + i * 3.4; const z = 112; const y = groundAt(x, z) + 0.25; WK.box('wood', x, y, z, 3.3, 0.12, 2.0, 0xc9a06a, { wuv: 0.6, solid: { walk: true } }); WK.box('wood', x, y - 0.4, z + 0.9, 0.12, 0.8, 0.12, 0x8a6a4a); }
   // 冰室小屋（海盐冰室）
-  const K = new Kit(26, groundAt(26, 110), 110, Math.PI);
+  const K = new Kit(26, groundAt(26, 117), 117, Math.PI);
   K.box('wood', 0, 1.4, 1.5, 5, 2.8, 3, 0xf4f1ea, { solid: true, wuv: 0.5 });
   K.box('vc', 0, 2.9, 0.6, 5.6, 0.12, 2.6, 0x2a8f8f, { rx: 0.15 });
   K.box('wood', 0, 1.0, -0.05, 4, 0.1, 0.6, 0xc9a06a);
   const iUV = drawShopSign({ id: 'ice', cn: '海盐冰室', en: 'SEA SALT ICE', tel: '0898-25-0808', font: 'round', bg: '#9fd2ee', fg: '#26375e', ac: '#ffffff' }, 480, 90);
   K.plane('sign', 0, 2.45, 0.01 + 0.0, 4.2, 0.78, 0xffffff, { uvr: iUV });
   K.cyl('vc', -2.2, 1.1, -0.6, 0.18, 0.5, 0xf4c27a, { rt: 0.02 / 0.18, seg: 12, rx: Math.PI }); K.sph('vc', -2.2, 1.45, -0.6, 0.22, 0.22, 0.22, 0xf8f4f0);
-  SHOPS.push({ def: { id: 'ice', cn: '海盐冰室', hours: [10, 19] }, x: 26, z: 108.5, door: K.w(0, 0, -0.5), ry: 0, open(h) { return h >= 10 && h < 19; } });
+  SHOPS.push({ def: { id: 'ice', cn: '海盐冰室', hours: [10, 19] }, x: 26, z: 115.5, door: K.w(0, 0, -0.5), ry: 0, open(h) { return h >= 10 && h < 19; } });
   // 遮阳伞、躺椅
-  for (const [x, z] of [[-20, 120], [-8, 126], [6, 122], [40, 124], [52, 118]]) {
+  for (const [x, z] of [[-20, 126], [-8, 131], [8, 128], [42, 129], [54, 124]]) {
     const y = groundAt(x, z); const U = new Kit(x, y, z, R(0, 3));
     U.cyl('vc', 0, 1.3, 0, 0.04, 2.6, 0xffffff, { seg: 6, rz: 0.1 });
     const cone = new THREE.ConeGeometry(1.6, 0.6, 12, 1, true);
     U.geo('paint', cone, 0.2, 2.55, 0, pick([0xe48fa6, 0x2a8f8f, 0xf6d04d, 0xd9483b]), { rz: 0.1 });
     U.box('wood', 1.4, 0.25, 0.4, 0.7, 0.06, 1.8, 0xffffff, { rx: 0.1 });
   }
+  // 海之家：木板平台、苇帘、桌椅、旗子与冲脚水龙头
+  { const hx = -52, hz = 117; const y = groundAt(hx, hz); const H = new Kit(hx, y, hz, Math.PI);
+    H.box('wood', 0, 0.35, 0, 12, 0.3, 8, 0xc9a06a, { solid: { walk: true }, wuv: 0.6 });
+    for (const [px, pz] of [[-5.8, -3.8], [5.8, -3.8], [-5.8, 3.8], [5.8, 3.8], [0, -3.8], [0, 3.8]]) H.box('wood', px, 1.7, pz, 0.16, 2.7, 0.16, 0x8a6a4a);
+    H.box('vc', 0, 3.1, 0, 12.6, 0.12, 8.6, 0x2a8f8f, { rx: 0.06 }); H.box('vc', 0, 2.9, 4.2, 12.6, 0.4, 0.06, 0xf4f1ea);
+    H.box('wood', 0, 1.7, -3.9, 12, 2.6, 0.08, 0xd8c8a0); // 后墙（苇帘）
+    for (let i = 0; i < 4; i++) { const tx = -4.2 + i * 2.8; H.box('wood', tx, 1.05, 1, 1.6, 0.06, 0.9, 0xf2f2f0); H.box('vc', tx, 0.75, 1, 0.08, 0.7, 0.08, 0x777777); for (const sz of [0.2, 1.8]) H.box('paint', tx, 0.75, sz, 0.5, 0.06, 0.4, pick([0xe9483b, 0x2c7bd8, 0xf6d04d])); }
+    H.box('wood', -3, 1.0, -3.0, 5, 1.0, 0.8, 0xb08a60); for (let i = 0; i < 5; i++) H.box('vcNoShadow', -5 + i, 1.65, -3.2, 0.5, 0.3, 0.4, pick([0xf6d04d, 0xffffff, 0xe48fa6]));
+    const hUV = allocSign(400, 90, (g, w, h2) => { g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, w, h2); g.fillStyle = '#d9483b'; g.font = `900 58px ${FONT.sans}`; g.textAlign = 'center'; g.fillText('海之家 · 汐风', w / 2, 68); });
+    H.plane('sign', 0, 2.85, 4.24, 5.4, 1.2, 0xffffff, { uvr: hUV });
+    for (const fx of [-7.5, 7.5]) { H.cyl('vc', fx, 1.6, 4.5, 0.03, 3.2, 0xdddddd, { seg: 6 }); H.box('vcNoShadow', fx + 0.4, 2.7, 4.5, 0.75, 1.2, 0.02, fx < 0 ? 0xd9483b : 0x2c6ea0); }
+    for (let i = 0; i < 6; i++) H.box('paint', -5 + i * 2, 0.9, -4.3, 0.55, 1.4, 0.1, pick([0x2c7bd8, 0xf6d04d, 0xe9483b, 0x7ac27a]), { rz: 0.15 });
+    const sh = H.w(9, 0, 1); WK.cyl('paint', sh[0], y + 1.2, sh[2], 0.05, 2.4, 0x9aa0a6, { seg: 8 }); WK.box('paint', sh[0], y + 2.35, sh[2] + 0.25, 0.1, 0.1, 0.5, 0x9aa0a6); WK.box('concrete', sh[0], y + 0.06, sh[2], 1.6, 0.12, 1.6, 0xd8d4cc); }
+  // 沙滩上的浴巾与凉鞋
+  for (const [x, z] of [[-14, 129], [2, 133], [36, 132], [50, 127]]) { WK.box('vcNoShadow', x, groundAt(x, z) + 0.02, z, 0.9, 0.01, 1.8, pick([0xe48fa6, 0xf6d04d, 0x9fd2ee, 0xffffff]), { ry: R(-0.4, 0.4), noCol: true }); }
   // 救生塔、小船
   const T = new Kit(64, groundAt(64, 128), 128, Math.PI);
   for (const sx of [-0.7, 0.7]) for (const sz of [-0.7, 0.7]) T.box('wood', sx, 1.2, sz, 0.12, 2.4, 0.12, 0xffffff);
@@ -408,7 +440,7 @@ function buildBeach() {
   bottle.position.set(bx, by + 0.08, bz); bottle.rotation.z = Math.PI / 2 - 0.2; scene.add(bottle);
   BEACH.bottle = bottle;
   addInteract({ x: bx, z: bz, r: 1.4, cond: () => bottle.visible, label: () => '捡起漂流瓶', act: () => GAME.bottle() });
-  addPlace('月牙沙滩', 10, 112, Math.PI, 'beach');
+  addPlace('月牙沙滩', 10, 118, Math.PI, 'beach');
 }
 const BEACH = {};
 
@@ -421,7 +453,7 @@ function buildResidential() {
   const eastLots = [[30, -34, -Math.PI / 2], [30, 8, -Math.PI / 2], [30, 24, -Math.PI / 2], [44, -32, 0], [44, -12, 0], [56, -30, 0], [80, -30, 0], [84, -10, Math.PI / 2], [86, 28, Math.PI / 2]];
   eastLots.forEach(([x, z, ry], i) => { if (ry === -Math.PI / 2) buildHouse(x - 2.4, z, ry, { w: 8, d: 7, yard: 2.0 }); else buildHouse(x, z, ry, { w: 9, d: 8, yard: 2.4, tree: i % 3 === 0 ? 'sakura' : 'green' }); });
   // 河西民居
-  const far = [[-100, -36, Math.PI / 2], [-100, -12, Math.PI / 2], [-100, 12, Math.PI / 2], [-104, 36, Math.PI / 2], [-122, -30, Math.PI / 2], [-124, -6, Math.PI / 2], [-126, 20, Math.PI / 2], [-112, 60, Math.PI / 2]];
+  const far = [[-100, -36, Math.PI / 2], [-100, -12, Math.PI / 2], [-100, 12, Math.PI / 2], [-104, 36, Math.PI / 2], [-110, 60, Math.PI / 2]];
   far.forEach(([x, z, ry], i) => buildHouse(x, z, ry, { w: 9, d: 8, yard: 2.6, tree: i % 2 ? 'sakura' : 'green' }));
   // 河西的小路
   WK.box('paving', -96, TOWN_Y + 0.03, 10, 4, 0.06, 110, 0xe5dccd, { wuv: 0.45 });

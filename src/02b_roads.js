@@ -18,17 +18,9 @@ function catmull(pts, spacing) {
   }
   out.push(P[P.length - 1].slice()); return out;
 }
-/* 环岛公路沿海岸布线：取环岛铁路中心线向岛内偏移 14 m（铁路在外侧临海），两端接回镇区 */
+/* 环岛公路：从镇北路西端出发，过樱川、在西北角穿过铁路，沿水田西侧南下，再沿海岸向东（铁路外侧临海），最后接回港口路南端 */
 function ringRoadCtrl() {
-  const xz = closedCatmull(RAIL_CTRL, 2); const n = xz.length; const S = [0]; for (let i = 1; i < n; i++) S.push(S[i - 1] + Math.hypot(xz[i][0] - xz[i - 1][0], xz[i][1] - xz[i - 1][1]));
-  const pts = [[100, -84], [100, -98]];
-  // 海岸是悬崖处（内侧地形高）把公路再往岛内移，使隧道完全埋在山体里
-  const samp = [];
-  for (let i = 0; i < n; i += 15) { if (S[i] < 430 || S[i] > 1290) continue; const a = xz[(i - 1 + n) % n], b = xz[(i + 1) % n]; let tx = b[0] - a[0], tz = b[1] - a[1]; const L = Math.hypot(tx, tz); tx /= L; tz /= L;
-    const h14 = terrainNatural(xz[i][0] + tz * 14, xz[i][1] - tx * 14); samp.push([xz[i][0], xz[i][1], tz, -tx, 14 + clamp((h14 - 14) * 0.9, 0, 22)]); }
-  for (let k = 0; k < samp.length; k++) { let a = 0, c = 0; for (let m = -2; m <= 2; m++) { const q = samp[clamp(k + m, 0, samp.length - 1)]; a += q[4]; c++; } const q = samp[k]; const D = a / c; pts.push([q[0] + q[2] * D, q[1] + q[3] * D]); }
-  pts.push([-352, -86], [-334, -40], [-318, 10], [-296, 46], [-240, 92], [-170, 98], [-122, 72], [-90, 40]);
-  return pts;
+  return [[-46, -80], [-62, -80], [-86, -80], [-110, -79], [-130, -72], [-146, -58], [-158, -40], [-162, -14], [-162, 20], [-160, 50], [-150, 70], [-130, 82], [-100, 86], [-60, 86], [-20, 86], [20, 86], [60, 86], [84, 84], [97, 75], [100, 62], [100, 47]];
 }
 function buildRoadData() {
   for (const def of ROAD_DEFS) {
@@ -49,7 +41,7 @@ function buildRoadData() {
       for (let i = n - 2; i >= 0; i--) { if (fixed.has(i)) continue; const d = Math.hypot(xz[i][0] - xz[i + 1][0], xz[i][1] - xz[i + 1][1]); y[i] = clamp(y[i], y[i + 1] - G * d, y[i + 1] + G * d); }
     }
     // 结构：深挖 → 隧道，高填 → 桥
-    const f = xz.map((p, i) => { const t = terrainNatural(p[0], p[1]); return t - y[i] > 8 ? 'tun' : y[i] - t > 7 ? 'bri' : 'grd'; });
+    const f = xz.map((p, i) => { const t = terrainNatural(p[0], p[1]); return t - y[i] > 8 ? 'tun' : (y[i] - t > 7 || riverDist(p[0], p[1]) < 9.5) ? 'bri' : 'grd'; });
     const runs = (val, minLen, repl) => { let i = 0; while (i < n) { if (f[i] !== val) { i++; continue; } let j = i; while (j < n && f[j] === val) j++; if (j - i < minLen) for (let k = i; k < j; k++) f[k] = repl; i = j; } };
     runs('tun', 14, 'grd'); runs('bri', 5, 'grd');
     { let i = 0; while (i < n) { if (f[i] !== 'grd') { i++; continue; } let j = i; while (j < n && f[j] === 'grd') j++; if (j - i < 12 && i > 0 && j < n && f[i - 1] === f[j] && f[j] !== 'grd') for (let k = i; k < j; k++) f[k] = f[j]; i = j; } }

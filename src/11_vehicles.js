@@ -123,8 +123,9 @@ function buildTrafficPaths() {
   TRAFFIC_PATHS.town = CAR_PATH;
   const ring = ROADS.find(r => r.def.id === 'ring'); if (!ring) return;
   const fw = roadLane(ring, 0, false), rv = roadLane(ring, 0, true);
-  TRAFFIC_PATHS.ringF = { loop: true, pts: [[98.2, 36], [98.2, -60], ...fw.slice(2), [-84, 38.2], [-60, 38.2], [60, 38.2], [95.5, 38.2]] };
-  TRAFFIC_PATHS.ringR = { loop: true, pts: [[95.5, 41.8], [-60, 41.8], [-84, 41.8], ...rv.slice(0, -2), [101.8, -66], [101.8, 36]] };
+  // 外环：港口路北上 → 北路西行 → 环岛公路（过樱川、穿铁路、沿水田、沿海岸）→ 回到港口路南端
+  TRAFFIC_PATHS.ringF = { loop: true, pts: [[98.2, 40], [98.2, -74.5], [94.5, -78.2], [-38, -78.2], ...fw.slice(3, -2)] };
+  TRAFFIC_PATHS.ringR = { loop: true, pts: [[101.8, -74.5], [101.8, 40], ...rv.slice(2, -3), [-38, -81.8], [98, -81.8]] };
 }
 function spawnTraffic() {
   addRingCrossingStops();

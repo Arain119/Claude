@@ -819,18 +819,18 @@ function buildWires() {
    地形（扩展后的岛屿：北部星见山、西部田园、东部港口）· 海 · 河 · 天空
    ========================================================================== */
 const TOWN_Y = 2;
-const RIVER = [[-86, -112], [-82, -98], [-76, -70], [-72, -40], [-70, -5], [-73, 30], [-80, 70], [-92, 110], [-104, 150], [-114, 196]];
+const RIVER = [[-86, -112], [-82, -98], [-76, -70], [-72, -40], [-70, -5], [-73, 30], [-80, 70], [-92, 110], [-102, 146], [-108, 178]];
 const CAPE_PATH = [[100, -82, 2], [90, -96, 5.5], [95, -114, 10], [108, -122, 15], [116, -113, 18.5]];
 const CAPE = { x: 118, z: -110, y: 18.5 };
 const SHRINE = { x: -40, z: -130, y: 14 };
-const WORLD = { x0: -470, x1: 330, z0: -430, z1: 240 };
+const WORLD = { x0: -270, x1: 280, z0: -250, z1: 235 };
 
-/* --- 海岸线：保留原来的东侧与南侧，把西北方向向外扩展 --- */
+/* --- 海岸线：紧凑的椭圆小岛（东西约 430 m、南北约 360 m），镇子居中 --- */
 function oldR(th) { const c = Math.cos(th), s = Math.sin(th); const e = 1 / Math.sqrt((c / 215) ** 2 + (s / 178) ** 2); return e * (1 + 0.07 * Math.sin(3 * th + 0.8) + 0.05 * Math.sin(5 * th + 2.1) + 0.03 * Math.sin(9 * th + 0.3)); }
 function coastR(th) {
-  const d = Math.abs(Math.atan2(Math.sin(th + 3 * Math.PI / 4), Math.cos(th + 3 * Math.PI / 4)));
-  const w = d < 1.92 ? Math.cos(d / 1.92 * Math.PI / 2) ** 2 : 0;
-  return oldR(th) * (1 + 1.3 * w) + (vnoise(th * 5 + 10, 1.7) - 0.5) * 22 * w;
+  // 西北角略向外鼓，给神社后山与环线铁路留出海岸
+  const d = Math.abs(Math.atan2(Math.sin(th + 2.2), Math.cos(th + 2.2)));
+  return oldR(th) * (1 + 0.1 * smooth(1.0, 0, d)) + (vnoise(th * 7 + 10, 1.7) - 0.5) * 8;
 }
 /* 内陆距离（米）/ 200：沿用旧代码里的阈值习惯 */
 function islandC(x, z) { return (coastR(Math.atan2(z, x)) - Math.hypot(x, z)) / 200; }
@@ -856,22 +856,20 @@ function terrainNatural(x, z) {
   let h = lerp(-9, 2.2, smooth(-0.13, 0.09, c));
   const inl = smooth(0.02, 0.2, c);
   h += (fbm(x * 0.012 + 3, z * 0.012 - 7, 4) - 0.5) * 4.0 * inl;
-  // 原有丘陵
-  const hill = gauss(x, z, -60, -152, 62, 17) + gauss(x, z, 25, -165, 55, 13) + gauss(x, z, -140, -118, 55, 15) + gauss(x, z, -184, -58, 38, 13) + gauss(x, z, 152, -64, 34, 14) + gauss(x, z, 92, -142, 40, 9);
-  // 星见山与西北山地
-  const mtn = gauss(x, z, -205, -255, 105, 80) + gauss(x, z, -110, -290, 65, 26) + gauss(x, z, -285, -150, 85, 36) + gauss(x, z, -10, -250, 60, 22) + gauss(x, z, -310, -275, 70, 26);
-  const ridge = (fbm(x * 0.008 + 40, z * 0.008, 4) - 0.45) * 26 * smooth(20, 70, mtn);
-  h += (hill + mtn + Math.max(0, ridge)) * inl;
+  // 丘陵：神社后山（星见山）与灯塔岬
+  const hill = gauss(x, z, -60, -152, 62, 17) + gauss(x, z, 25, -165, 55, 13) + gauss(x, z, -140, -122, 46, 13) + gauss(x, z, 92, -142, 40, 9) + gauss(x, z, -8, -182, 34, 12);
+  const ridge = (fbm(x * 0.02 + 40, z * 0.02, 3) - 0.5) * 7 * smooth(6, 20, hill);
+  h += (hill + ridge) * inl;
   h += gauss(x, z, CAPE.x, CAPE.z, 34, 17) * smooth(-0.03, 0.05, c);
   // 河源：压低成一片缓坡谷地
   { const vw = smooth(70, 12, Math.hypot(x + 86, z + 112)) * inl; h = lerp(h, Math.min(h, 4 + Math.hypot(x + 86, z + 112) * 0.12), vw); }
-  // 西部田园（低平）
-  let w = flatW(x, z, -330, -120, -50, 120, 55) * smooth(0.04, 0.12, c); h = lerp(h, 3.2 + (fbm(x * 0.02, z * 0.02, 2) - 0.5) * 0.3, w);
+  // 西部水田（低平）
+  let w = flatW(x, z, -190, -112, -50, 84, 16) * smooth(0.03, 0.1, c); h = lerp(h, 2.3 + (fbm(x * 0.02, z * 0.02, 2) - 0.5) * 0.2, w);
   // 镇区
   w = flatW(x, z, -112, 108, -84, 72, 14); h = lerp(h, TOWN_Y, w);
   w = flatW(x, z, 100, 129, -34, 64, 6); h = lerp(h, TOWN_Y, w);
   h -= smooth(80, 150, z) * smooth(140, 70, Math.abs(x - 10)) * 1.5;
-  w = flatW(x, z, -166, 138, -71, -49, 5); h = lerp(h, TOWN_Y, w);
+  w = flatW(x, z, -128, 120, -71, -49, 5); h = lerp(h, TOWN_Y, w);
   // 神社
   w = flatW(x, z, -64, -16, -152, -110, 8); h = lerp(h, SHRINE.y, w);
   const rampY = lerp(TOWN_Y, SHRINE.y, clamp((-86 - z) / 24, 0, 1));
@@ -984,7 +982,7 @@ function buildTerrain() {
     let gr = 1, di = 0, ro = 0, sa = 0;
     di = smooth(0.35, 0.75, slope) * 0.9 + smooth(0.55, 0.8, n) * 0.35;
     ro = smooth(0.7, 1.15, slope);
-    const beach = Math.max(smooth(1.4, 0.5, h) * smooth(0.0, 0.2, 0.3 - c), smooth(84, 100, z) * smooth(150, 110, Math.abs(x - 10)));
+    const beach = Math.max(smooth(1.4, 0.5, h) * smooth(0.0, 0.2, 0.3 - c), smooth(104, 114, z) * smooth(150, 110, Math.abs(x - 10)));
     sa = clamp(beach, 0, 1) + smooth(0.2, -0.6, h);
     if (Math.hypot(x - SHRINE.x, z - SHRINE.z + 2) < 26 && Math.abs(h - SHRINE.y) < 0.4) di = 1;
     if (polyDist(CAPE_PATH, x, z) < 1.8) di = 1;
@@ -1000,7 +998,9 @@ function buildTerrain() {
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('splat', new THREE.BufferAttribute(spl, 4));
   // 供草地着色器采样的高度 / 草量网格
-  { const F = new Float32Array(p.count * 4); for (let i = 0; i < p.count; i++) { F[i * 4] = H[i]; F[i * 4 + 1] = spl[i * 4]; F[i * 4 + 2] = col[i * 3 + 1]; F[i * 4 + 3] = 1; }
+  // 草高系数（第 4 通道）：镇内是修剪过的草坪，河堤与田埂中等，野地、山坡最高
+  const mow = (x, z) => { const town = flatW(x, z, -112, 130, -90, 94, 6); const rd = riverDist(x, z); const bank = smooth(7.5, 9.5, rd) * smooth(17, 13, rd); return lerp(1, lerp(0.3, 0.62, bank), town); };
+  { const F = new Float32Array(p.count * 4); for (let i = 0; i < p.count; i++) { F[i * 4] = H[i]; F[i * 4 + 1] = spl[i * 4]; F[i * 4 + 2] = col[i * 3 + 1]; F[i * 4 + 3] = mow(p.getX(i), p.getZ(i)); }
     const x0 = p.getX(0), z0 = p.getZ(0);
     TERRAIN_GRID = { nx: nx + 1, nz: nz + 1, x0, z0, dx: (p.getX(nx) - x0) / nx, dz: (p.getZ(row * nz) - z0) / nz, data: F }; }
   g.computeVertexNormals();
@@ -1026,11 +1026,11 @@ function buildTerrain() {
 }
 
 /* 深度贴图（供海面浅滩与泡沫） */
-let DEPTH_TEX;
+let DEPTH_TEX; const DEPTH_S = 640, DEPTH_O = [5, -8];
 function buildDepthTex() {
-  const N = 512, S = 960; const data = new Uint8Array(N * N * 4);
+  const N = 512, S = DEPTH_S; const data = new Uint8Array(N * N * 4);
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const x = -S / 2 - 70 + (i + 0.5) * S / N, z = -S / 2 - 90 + (j + 0.5) * S / N; const h = terrainNatural(x, z) - (smooth(127.6, 129, x) * smooth(-31, -27, z) * (1 - smooth(57, 61, z))) * 6;
+    const x = DEPTH_O[0] - S / 2 + (i + 0.5) * S / N, z = DEPTH_O[1] - S / 2 + (j + 0.5) * S / N; const h = terrainNatural(x, z) - (smooth(127.6, 129, x) * smooth(-31, -27, z) * (1 - smooth(57, 61, z))) * 6;
     const d = clamp(-h / 10, 0, 1); const k = (j * N + i) * 4; data[k] = d * 255; data[k + 1] = h > 0 ? 255 : 0; data[k + 2] = 0; data[k + 3] = 255;
   }
   DEPTH_TEX = new THREE.DataTexture(data, N, N, THREE.RGBAFormat); DEPTH_TEX.magFilter = THREE.LinearFilter; DEPTH_TEX.minFilter = THREE.LinearFilter; DEPTH_TEX.needsUpdate = true;
@@ -1109,7 +1109,7 @@ function updateSkyEnv(force) {
 
 /* ---------------- 海 ---------------- */
 const SEA_U = {
-  time: { value: 0 }, depthTex: { value: null }, depthS: { value: 960 }, depthO: { value: new THREE.Vector2(-70, -90) }, sunDir: SKY_U.sunDir,
+  time: { value: 0 }, depthTex: { value: null }, depthS: { value: DEPTH_S }, depthO: { value: new THREE.Vector2(DEPTH_O[0], DEPTH_O[1]) }, sunDir: SKY_U.sunDir,
   sunCol: { value: new THREE.Color(1, 0.95, 0.85) }, deepCol: { value: lin(0x0f3f63) }, shallowCol: { value: lin(0x2a9a9a) }, foamCol: { value: new THREE.Color(0.9, 0.95, 0.95) },
   light: { value: 1 }, waves: { value: 1 }, envCube: { value: null }, night: SKY_U.night,
   fogColor: { value: new THREE.Color() }, fogDensity: { value: 0.001 }
@@ -1235,17 +1235,9 @@ function catmull(pts, spacing) {
   }
   out.push(P[P.length - 1].slice()); return out;
 }
-/* 环岛公路沿海岸布线：取环岛铁路中心线向岛内偏移 14 m（铁路在外侧临海），两端接回镇区 */
+/* 环岛公路：从镇北路西端出发，过樱川、在西北角穿过铁路，沿水田西侧南下，再沿海岸向东（铁路外侧临海），最后接回港口路南端 */
 function ringRoadCtrl() {
-  const xz = closedCatmull(RAIL_CTRL, 2); const n = xz.length; const S = [0]; for (let i = 1; i < n; i++) S.push(S[i - 1] + Math.hypot(xz[i][0] - xz[i - 1][0], xz[i][1] - xz[i - 1][1]));
-  const pts = [[100, -84], [100, -98]];
-  // 海岸是悬崖处（内侧地形高）把公路再往岛内移，使隧道完全埋在山体里
-  const samp = [];
-  for (let i = 0; i < n; i += 15) { if (S[i] < 430 || S[i] > 1290) continue; const a = xz[(i - 1 + n) % n], b = xz[(i + 1) % n]; let tx = b[0] - a[0], tz = b[1] - a[1]; const L = Math.hypot(tx, tz); tx /= L; tz /= L;
-    const h14 = terrainNatural(xz[i][0] + tz * 14, xz[i][1] - tx * 14); samp.push([xz[i][0], xz[i][1], tz, -tx, 14 + clamp((h14 - 14) * 0.9, 0, 22)]); }
-  for (let k = 0; k < samp.length; k++) { let a = 0, c = 0; for (let m = -2; m <= 2; m++) { const q = samp[clamp(k + m, 0, samp.length - 1)]; a += q[4]; c++; } const q = samp[k]; const D = a / c; pts.push([q[0] + q[2] * D, q[1] + q[3] * D]); }
-  pts.push([-352, -86], [-334, -40], [-318, 10], [-296, 46], [-240, 92], [-170, 98], [-122, 72], [-90, 40]);
-  return pts;
+  return [[-46, -80], [-62, -80], [-86, -80], [-110, -79], [-130, -72], [-146, -58], [-158, -40], [-162, -14], [-162, 20], [-160, 50], [-150, 70], [-130, 82], [-100, 86], [-60, 86], [-20, 86], [20, 86], [60, 86], [84, 84], [97, 75], [100, 62], [100, 47]];
 }
 function buildRoadData() {
   for (const def of ROAD_DEFS) {
@@ -1266,7 +1258,7 @@ function buildRoadData() {
       for (let i = n - 2; i >= 0; i--) { if (fixed.has(i)) continue; const d = Math.hypot(xz[i][0] - xz[i + 1][0], xz[i][1] - xz[i + 1][1]); y[i] = clamp(y[i], y[i + 1] - G * d, y[i + 1] + G * d); }
     }
     // 结构：深挖 → 隧道，高填 → 桥
-    const f = xz.map((p, i) => { const t = terrainNatural(p[0], p[1]); return t - y[i] > 8 ? 'tun' : y[i] - t > 7 ? 'bri' : 'grd'; });
+    const f = xz.map((p, i) => { const t = terrainNatural(p[0], p[1]); return t - y[i] > 8 ? 'tun' : (y[i] - t > 7 || riverDist(p[0], p[1]) < 9.5) ? 'bri' : 'grd'; });
     const runs = (val, minLen, repl) => { let i = 0; while (i < n) { if (f[i] !== val) { i++; continue; } let j = i; while (j < n && f[j] === val) j++; if (j - i < minLen) for (let k = i; k < j; k++) f[k] = repl; i = j; } };
     runs('tun', 14, 'grd'); runs('bri', 5, 'grd');
     { let i = 0; while (i < n) { if (f[i] !== 'grd') { i++; continue; } let j = i; while (j < n && f[j] === 'grd') j++; if (j - i < 12 && i > 0 && j < n && f[i - 1] === f[j] && f[j] !== 'grd') for (let k = i; k < j; k++) f[k] = f[j]; i = j; } }
@@ -1488,7 +1480,7 @@ TEX_PETALS_GROUND.wrapS = TEX_PETALS_GROUND.wrapT = THREE.RepeatWrapping;
 regMat('bark', pm(TEX.bark, { roughness: 0.95, ns: 1.2 }), { tint: 0.55 });
 
 function foliageMat(map, opts = {}) {
-  const m = new THREE.MeshStandardMaterial({ vertexColors: true, map, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8, metalness: 0, emissive: opts.emissive || 0x000000, envMapIntensity: 0.6 });
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, map, alphaTest: opts.body ? 0 : 0.45, side: opts.body ? THREE.FrontSide : THREE.DoubleSide, roughness: 0.8, metalness: 0, emissive: opts.emissive || 0x000000, envMapIntensity: 0.6 });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = WIND.uTime; sh.uniforms.uWind = WIND.uWind; sh.uniforms.folSun = { value: FOGX.sun }; sh.uniforms.folCol = { value: FOGX.leafCol };
     sh.vertexShader = 'attribute float sway;\nuniform float uTime; uniform float uWind; varying vec3 vFolW;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
@@ -1520,13 +1512,59 @@ function foliageMat(map, opts = {}) {
         outgoingLight += diffuseColor.rgb * folCol * (back * 1.6 + rim * 0.35); }
       #include <output_fragment>`);
   };
-  const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.45 });
+  const depth = opts.body ? null : new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.45 });
   return { m, depth };
 }
-const SAK_M = foliageMat(TEX.sakura, { emissive: 0x150a0c });
-const LEAF_M = foliageMat(TEX.leaves);
-const PINE_M = foliageMat(TEX.pine);
+/* --- 程序绘制的叶片图集（2×2 格，每格一小簇完整的叶 / 花 / 针叶，边缘留透明，不会被卡片边缘切断） --- */
+function paintAtlas(fn) {
+  return canvasTex(1024, 1024, (g) => { g.clearRect(0, 0, 1024, 1024); for (let c = 0; c < 4; c++) { g.save(); g.translate((c & 1) * 512, (c >> 1) * 512); g.beginPath(); g.rect(0, 0, 512, 512); g.clip(); fn(g, 512, c); g.restore(); } });
+}
+function leafShape(g, L, W) { g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(W * 0.9, -L * 0.18, W * 0.75, -L * 0.8, 0, -L); g.bezierCurveTo(-W * 0.75, -L * 0.8, -W * 0.9, -L * 0.18, 0, 0); }
+const TEX_LEAF_ATLAS = paintAtlas((g, C) => {
+  const cx = C / 2, cy = C / 2;
+  g.strokeStyle = 'rgb(120,110,80)'; g.lineCap = 'round';
+  for (let i = 0; i < 5; i++) { const a = R(0, TAU); g.lineWidth = R(3, 5); g.beginPath(); g.moveTo(cx, cy); g.quadraticCurveTo(cx + Math.cos(a + 0.4) * C * 0.15, cy + Math.sin(a + 0.4) * C * 0.15, cx + Math.cos(a) * C * 0.3, cy + Math.sin(a) * C * 0.3); g.stroke(); }
+  const leaves = []; for (let i = 0; i < 34; i++) { const a = R(0, TAU), d = Math.sqrt(R()) * C * 0.3; leaves.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d, a + R(-0.7, 0.7) + Math.PI / 2, d]); }
+  leaves.sort((p, q) => q[3] - p[3]);
+  for (const [x, y, a] of leaves) {
+    const L = R(0.15, 0.21) * C, W = L * R(0.38, 0.5), k = R(0.72, 1.0), wy = R(-8, 10);
+    g.save(); g.translate(x, y); g.rotate(a);
+    leafShape(g, L, W); const gr = g.createLinearGradient(0, 0, W * 0.5, -L);
+    gr.addColorStop(0, `rgb(${185 * k | 0},${205 * k | 0},${165 * k | 0})`); gr.addColorStop(1, `rgb(${Math.min(255, 250 * k + wy) | 0},${Math.min(255, 255 * k) | 0},${Math.min(255, 215 * k - wy) | 0})`);
+    g.fillStyle = gr; g.fill(); g.lineWidth = 2.2; g.strokeStyle = `rgba(70,90,60,0.55)`; g.stroke();
+    g.strokeStyle = 'rgba(255,255,235,0.45)'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(0, -L * 0.05); g.quadraticCurveTo(W * 0.08, -L * 0.5, 0, -L * 0.9); g.stroke();
+    g.restore();
+  }
+});
+const TEX_SAK_ATLAS = paintAtlas((g, C) => {
+  const cx = C / 2, cy = C / 2;
+  g.strokeStyle = 'rgb(90,70,72)'; g.lineCap = 'round';
+  for (let i = 0; i < 4; i++) { const a = R(0, TAU); g.lineWidth = R(4, 7); g.beginPath(); g.moveTo(cx + Math.cos(a + Math.PI) * C * 0.1, cy + Math.sin(a + Math.PI) * C * 0.1); g.lineTo(cx + Math.cos(a) * C * 0.3, cy + Math.sin(a) * C * 0.3); g.stroke(); }
+  const fl = []; for (let i = 0; i < 15; i++) { const a = R(0, TAU), d = Math.sqrt(R()) * C * 0.3; fl.push([cx + Math.cos(a) * d, cy + Math.sin(a) * d, d]); }
+  fl.sort((p, q) => q[2] - p[2]);
+  for (const [x, y] of fl) { if (chance(0.15)) { g.fillStyle = '#e7849f'; g.beginPath(); g.ellipse(x, y, C * 0.03, C * 0.045, R(0, 3), 0, TAU); g.fill(); continue; } drawBlossom(g, x, y, C * R(0.075, 0.1), R(0, TAU)); }
+});
+const TEX_PINE_ATLAS = paintAtlas((g, C) => {
+  const cx = C / 2, cy = C / 2; g.lineCap = 'round';
+  g.strokeStyle = 'rgb(110,90,70)'; g.lineWidth = 6; g.beginPath(); g.moveTo(cx - C * 0.3, cy + C * 0.12); g.quadraticCurveTo(cx, cy - C * 0.02, cx + C * 0.3, cy - C * 0.08); g.stroke();
+  for (let t = 0; t < 7; t++) {
+    const u = t / 6, tx = cx - C * 0.28 + u * C * 0.56, ty = cy + C * 0.1 - u * C * 0.16 + R(-C * 0.06, C * 0.06);
+    for (let i = 0; i < 46; i++) { const a = -Math.PI / 2 + R(-1.5, 1.5), L = R(0.09, 0.16) * C, k = R(0.6, 1); g.strokeStyle = `rgb(${170 * k | 0},${215 * k | 0},${190 * k | 0})`; g.lineWidth = R(2, 3.4); g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx + Math.cos(a) * L, ty + Math.sin(a) * L); g.stroke(); }
+  }
+});
+const SAK_M = foliageMat(TEX_SAK_ATLAS, { emissive: 0x150a0c });
+const LEAF_M = foliageMat(TEX_LEAF_ATLAS);
+const PINE_M = foliageMat(TEX_PINE_ATLAS);
 const GRASS_M = foliageMat(TEX_GRASS);
+/* 簇体的平铺纹理：密密的花 / 叶 / 针叶（不透明），让簇体近看也是一团花叶而不是光滑的球 */
+function paintMass(bg, fn) {
+  return canvasTex(512, 512, (g) => { g.fillStyle = bg; g.fillRect(0, 0, 512, 512); const draw = (x, y, f) => { for (const ox of [-512, 0, 512]) for (const oy of [-512, 0, 512]) { g.save(); g.translate(x + ox, y + oy); f(g); g.restore(); } }; fn(g, draw); }, { repeat: true });
+}
+const TEX_SAK_MASS = paintMass('#d9b3c0', (g, draw) => { for (let i = 0; i < 150; i++) { const x = R(0, 512), y = R(0, 512), r = R(18, 26), rot = R(0, TAU), k = R(0.82, 1.0); draw(x, y, (gg) => { gg.globalAlpha = 1; drawBlossom(gg, 0, 0, r, rot); if (k < 0.9) { gg.fillStyle = 'rgba(150,100,130,0.25)'; gg.beginPath(); gg.arc(0, 0, r, 0, TAU); gg.fill(); } }); } });
+const TEX_LEAF_MASS = paintMass('#5f7550', (g, draw) => { for (let i = 0; i < 260; i++) { const x = R(0, 512), y = R(0, 512), a = R(0, TAU), L = R(34, 48), k = R(0.62, 1.0); draw(x, y, (gg) => { gg.rotate(a); leafShape(gg, L, L * 0.45); gg.fillStyle = `rgb(${200 * k | 0},${225 * k | 0},${170 * k | 0})`; gg.fill(); gg.lineWidth = 1.6; gg.strokeStyle = 'rgba(60,80,50,0.6)'; gg.stroke(); }); } });
+const TEX_PINE_MASS = paintMass('#4c6658', (g, draw) => { g.lineCap = 'round'; for (let i = 0; i < 900; i++) { const x = R(0, 512), y = R(0, 512), a = -Math.PI / 2 + R(-1.4, 1.4), L = R(18, 30), k = R(0.6, 1); draw(x, y, (gg) => { gg.strokeStyle = `rgb(${165 * k | 0},${210 * k | 0},${185 * k | 0})`; gg.lineWidth = 2.2; gg.beginPath(); gg.moveTo(0, 0); gg.lineTo(Math.cos(a) * L, Math.sin(a) * L); gg.stroke(); }); } });
+const BODY_S = foliageMat(TEX_SAK_MASS, { body: true }), BODY_L = foliageMat(TEX_LEAF_MASS, { body: true }), BODY_P = foliageMat(TEX_PINE_MASS, { body: true });
+regMat('leafBodyS', BODY_S.m); regMat('leafBodyL', BODY_L.m); regMat('leafBodyP', BODY_P.m);
 regMat('petalGround', new THREE.MeshStandardMaterial({ map: TEX_PETALS_GROUND, transparent: true, alphaTest: 0.35, depthWrite: false, roughness: 1, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), { cast: false });
 
 /* --- 卡片累加器（带 sway 属性与乱序索引，便于按画质截断） --- */
@@ -1539,7 +1577,7 @@ function cardBucket(kind, x, z) {
 }
 const _cl = new THREE.Color();
 const _t1 = new THREE.Vector3(), _t2 = new THREE.Vector3(), _nn = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
-function addCard(b, cx, cy, cz, nx, ny, nz, size, cell, col, sway, lnx, lny, lnz, aspect = 1, spin = null) {
+function addCard(b, cx, cy, cz, nx, ny, nz, size, cell, col, sway, lnx, lny, lnz, aspect = 1, spin = null, uvr = null) {
   _nn.set(nx, ny, nz).normalize();
   _t1.set(R(-1, 1), R(-1, 1), R(-1, 1)).cross(_nn).normalize();
   if (spin != null) { _t1.set(Math.cos(spin), 0, Math.sin(spin)).cross(_nn).normalize(); }
@@ -1549,7 +1587,8 @@ function addCard(b, cx, cy, cz, nx, ny, nz, size, cell, col, sway, lnx, lny, lnz
   const corners = [[-1, -1, 0, 0], [1, -1, 1, 0], [1, 1, 1, 1], [-1, 1, 0, 1]];
   for (const c of corners) {
     b.pos.push(cx + _t1.x * c[0] * hw + _t2.x * c[1] * hh, cy + _t1.y * c[0] * hw + _t2.y * c[1] * hh, cz + _t1.z * c[0] * hw + _t2.z * c[1] * hh);
-    b.nor.push(lnx, lny, lnz); b.uv.push(fu ? 1 - c[2] : c[2], fv ? 1 - c[3] : c[3]); b.col.push(_cl.r, _cl.g, _cl.b); b.sway.push(sway);
+    let u = fu ? 1 - c[2] : c[2], v = fv ? 1 - c[3] : c[3]; if (uvr) { u = uvr[0] + (uvr[2] - uvr[0]) * u; v = uvr[1] + (uvr[3] - uvr[1]) * v; }
+    b.nor.push(lnx, lny, lnz); b.uv.push(u, v); b.col.push(_cl.r, _cl.g, _cl.b); b.sway.push(sway);
   }
   b.q++;
 }
@@ -1598,131 +1637,154 @@ function growBranches(kit, p, az, el, len, r, depth, P, tips) {
   }
 }
 
-/* 樱花树 */
+/* ---------------- 树冠：簇体 + 贴在簇表面的叶片卡 ----------------
+   每个簇是一个微微起伏的椭球（不透明，填满叶片之间的空隙，压出暗部），表面再贴一层按真实尺寸缩放的叶片卡。
+   光照法线在“簇自身的法线”与“整个树冠的法线”之间混合：远看明暗成大块（新海诚式），近看每一簇仍有体积。 */
+const ICO1 = new THREE.IcosahedronGeometry(1, 1).attributes.position.array.slice(), ICO0 = new THREE.IcosahedronGeometry(1, 0).attributes.position.array.slice();
+const CROP4 = [[0, 0, 0.5, 0.5], [0.5, 0, 1, 0.5], [0, 0.5, 0.5, 1], [0.5, 0.5, 1, 1]];
+const _cA = new THREE.Color(), _cB = new THREE.Color();
+function clusterTips(pts, rad) {
+  const out = [];
+  for (const p of pts) {
+    let best = null, bd = rad; for (const c of out) { const d = Math.hypot(c.x / c.n - p[0], (c.y / c.n - p[1]) * 1.4, c.z / c.n - p[2]); if (d < bd) { bd = d; best = c; } }
+    if (best) { best.x += p[0]; best.y += p[1]; best.z += p[2]; best.n++; } else out.push({ x: p[0], y: p[1], z: p[2], n: 1 });
+  }
+  return out.map(c => ({ x: c.x / c.n, y: c.y / c.n, z: c.z / c.n, n: c.n }));
+}
+// clumps: [{x, y, z, r, sq}]（相对于树根）；o: {kind, base, lite, shade, card, dens, crop, body, inner, local, sway}
+function canopy(kit, ox, oy, oz, clumps, o) {
+  const b = cardBucket(o.kind, ox, oz);
+  let cx = 0, cy = 0, cz = 0, W = 0; for (const c of clumps) { const w = c.r ** 3; cx += c.x * w; cy += c.y * w; cz += c.z * w; W += w; } cx /= W; cy /= W; cz /= W;
+  let ext = 0.5, y0 = 1e9, y1 = -1e9; for (const c of clumps) { ext = Math.max(ext, Math.hypot(c.x - cx, c.z - cz) + c.r); y0 = Math.min(y0, c.y - c.r * c.sq); y1 = Math.max(y1, c.y + c.r * c.sq); }
+  const ey = Math.max(0.5, (y1 - y0) / 2), loc = o.local != null ? o.local : 0.45;
+  const N = [0, 0, 0];
+  const light = (px, py, pz, dx, dy, dz) => {
+    let gx = (px - cx) / ext, gy = (py - cy) / ey * 0.8 + 0.3, gz = (pz - cz) / ext; const gl = Math.hypot(gx, gy, gz) || 1;
+    let nx = dx * loc + gx / gl * (1 - loc), ny = dy * loc + gy / gl * (1 - loc) + 0.12, nz = dz * loc + gz / gl * (1 - loc); const l = Math.hypot(nx, ny, nz) || 1;
+    N[0] = nx / l; N[1] = ny / l; N[2] = nz / l;
+    // 环境遮蔽：树冠内部、底部与朝内的面更暗
+    const out = clamp(Math.hypot(px - cx, pz - cz) / ext, 0, 1), h = clamp((py - y0) / (y1 - y0 + 1e-3), 0, 1);
+    const face = (dx * gx + dy * gy + dz * gz) / gl;
+    return clamp(0.32 + 0.38 * h + 0.2 * out + 0.22 * face, 0.22, 1);
+  };
+  const sh = o.shade || o.base;
+  for (const c of clumps) {
+    const sq = c.sq, r = c.r;
+    if (o.body) {
+      const ICO = o.lo ? ICO0 : ICO1;
+      const n = ICO.length / 3, pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3), uv = new Float32Array(n * 2); const ph = R(0, 100), ts = o.kind === 'sakura' ? 1 / 0.9 : 1 / 1.1;
+      for (let i = 0; i < n; i++) {
+        const ux = ICO[i * 3], uy = ICO[i * 3 + 1], uz = ICO[i * 3 + 2];
+        const k = o.body * (1 + (vnoise(ux * 2.3 + ph, uz * 2.3 + uy * 1.7, 1) - 0.5) * 0.55);
+        const px = c.x + ux * r * k, py = c.y + uy * r * k * sq, pz = c.z + uz * r * k;
+        let dx = ux, dy = uy / sq, dz = uz; const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl;
+        const a = lerp(o.bodyMin || 0, 1, light(px, py, pz, dx, dy, dz)) * 0.84;
+        _cA.copy(sh).lerp(o.base, clamp(a * 1.2 - 0.1, 0, 1)).multiplyScalar(a).convertSRGBToLinear();
+        pos.set([px, py, pz], i * 3); nor.set(N, i * 3); col.set([_cA.r, _cA.g, _cA.b], i * 3);
+        // 按簇自身法线做三向投影（每个三角形取其主轴，避免拉伸）
+        const fi = i - i % 3;
+        if (i % 3 === 0) { let sx = 0, sy = 0, sz = 0; for (let q = 0; q < 3; q++) { sx += Math.abs(ICO[(fi + q) * 3]); sy += Math.abs(ICO[(fi + q) * 3 + 1]) / sq; sz += Math.abs(ICO[(fi + q) * 3 + 2]); } canopy._ax = sy >= sx && sy >= sz ? 1 : sx >= sz ? 0 : 2; }
+        const A = canopy._ax; uv[i * 2] = (A === 1 ? px + ox : A === 0 ? pz + oz : px + ox) * ts; uv[i * 2 + 1] = (A === 1 ? pz + oz : py + oy) * ts;
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      kit.geo(o.kind === 'sakura' ? 'leafBodyS' : o.kind === 'pine' ? 'leafBodyP' : 'leafBodyL', g, 0, 0, 0, 0xffffff, { vcol: true });
+    }
+    const area = 4 * Math.PI * r * r * (0.45 + 0.55 * sq); const nC = Math.max(6, Math.round(area / (o.card * o.card) * o.dens));
+    for (let k = 0; k < nC; k++) {
+      let ux = R(-1, 1), uy = R(-1, 1), uz = R(-1, 1); let ul = Math.hypot(ux, uy, uz); if (ul > 1 || ul < 0.05) { k--; continue; } ux /= ul; uy /= ul; uz /= ul;
+      if (uy < -0.4 && rng() < 0.55) continue; // 底面稀一些
+      const inner = rng() < (o.inner || 0);
+      const rr = r * (inner ? R(0.35, 0.8) : R(0.9, 1.08));
+      const px = c.x + ux * rr, py = c.y + uy * rr * sq, pz = c.z + uz * rr;
+      const a = light(px, py, pz, ux, uy / sq, uz) * (inner ? 0.75 : 1);
+      const h = clamp((py - y0) / (y1 - y0 + 1e-3), 0, 1);
+      _cB.copy(o.base).lerp(o.lite, clamp(h * 0.55 + R(-0.15, 0.3), 0, 1)); _cA.copy(sh).lerp(_cB, clamp(a * 1.25 - 0.1, 0, 1)).multiplyScalar(lerp(0.55, 1.05, a));
+      const sz = o.card * R(0.8, 1.2);
+      addCard(b, ox + px, oy + py, oz + pz, ux + R(-0.5, 0.5), uy + R(-0.3, 0.6), uz + R(-0.5, 0.5), sz, RI(0, 3), _cA, clamp(o.sway * (0.3 + 0.7 * Math.hypot(px, pz) / (ext + 1)), 0.05, 1), N[0], N[1], N[2], 1, null, o.crop ? CROP4[RI(0, 3)] : null);
+    }
+  }
+  return { cx, cy, cz, ext };
+}
+
+/* 樱花树（染井吉野）：伞形树冠，深色弯曲枝干，花簇扁平成层 */
+const SAK_BASE = new THREE.Color(0xfbe9ec), SAK_LITE = new THREE.Color(0xffffff), SAK_SHADE = new THREE.Color(0xc79db0);
 function sakuraTree(x, z, s = 1, o = {}) {
   const y = o.y != null ? o.y : groundAt(x, z);
   const kit = new Kit(x, y, z, 0);
-  const P = { droop: 0.14, spread: 0.85, flatten: 0.62, lenK: 0.68, depth: 3, bark: new THREE.Color(0x8a7676).multiplyScalar(R(0.85, 1.05)) };
+  const P = { droop: 0.16, spread: 0.85, flatten: 0.6, lenK: 0.7, depth: 3, bark: new THREE.Color(0x5e4f52).multiplyScalar(R(0.85, 1.05)) };
   const trunkH = (o.trunkH || 1.7) * s, r0 = (o.r0 || 0.2) * s;
   const lean = R(-0.12, 0.12), leanA = R(0, TAU);
   const top = [Math.cos(leanA) * lean * trunkH, trunkH, Math.sin(leanA) * lean * trunkH];
   kit.rod('bark', [0, -0.3, 0], [top[0] * 0.5, trunkH * 0.5, top[2] * 0.5], r0 * 1.15, P.bark, { rt: 0.92, seg: 10 });
   kit.rod('bark', [top[0] * 0.5, trunkH * 0.5, top[2] * 0.5], top, r0 * 1.05, P.bark, { rt: 0.9, seg: 10 });
-  // 根部隆起
   for (let i = 0; i < 4; i++) { const a = i * TAU / 4 + R(-0.3, 0.3); kit.rod('bark', [0, 0.25 * s, 0], [Math.cos(a) * r0 * 2.6, -0.05, Math.sin(a) * r0 * 2.6], r0 * 0.45, P.bark, { rt: 0.4, seg: 5 }); }
   const tips = [];
   const nMain = o.main || RI(3, 4); const a0 = R(0, TAU);
-  for (let i = 0; i < nMain; i++) {
-    const az = a0 + i * TAU / nMain + R(-0.3, 0.3);
-    growBranches(kit, top, az, R(0.55, 0.9), (o.L1 || 2.6) * s, r0 * 0.72, 0, P, tips);
-  }
-  // 树冠
-  let cxs = 0, cys = 0, czs = 0; tips.forEach(t => { cxs += t.p[0]; cys += t.p[1]; czs += t.p[2]; });
-  const cc = [cxs / tips.length, cys / tips.length, czs / tips.length];
-  let crown = 0; tips.forEach(t => crown = Math.max(crown, Math.hypot(t.p[0] - cc[0], t.p[2] - cc[2])));
-  const total = Math.round((o.cards || 1500) * s * s);
-  const b = cardBucket('sakura', x, z); const col = new THREE.Color();
-  const tint = R(-0.03, 0.03);
-  for (const t of tips) {
-    const k = t.small ? 0.55 : 1; const n = Math.round(total / tips.length * k);
-    const rc = 1.05 * s * (t.small ? 0.75 : 1);
-    const ccx = t.p[0] + Math.cos(t.az) * 0.25 * s, ccy = t.p[1] + 0.3 * s, ccz = t.p[2] + Math.sin(t.az) * 0.25 * s;
-    for (let i = 0; i < n; i++) {
-      const u = R(-1, 1), th = R(0, TAU), rr = rc * (0.45 + 0.55 * Math.sqrt(R()));
-      const sq = Math.sqrt(1 - u * u);
-      const ox = sq * Math.cos(th) * rr, oy = u * rr * 0.62, oz = sq * Math.sin(th) * rr;
-      const px = ccx + ox, py = ccy + oy, pz = ccz + oz;
-      // 光照法线：相对于整体树冠中心向外
-      const lx = px - cc[0], ly = (py - cc[1]) * 1.3 + 0.8 * s, lz = pz - cc[2]; const L = Math.hypot(lx, ly, lz) || 1;
-      const outward = clamp(Math.hypot(px - cc[0], pz - cc[2]) / (crown + rc), 0, 1);
-      const hgt = clamp((py - (cc[1] - rc)) / (rc * 2.2), 0, 1);
-      const bright = clamp(0.25 + 0.45 * hgt + 0.35 * outward, 0, 1);
-      col.setRGB(lerp(0.62, 1.0, bright), lerp(0.52, 0.98, bright) + tint, lerp(0.56, 0.98, bright) + tint);
-      const sz = R(0.55, 0.9) * Math.sqrt(s) * (o.cardK || 1);
-      addCard(b, x + px, y + py, z + pz, ox + R(-0.4, 0.4), oy + 0.5, oz + R(-0.4, 0.4), sz, RI(0, 3), col, clamp(outward * 1.2, 0.15, 1), lx / L, ly / L, lz / L);
-    }
-    if (!t.small) kit.sph('blob', ccx, ccy - 0.2 * s, ccz, rc * 0.3, rc * 0.2, rc * 0.3, 0xd9b0b8, { lo: true });
-  }
+  for (let i = 0; i < nMain; i++) growBranches(kit, top, a0 + i * TAU / nMain + R(-0.3, 0.3), R(0.5, 0.85), (o.L1 || 2.6) * s, r0 * 0.72, 0, P, tips);
+  const cl = clusterTips(tips.map(t => [t.p[0] + Math.cos(t.az) * 0.3 * s, t.p[1] + 0.25 * s, t.p[2] + Math.sin(t.az) * 0.3 * s]), 1.05 * s);
+  const clumps = cl.map(c => ({ x: c.x, y: c.y, z: c.z, r: (0.85 + 0.12 * Math.min(c.n, 4)) * s, sq: R(0.55, 0.68) }));
+  const tint = R(-0.02, 0.02); const base = SAK_BASE.clone().offsetHSL(tint, 0, 0);
+  const C = canopy(kit, x, y, z, clumps, { kind: 'sakura', base, lite: SAK_LITE, shade: SAK_SHADE, card: 0.4 * Math.sqrt(s) * (o.cardK || 1), dens: 2.1 * (o.cards || 1400) / 1400, crop: true, body: 0.74, bodyMin: 0.7, inner: 0.3, local: 0.4, sway: 0.7 });
+  let crown = C.ext;
   // 落花地毯
-  const rr = crown + 1.6 * s;
+  const rr = crown + 1.2 * s;
   for (let i = 0; i < Math.round(10 + rr * rr * 0.25); i++) {
     const a = R(0, TAU), d = Math.sqrt(R()) * rr; const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
     const gy = o.flatY != null ? o.flatY : groundAt(px, pz, y + 2);
     WK.plane('petalGround', px, gy + 0.035, pz, R(1.4, 2.4), R(1.4, 2.4), 0xffffff, { rx: -Math.PI / 2, ry: R(0, TAU), uvr: [R(0, 0.5), R(0, 0.5), R(0.5, 1), R(0.5, 1)] });
   }
-  TREES.push({ x, z, r: crown + 1.2 * s, kind: 'sakura', y });
-  return { crown, cc: [x + cc[0], y + cc[1], z + cc[2]] };
+  TREES.push({ x, z, r: crown + 0.8 * s, kind: 'sakura', y });
+  return { crown, cc: [x + C.cx, y + C.cy, z + C.cz] };
 }
 
-/* 绿树（樟树、榉树） */
+/* 绿树（樟树、榉树）：圆润的大树冠，几团叶簇叠在一起 */
 function greenTree(x, z, s = 1, o = {}) {
   const y = o.y != null ? o.y : groundAt(x, z);
   const kit = new Kit(x, y, z, 0);
-  const P = { droop: 0.02, spread: 0.7, flatten: 0.85, lenK: 0.66, depth: 2, bark: new THREE.Color(0x6e6150) };
+  const P = { droop: 0.02, spread: 0.7, flatten: 0.85, lenK: 0.68, depth: 2, bark: new THREE.Color(0x6e6150) };
   const trunkH = 2.2 * s, r0 = 0.22 * s;
   kit.rod('bark', [0, -0.3, 0], [0, trunkH, 0], r0, P.bark, { rt: 0.75, seg: 8 });
   const tips = []; const n = RI(3, 4); const a0 = R(0, TAU);
   for (let i = 0; i < n; i++) growBranches(kit, [0, trunkH, 0], a0 + i * TAU / n, R(0.8, 1.1), 2.2 * s, r0 * 0.6, 0, P, tips);
-  const b = cardBucket('leaf', x, z); const col = new THREE.Color(); const hue = o.hue || R(0, 1);
-  const base = new THREE.Color().setHSL(lerp(0.22, 0.3, hue), 0.25, 0.45);
-  const lite = new THREE.Color().setHSL(lerp(0.18, 0.24, hue), 0.35, 0.9);
-  let cy = 0; tips.forEach(t => cy += t.p[1]); cy /= tips.length;
-  const per = Math.round((o.cards || 700) * s * s / tips.length);
-  for (const t of tips) {
-    const rc = 1.5 * s;
-    for (let i = 0; i < per; i++) {
-      const u = R(-1, 1), th = R(0, TAU), rr = rc * (0.4 + 0.6 * Math.sqrt(R())); const sq = Math.sqrt(1 - u * u);
-      const ox = sq * Math.cos(th) * rr, oy = u * rr * 0.75 + 0.4 * s, oz = sq * Math.sin(th) * rr;
-      const px = t.p[0] + ox, py = t.p[1] + oy, pz = t.p[2] + oz;
-      const lx = px, ly = (py - cy) * 1.2 + 1.0 * s, lz = pz; const L = Math.hypot(lx, ly, lz) || 1;
-      const bright = clamp(0.3 + 0.5 * (py - cy + rc) / (rc * 2.2) + 0.25 * Math.hypot(px, pz) / (rc * 2.4), 0, 1);
-      col.copy(base).lerp(lite, bright);
-      addCard(b, x + px, y + py, z + pz, ox, oy + 0.4, oz, R(0.9, 1.4) * Math.sqrt(s), RI(0, 3), col, clamp(Math.hypot(px, pz) / (rc * 2.5), 0.1, 0.8), lx / L, ly / L, lz / L);
-    }
-    kit.sph('vc', t.p[0], t.p[1] + 0.3 * s, t.p[2], rc * 0.55, rc * 0.42, rc * 0.55, 0x2f4a2a, { lo: true });
-  }
-  TREES.push({ x, z, r: 2.5 * s, kind: 'green', y });
+  const cl = clusterTips(tips.map(t => [t.p[0], t.p[1] + 0.45 * s, t.p[2]]), 1.5 * s);
+  const clumps = cl.map(c => ({ x: c.x, y: c.y, z: c.z, r: (1.15 + 0.12 * Math.min(c.n, 4)) * s, sq: R(0.72, 0.85) }));
+  // 顶部再加一簇，让树冠更饱满
+  let tx = 0, tz = 0, ty = 0; for (const c of clumps) { tx += c.x; tz += c.z; ty = Math.max(ty, c.y); } clumps.push({ x: tx / clumps.length, y: ty + 0.7 * s, z: tz / clumps.length, r: 1.3 * s, sq: 0.75 });
+  const hue = o.hue != null ? o.hue : R(0, 1);
+  const base = new THREE.Color().setHSL(lerp(0.24, 0.3, hue), 0.42, 0.36), lite = new THREE.Color().setHSL(lerp(0.17, 0.22, hue), 0.55, 0.62), shade = new THREE.Color().setHSL(0.42, 0.3, 0.2);
+  const C = canopy(kit, x, y, z, clumps, { kind: 'leaf', base, lite, shade, card: (o.proto ? 0.85 : 0.62) * Math.sqrt(s), dens: 1.5 * (o.cards || 700) / 700, crop: true, body: 0.86, inner: o.proto ? 0 : 0.12, local: 0.45, sway: 0.5, lo: o.proto });
+  TREES.push({ x, z, r: C.ext, kind: 'green', y });
 }
 
-/* 黑松 */
+/* 黑松：弯曲的树干，枝端是一层层扁平的针叶团 */
 function pineTree(x, z, s = 1, o = {}) {
   const y = o.y != null ? o.y : groundAt(x, z);
   const kit = new Kit(x, y, z, 0); const bark = new THREE.Color(0x5e4b3c);
   let p = [0, -0.3, 0]; let a = R(0, TAU); const pts = [p];
   for (let i = 0; i < 4; i++) { const np = [p[0] + Math.cos(a) * 0.6 * s, p[1] + 1.4 * s, p[2] + Math.sin(a) * 0.6 * s]; kit.rod('bark', p, np, 0.2 * s * (1 - i * 0.18), bark, { rt: 0.85, seg: 7 }); p = np; pts.push(np); a += R(-1.2, 1.2); }
-  const b = cardBucket('pine', x, z); const col = new THREE.Color();
+  const clumps = [];
   for (let i = 1; i < pts.length; i++) {
     const nb = i === pts.length - 1 ? 1 : 2;
     for (let k = 0; k < nb; k++) {
-      const ba = R(0, TAU), bl = R(1.2, 2.4) * s * (1 - i * 0.12);
+      const ba = R(0, TAU), bl = (i === pts.length - 1 ? 0.3 : R(1.2, 2.2)) * s * (1 - i * 0.1);
       const e = [pts[i][0] + Math.cos(ba) * bl, pts[i][1] + R(-0.2, 0.3), pts[i][2] + Math.sin(ba) * bl];
-      kit.rod('bark', pts[i], e, 0.07 * s, bark, { rt: 0.5, seg: 5 });
-      const rc = R(1.0, 1.5) * s;
-      for (let j = 0; j < 55 * s; j++) {
-        const th = R(0, TAU), rr = Math.sqrt(R()) * rc; const px = e[0] + Math.cos(th) * rr, pz = e[2] + Math.sin(th) * rr, py = e[1] + R(-0.15, 0.35) * s;
-        const bright = R(0.35, 0.8) + (py - e[1]) * 0.5; col.setScalar(lerp(0.55, 1.0, bright));
-        addCard(b, x + px, y + py, z + pz, R(-0.4, 0.4), 1, R(-0.4, 0.4), R(0.8, 1.15) * s, RI(0, 1), col, 0.3, (px - e[0]) * 0.3, 1, (pz - e[2]) * 0.3, 0.7);
-      }
+      if (bl > 0.5) kit.rod('bark', pts[i], e, 0.07 * s, bark, { rt: 0.5, seg: 5 });
+      clumps.push({ x: e[0], y: e[1] + 0.25 * s, z: e[2], r: R(1.0, 1.4) * s * (1 - i * 0.06), sq: 0.36 });
     }
   }
+  canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3f5c48), lite: new THREE.Color(0x8aa874), shade: new THREE.Color(0x1f3436), card: (o.proto ? 0.8 : 0.6) * Math.sqrt(s), dens: o.proto ? 1.0 : 1.6, crop: true, body: 0.8, inner: o.proto ? 0 : 0.1, local: 0.6, sway: 0.3, lo: o.proto });
   TREES.push({ x, z, r: 2.5 * s, kind: 'pine', y });
 }
 
-/* 灌木 */
+/* 灌木（杜鹃、黄杨）：两三团贴地的叶簇，可带花 */
 function shrub(x, z, s = 1, flowers = 0, y) {
   y = y != null ? y : groundAt(x, z);
-  const b = cardBucket('leaf', x, z); const col = new THREE.Color();
-  const n = Math.round(30 * s * s);
-  for (let i = 0; i < n; i++) {
-    const th = R(0, TAU), u = R(0, 1), rr = Math.sqrt(R()) * s;
-    const px = Math.cos(th) * rr, pz = Math.sin(th) * rr, py = 0.35 * s + u * 0.55 * s;
-    const bright = 0.3 + u * 0.6; col.setScalar(lerp(0.5, 0.95, bright));
-    if (flowers) col.lerp(new THREE.Color(flowers), 0.0);
-    addCard(b, x + px, y + py, z + pz, px, 1, pz, R(0.6, 0.9) * s, RI(0, 3), col, 0.2, px, 1, pz);
-  }
-  WK.sph('vc', x, y + 0.42 * s, z, s * 0.7, s * 0.4, s * 0.7, 0x2f4a2a, { lo: true });
+  const kit = new Kit(x, y, z, 0);
+  const clumps = []; const n = RI(2, 3);
+  for (let i = 0; i < n; i++) { const a = R(0, TAU), d = R(0.15, 0.4) * s; clumps.push({ x: Math.cos(a) * d, y: 0.45 * s, z: Math.sin(a) * d, r: R(0.5, 0.65) * s, sq: 0.8 }); }
+  canopy(kit, x, y, z, clumps, { kind: 'leaf', base: new THREE.Color(0x4f7a40), lite: new THREE.Color(0x9cc070), shade: new THREE.Color(0x24403a), card: 0.3, dens: 1.7, crop: true, body: 0.88, local: 0.5, sway: 0.15 });
   if (!BATCH_NOCHUNK) addCollider(x, z, 0.65 * s, 0.65 * s, 0, y, y + 0.9 * s, { round: true, noFloor: true });
-  if (flowers) for (let i = 0; i < 10 * s; i++) { const th = R(0, TAU), rr = R(0.3, 0.9) * s; WK.sph('vcNoShadow', x + Math.cos(th) * rr, y + R(0.6, 0.95) * s, z + Math.sin(th) * rr, 0.09, 0.07, 0.09, flowers, { lo: true }); }
+  if (flowers) for (let i = 0; i < 22 * s; i++) { const th = R(0, TAU), u = R(0.1, 1), rr = Math.sqrt(1 - u * u) * 0.75 * s; WK.sph('vcNoShadow', x + Math.cos(th) * rr, y + 0.45 * s + u * 0.5 * s, z + Math.sin(th) * rr, 0.07, 0.05, 0.07, flowers, { lo: true }); }
 }
 
 /* 草丛卡片 */
@@ -1769,17 +1831,14 @@ function applyPetalQuality() { if (petalPoints) petalPoints.geometry.setDrawRang
 /* ---------------- 实例化森林：少量原型树 × 数千实例 ---------------- */
 function sugiTree(x, z, s = 1, o = {}) {
   const y = o.y != null ? o.y : groundAt(x, z); const kit = new Kit(x, y, z, 0); const H = 15 * s;
-  kit.cyl('bark', 0, H * 0.45, 0, 0.32 * s, H * 0.9, 0x9a8070, { rt: 0.25, seg: 8 });
-  const b = cardBucket('pine', x, z); const col = new THREE.Color();
-  for (let h = 3.5 * s; h < H; h += 0.9 * s) {
-    const t = (h - 3.5 * s) / (H - 3.5 * s); const r = lerp(2.9, 0.35, Math.pow(t, 0.85)) * s; const n = Math.max(3, Math.round(r * 4));
-    for (let k = 0; k < n; k++) {
-      const a = k / n * TAU + R(-0.3, 0.3); const rr = r * R(0.55, 1.0);
-      const px = Math.cos(a) * rr, pz = Math.sin(a) * rr, py = h + R(-0.3, 0.3);
-      col.setScalar(lerp(0.42, 0.85, R(0, 1) * 0.5 + t * 0.5)).multiply(_cl.setRGB(0.85, 0.95, 0.85));
-      addCard(b, x + px, y + py, z + pz, px, 0.6, pz, R(1.3, 2.0) * s, RI(0, 3), col, clamp(t * 0.8 + 0.2, 0, 1), px, 0.5, pz, 0.8);
-    }
+  kit.cyl('bark', 0, H * 0.45, 0, 0.32 * s, H * 0.9, 0x8a7060, { rt: 0.25, seg: 8 });
+  // 杉：沿主干一层层的锥形针叶团
+  const clumps = [];
+  for (let h = 4.4 * s; h < H; h += 1.7 * s) {
+    const t = (h - 4.4 * s) / (H - 4.4 * s); const r = lerp(2.5, 0.6, Math.pow(t, 0.9)) * s; const n = t > 0.6 ? 1 : 2; const a0 = R(0, TAU);
+    for (let k = 0; k < n; k++) { const a = a0 + k * Math.PI, d = n > 1 ? r * 0.3 : 0; clumps.push({ x: Math.cos(a) * d, y: h, z: Math.sin(a) * d, r: n > 1 ? r * 0.82 : r, sq: 0.62 }); }
   }
+  canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3c5a40), lite: new THREE.Color(0x7d9c64), shade: new THREE.Color(0x1c3032), card: 1.2 * s, dens: 0.8, crop: true, body: 0.86, local: 0.5, sway: 0.25, lo: o.proto });
   if (!o.proto) TREES.push({ x, z, r: 3 * s, kind: 'sugi', y });
 }
 const FOREST = { meshes: [] };
@@ -1806,24 +1865,26 @@ function makeProto(fn) {
 function buildForest() {
   seed(99);
   const protos = {
-    broad: [makeProto(() => greenTree(0, 0, 1.25, { y: 0, cards: 420, hue: 0.2 })), makeProto(() => greenTree(0, 0, 1.0, { y: 0, cards: 380, hue: 0.7 }))],
+    broad: [makeProto(() => greenTree(0, 0, 1.25, { y: 0, cards: 420, hue: 0.2, proto: true })), makeProto(() => greenTree(0, 0, 1.0, { y: 0, cards: 380, hue: 0.7, proto: true }))],
     sugi: [makeProto(() => sugiTree(0, 0, 1.0, { y: 0, proto: true })), makeProto(() => sugiTree(0, 0, 0.8, { y: 0, proto: true }))],
-    pine: [makeProto(() => pineTree(0, 0, 1.1, { y: 0 }))],
+    pine: [makeProto(() => pineTree(0, 0, 1.1, { y: 0, proto: true }))],
   };
   const lists = { broad: [[], []], sugi: [[], []], pine: [[]] };
   let placed = 0;
-  for (let i = 0; i < 26000 && placed < 3200; i++) {
-    const x = R(WORLD.x0 + 10, WORLD.x1 - 10), z = R(WORLD.z0 + 10, WORLD.z1 - 10); const c = islandC(x, z); if (c < 0.05) continue;
-    if (x > -125 && x < 135 && z > -95 && z < 160) continue;
-    if (Math.abs(z + 60) < 16 && x > -175 && x < 145) continue;
-    if (flatW(x, z, -330, -120, -50, 120, 4) > 0.3) continue;
-    if (Math.abs(x + 40) < 30 && z < -80 && z > -158) continue;
-    if (Math.hypot(x - CAPE.x, z - CAPE.z) < 22 || polyDist(CAPE_PATH, x, z) < 5) continue;
+  const trail = (typeof VIEW_TRAIL !== 'undefined' && VIEW_TRAIL) || [];
+  for (let i = 0; i < 40000 && placed < 2400; i++) {
+    const x = R(WORLD.x0 + 10, WORLD.x1 - 10), z = R(WORLD.z0 + 10, WORLD.z1 - 10); const c = islandC(x, z); if (c < 0.035) continue;
+    if (x > -116 && x < 132 && z > -92 && z < 96) continue; // 镇区
+    if (Math.abs(x + 40) < 25 && z < -100 && z > -151) continue; // 神社台地
+    if (Math.hypot(x - CAPE.x, z - CAPE.z) < 20 || polyDist(CAPE_PATH, x, z) < 4.5) continue;
+    if (FARM.paddy(x, z) || (x < -112 && x > -158 && z > -50 && z < 92)) continue;
     if (roadSample(x, z) > 0.02 || riverDist(x, z) < 11) continue;
-    const h = terrainH(x, z); if (h < 3 || occNear(x, z, 3.6)) continue;
-    const dens = smooth(0.35, 0.6, fbm(x * 0.012 + 7, z * 0.012, 3)) * 0.8 + smooth(10, 40, h) * 0.6; if (rng() > dens) continue;
-    const kind = c < 0.12 ? 'pine' : (h > 22 ? (chance(0.75) ? 'sugi' : 'broad') : (chance(0.3) ? 'sugi' : 'broad'));
-    const sc = R(0.8, 1.25); const arr = lists[kind]; arr[RI(0, arr.length - 1)].push([x, h - 0.2, z, R(0, TAU), sc]);
+    if (trail.length && polyDist(trail, x, z) < 3.2) continue;
+    const h = terrainH(x, z); if (h < 2.2 || occNear(x, z, 3.4)) continue;
+    const coast = c < 0.13; // 海岸防风林
+    const dens = coast ? 0.75 : smooth(3.5, 12, h) * 0.95 + smooth(0.45, 0.7, fbm(x * 0.02 + 7, z * 0.02, 3)) * 0.3; if (rng() > dens) continue;
+    const kind = coast ? 'pine' : (h > 16 ? (chance(0.6) ? 'sugi' : 'broad') : (chance(0.25) ? 'sugi' : 'broad'));
+    const sc = R(0.8, 1.2) * (coast ? R(0.85, 1.1) : 1); const arr = lists[kind]; arr[RI(0, arr.length - 1)].push([x, h - 0.2, z, R(0, TAU), sc]);
     addCollider(x, z, (kind === 'sugi' ? 0.3 : 0.24) * sc, (kind === 'sugi' ? 0.3 : 0.24) * sc, 0, h - 0.5, h + 4, { round: true, noFloor: true });
     placed++;
   }
@@ -1962,12 +2023,12 @@ function buildGrass() {
         float dens = smoothstep(0.4, 0.8, gf.y) * (1.0 - covered) * (1.0 - smoothstep(gSize * 0.3, gSize * 0.5, gd));
         float keep = step(aBlade.z, dens * mix(0.45, 1.0, macro));
         float meadow = smoothstep(0.45, 0.75, gNoise(gwp * 0.018 + 7.0));
-        float hgt = gH * mix(0.55, 1.35, aBlade.w) * mix(0.65, 1.3, macro) * mix(1.0, 1.6, meadow) * keep;
-        vFlower = step(0.985, fract(aBlade.w * 91.7)) * step(0.3, macro);
+        float hgt = gH * mix(0.55, 1.35, aBlade.w) * mix(0.65, 1.3, macro) * mix(1.0, 1.6, meadow * smoothstep(0.75, 1.0, gf.w)) * gf.w * keep;
+        vFlower = step(0.985, fract(aBlade.w * 91.7)) * step(0.3, macro) * step(0.5, gf.w);
         float t = position.y;
         float ang = aBlade.w * 6.2831 + aBlade.z * 3.0;
         vec3 sideV = vec3(cos(ang), 0.0, sin(ang));
-        float w = gW * mix(0.75, 1.3, fract(aBlade.z * 7.31)) * (1.0 + smoothstep(10.0, gSize * 0.5, gd) * 1.5);
+        float w = gW * mix(0.75, 1.3, fract(aBlade.z * 7.31)) * mix(0.62, 1.0, gf.w) * (1.0 + smoothstep(10.0, gSize * 0.5, gd) * 1.5);
         // 草浪：沿风向推进的阵风带 + 低频噪声
         float wave = sin(dot(gwp, vec2(0.13, 0.08)) - uTime * 1.7) * 0.5 + 0.5;
         float wn = gNoise(gwp * 0.045 - vec2(uTime * 0.35, uTime * 0.22));
@@ -2751,12 +2812,18 @@ function parkBench(x, z, ry, y) {
    ========================================================================== */
 const TRACK_Z = [-65, -55]; // 镇区：0 = 外侧（北轨，顺 s 方向），1 = 内侧（南轨，逆 s 方向）
 const RAIL_Y = TOWN_Y + 0.2, PLAT_Y = TOWN_Y + 1.3;
-const RAIL_X0 = -178, RAIL_X1 = 150;
+const RAIL_X0 = -125, RAIL_X1 = 108;
 const CROSSINGS = []; // {id, x, z, s, active, arms:[], lamps:[], t}
 const STATION = { x: 61 };
-const RAIL_CTRL = [[-178, -60], [-120, -60], [-60, -60], [0, -60], [60, -60], [120, -60], [150, -60], [170, -64], [180, -80], [168, -102], [138, -118], [116, -142], [106, -170], [103, -197], [94, -225], [80, -252], [62, -278], [40, -300], [14, -318], [-16, -334], [-50, -348], [-88, -360], [-125, -366], [-162, -362], [-196, -350], [-230, -333], [-264, -316], [-300, -298], [-336, -276], [-366, -252], [-388, -220], [-400, -182], [-398, -140], [-382, -104], [-360, -78], [-330, -64], [-290, -60], [-240, -60]];
-const RAIL = { pts: [], len: 0, trk: [[], []], townS1: 0, cross: null, stops: [] };
-const RAIL_G = 0.025; // 最大坡度 2.5%
+const RAIL_CTRL = [[-125, -60], [-60, -60], [0, -60], [60, -60], [115, -60], [142, -58], [166, -50], [180, -33], [185, -8], [185, 22], [182, 52], [174, 74], [158, 90], [132, 100], [100, 101], [50, 101], [0, 101], [-50, 101], [-100, 101], [-134, 97], [-158, 82], [-174, 58], [-179, 25], [-178, -12], [-170, -38], [-153, -55]];
+const RAIL = { pts: [], len: 0, trk: [[], []], townS1: 0, cross: null, stops: [], xings: [] };
+// 镇外的人行道口（樱花广场 → 海滩）
+const RAIL_XINGS = [{ id: 'B', x: 0, z: 101, w: 6.4 }];
+// s 是否靠近镇外道口（公路平交道或人行道口）
+function railNearXing(s, d) { const L = RAIL.len; const near = (c) => { const ds = Math.abs(s - c); return Math.min(ds, L - ds) < d; }; return (RAIL.cross && near(RAIL.cross.s)) || RAIL.xings.some(x => near(x.s)); }
+const RAIL_G = 0.03; // 最大坡度 30‰（地方线常见）
+// 轨面最低高度：跨港口处抬高，让渔船能从桥下进出
+function railMinY(x, z) { return x > 124 && z > -40 && z < 66 ? 4.8 : 2.6; }
 
 function closedCatmull(P, spacing) {
   const out = []; const n = P.length;
@@ -2780,10 +2847,10 @@ function railSep(s) {
 /* 预规划（道路数据之前）：按自然地形求铁路纵断面，并找出与环岛公路的交点，让公路在交点处降到轨面高度 */
 function railPrep() {
   const xz = closedCatmull(RAIL_CTRL, 2); const n = xz.length;
-  const town = (i) => xz[i][0] > -182 && xz[i][0] < 152 && Math.abs(xz[i][1] + 60) < 0.8;
-  let y = xz.map(p => Math.max(2.6, terrainNatural(p[0], p[1])));
+  const town = (i) => xz[i][0] > RAIL_X0 - 2 && xz[i][0] < RAIL_X1 + 2 && Math.abs(xz[i][1] + 60) < 0.8;
+  let y = xz.map(p => Math.max(railMinY(p[0], p[1]), terrainNatural(p[0], p[1])));
   for (let pass = 0; pass < 4; pass++) { const ny = y.slice(); for (let i = 0; i < n; i++) { let a = 0; for (let k = -30; k <= 30; k++) a += y[(i + k + n) % n]; ny[i] = a / 61; } y = ny; }
-  for (let i = 0; i < n; i++) if (town(i)) y[i] = TOWN_Y;
+  for (let i = 0; i < n; i++) if (town(i)) y[i] = TOWN_Y; else if (railMinY(xz[i][0], xz[i][1]) > 3) y[i] = railMinY(xz[i][0], xz[i][1]);
   const seg = (i, j) => Math.hypot(xz[i][0] - xz[j][0], xz[i][1] - xz[j][1]);
   for (let it = 0; it < 12; it++) {
     for (let k = 1; k <= n; k++) { const i = k % n, j = k - 1; if (town(i)) continue; const d = seg(i, j) * RAIL_G; y[i] = clamp(y[i], y[j] - d, y[j] + d); }
@@ -2797,11 +2864,11 @@ function buildRailData() {
   const xz = closedCatmull(RAIL_CTRL, 2); const n = xz.length;
   const S = [0]; for (let i = 1; i < n; i++) S.push(S[i - 1] + Math.hypot(xz[i][0] - xz[i - 1][0], xz[i][1] - xz[i - 1][1]));
   const L = S[n - 1] + Math.hypot(xz[0][0] - xz[n - 1][0], xz[0][1] - xz[n - 1][1]);
-  const town = (i) => xz[i][0] > -182 && xz[i][0] < 152 && Math.abs(xz[i][1] + 60) < 0.8;
+  const town = (i) => xz[i][0] > RAIL_X0 - 2 && xz[i][0] < RAIL_X1 + 2 && Math.abs(xz[i][1] + 60) < 0.8;
   const gnd = (x, z) => terrainH(x, z); // 已包含道路填挖
-  let y = xz.map(p => Math.max(2.6, gnd(p[0], p[1])));
+  let y = xz.map(p => Math.max(railMinY(p[0], p[1]), gnd(p[0], p[1])));
   for (let pass = 0; pass < 4; pass++) { const ny = y.slice(); for (let i = 0; i < n; i++) { let a = 0; for (let k = -30; k <= 30; k++) a += y[(i + k + n) % n]; ny[i] = a / 61; } y = ny; }
-  const fix = new Map(); for (let i = 0; i < n; i++) if (town(i)) fix.set(i, TOWN_Y);
+  const fix = new Map(); for (let i = 0; i < n; i++) if (town(i)) fix.set(i, TOWN_Y); else if (railMinY(xz[i][0], xz[i][1]) > 3) fix.set(i, railMinY(xz[i][0], xz[i][1]));
   // 与环岛公路的平交道：轨面与路面同高
   const road = ROADS[0]; let best = 1e9, bi = -1, bp = null;
   for (let i = 0; i < n; i++) { if (town(i)) continue; for (const p of road.pts) { const d = Math.hypot(p[0] - xz[i][0], p[2] - xz[i][1]); if (d < best) { best = d; bi = i; bp = p; } } }
@@ -2822,7 +2889,7 @@ function buildRailData() {
     else sepType = diff > 0 ? 'tun' : 'bri';
   }
   // 结构判定
-  const f = []; for (let i = 0; i < n; i++) { const t = gnd(xz[i][0], xz[i][1]); f.push(town(i) ? 'town' : t - y[i] > 7 ? 'tun' : y[i] - t > 6 ? 'bri' : 'grd'); }
+  const f = []; for (let i = 0; i < n; i++) { const t = gnd(xz[i][0], xz[i][1]); f.push(town(i) ? 'town' : t - y[i] > 7 ? 'tun' : (y[i] - t > 6 || riverDist(xz[i][0], xz[i][1]) < 10) ? 'bri' : 'grd'); }
   const runs = (val, minLen, repl) => { let i = 0; while (i < n) { if (f[i] !== val) { i++; continue; } let j = i; while (j < n && f[j] === val) j++; if (j - i < minLen) for (let k = i; k < j; k++) f[k] = repl; i = j; } };
   if (sepType) { const span = sepType === 'tun' ? 14 : 10; for (let k = -span; k <= span; k++) f[(bi + k + n) % n] = sepType; RAIL.over = { i: bi, type: sepType }; }
   runs('tun', 16, 'grd'); runs('bri', 6, 'grd');
@@ -2835,6 +2902,7 @@ function buildRailData() {
   RAIL.len = L;
   { let i = 0; while (i < n && RAIL.pts[i].f === 'town') i++; RAIL.townS1 = RAIL.pts[Math.max(0, i - 1)].s; }
   if (RAIL.cross) RAIL.cross.s = S[RAIL.cross.i];
+  for (const x of RAIL_XINGS) { const s0 = railNearestS(x.x, x.z); const p = railAt(s0); RAIL.xings.push(Object.assign({}, x, { s: s0, x: p.x, z: p.z, y: p.y })); }
   // 铁路隧道覆土下限
   for (const p of RAIL.pts) if (p.f === 'tun') addTunnelCover(p.x, p.z, p.y + 9, 7);
   for (const p of RAIL.pts) if (p.f === 'grd') addClearance(p.x, p.z, p.y - 0.32, 5);
@@ -2855,10 +2923,10 @@ function buildRailData() {
   // 各轨道中心线（左手通行：0 号轨在 s 方向左侧）
   for (const p of RAIL.pts) { const o = railSep(p.s) / 2; RAIL.trk[0].push([p.x + p.lx * o, p.y, p.z + p.lz * o]); RAIL.trk[1].push([p.x - p.lx * o, p.y, p.z - p.lz * o]); }
 }
-/* 车站：镇区樱丘站（岛式站台）+ 北岸潮见崎站、西岸西浜站（相对式站台），选在平缓的路基段 */
+/* 车站：镇区樱丘站（岛式站台）+ 海边的汐见浜站、水田边的稻穗站（相对式站台），选在平缓的路基段 */
 function planRailStops() {
   RAIL.stops.push({ name: '樱丘', roman: 'SAKURAGAOKA', code: 'S07', s: railNearestS(STATION.x, -60), half: 31, island: true });
-  for (const [name, roman, code, tx, tz] of [['潮见崎', 'SHIOMISAKI', 'S08', -125, -366], ['西浜', 'NISHIHAMA', 'S09', -398, -140]]) {
+  for (const [name, roman, code, tx, tz] of [['汐见浜', 'SHIOMIHAMA', 'S08', 60, 101], ['稻穗', 'INAHO', 'S09', -178, 8]]) {
     const P = RAIL.pts, n = P.length; const s0 = railNearestS(tx, tz); let best = null;
     for (let i = 0; i < n; i++) {
       const c = P[i]; const ds = Math.abs(c.s - s0); if (ds > 220) continue;
@@ -2903,7 +2971,7 @@ function railRuns() { const P = RAIL.pts, out = []; let i = 0; while (i < P.leng
 function buildTracks() {
   const P = RAIL.pts, n = P.length;
   const townGaps = [[-4.6, 4.6], [95.4, 104.6], [22.6, 26.6]];
-  const inGap = (p) => (p.f === 'town' && townGaps.some(g => p.x > g[0] && p.x < g[1])) || (RAIL.cross && Math.abs(p.s - RAIL.cross.s) < 6.5);
+  const inGap = (p) => (p.f === 'town' && townGaps.some(g => p.x > g[0] && p.x < g[1])) || (RAIL.cross && Math.abs(p.s - RAIL.cross.s) < 6.5) || RAIL.xings.some(x => Math.abs(p.s - x.s) < x.w / 2 + 0.2);
   for (const k of [0, 1]) {
     const path = railPath(k, 0, n); // 闭合：多取一个点
     // 道砟（梯形截面）
@@ -2941,6 +3009,13 @@ function buildTracks() {
     K.box('concrete', 0, 0.1, 0, 12.5, 0.2, railSep(c.s) + 7, 0xb9b5ad, { wuv: 0.6, solid: { walk: true } });
     for (const sd of [-1, 1]) for (const r of [-0.62, 0.62]) K.box('vcNoShadow', 0, 0.205, sd * railSep(c.s) / 2 + r * 0.9, 12.5, 0.01, 0.12, 0x3a3a3a);
     buildCrossingAt('W', c.x, c.y, c.z, Math.atan2(-p.tz, p.tx), railSep(c.s) / 2 + 4.2, 4.6, c.s);
+  }
+  // 人行道口：铺板 + 警报器 + 栏杆
+  for (const c of RAIL.xings) {
+    const p = railAt(c.s); const ry = Math.atan2(-p.tz, p.tx); const K = new Kit(c.x, c.y, c.z, ry);
+    K.box('concrete', 0, 0.1, 0, c.w, 0.2, railSep(c.s) + 6, 0xb9b5ad, { wuv: 0.6, solid: { walk: true } });
+    for (const sd of [-1, 1]) for (const r of [-0.62, 0.62]) K.box('vcNoShadow', 0, 0.205, sd * railSep(c.s) / 2 + r * 0.9, c.w, 0.01, 0.12, 0x3a3a3a);
+    buildCrossingAt(c.id, c.x, c.y, c.z, ry, railSep(c.s) / 2 + 3.2, c.w / 2 + 0.3, c.s);
   }
   buildRailStations();
   buildCatenary();
@@ -2989,7 +3064,7 @@ function buildCatenary() {
     if (p.s - last < 42) continue;
     if (p.f === 'tun') { last = p.s; attach[0].push(null); attach[1].push(null); continue; }
     if (p.f === 'town' && (Math.abs(p.x) < 7 || Math.abs(p.x - 100) < 7 || Math.abs(p.x - 24.6) < 5 || Math.abs(p.x + 74.8) < 12)) continue;
-    if (RAIL.cross && Math.abs(p.s - RAIL.cross.s) < 10) continue;
+    if (railNearXing(p.s, 10)) continue;
     last = p.s;
     const half = railSep(p.s) / 2 + 2.6; const K = new Kit(p.x, p.y, p.z, Math.atan2(-p.tz, p.tx));
     for (const sd of [-1, 1]) { K.cyl('concrete', 0, 3.6, sd * half, 0.16, 7.2, 0xc9c9c4, { rt: 0.75, seg: 8 }); }
@@ -3049,7 +3124,8 @@ function buildRailStations() {
       for (const x of [-8, 8]) { for (const f of [-1, 1]) K.plane('sign', x, 2.0, f * 0.04, 2.4, 0.94, 0xffffff, { uvr: uv, ry: f > 0 ? 0 : Math.PI }); K.box('vc', x, 2.0, 0, 2.5, 1.04, 0.06, 0x5a6670); for (const r of [-1, 1]) K.box('vc', x + r * 1.1, 0.75, 0, 0.08, 1.5, 0.08, 0x5a6670); }
       for (const x of [-12, 0, 12]) { K.cyl('paint', x, 1.8, back, 0.06, 3.6, 0x5a6670, { seg: 8 }); K.box('glow', x, 3.55, back - sd * 0.3, 0.5, 0.06, 0.16, 0xfafafa); const hp = K.w(x, 3.4, back - sd * 0.3); addHalo(hp[0], hp[1], hp[2], 1.8, 0xf2f6ff); const lp = K.w(x, 0, back - sd * 0.6); addLightPool(lp[0], c.y + 1.3, lp[2], 3.5, 0xe8f0ff); }
     }
-    const pl = railAt(st.s); addPlace(st.name + '站', pl.x + pl.lx * (railSep(st.s) / 2 + 9), pl.z + pl.lz * (railSep(st.s) / 2 + 9), ry, 'station2');
+    const pl = railAt(st.s); const inl = islandC(pl.x + pl.lx * 20, pl.z + pl.lz * 20) > islandC(pl.x - pl.lx * 20, pl.z - pl.lz * 20) ? 1 : -1; // 放在岛内一侧
+    addPlace(st.name + '站', pl.x + pl.lx * inl * (railSep(st.s) / 2 + 6.5), pl.z + pl.lz * inl * (railSep(st.s) / 2 + 6.5), Math.atan2(-pl.lx * inl, -pl.lz * inl), 'station2');
   });
 }
 /* 线路两侧的防护栅栏（镇外、路基段），在道口与车站处断开 */
@@ -3060,7 +3136,7 @@ function buildRailFences() {
       let last = -99, prev = null;
       for (let i = i0; i <= i1; i++) {
         const p = RAIL.pts[i]; if (p.s - last < 3) continue;
-        if (RAIL.cross && Math.abs(p.s - RAIL.cross.s) < 12) { prev = null; continue; }
+        if (railNearXing(p.s, 12)) { prev = null; continue; }
         if (RAIL.stops.some(st => Math.abs(p.s - st.s) < st.half + 6)) { prev = null; continue; }
         last = p.s; const o = sd * (railSep(p.s) / 2 + 3.4); const x = p.x + p.lx * o, z = p.z + p.lz * o; const y = terrainH(x, z);
         WK.cyl('paint', x, y + 0.6, z, 0.035, 1.2, 0x6d7a72, { seg: 6 });
@@ -3429,14 +3505,24 @@ function buildRiverbanks() {
       const top = Math.min(terrainH(mx + nx * s * 9, mz + nz * s * 9), TOWN_Y);
       const hgt = top + 0.9;
       WK.box('stone', mx + nx * s * 6.9, -0.9 + hgt / 2, mz + nz * s * 6.9, 0.6, hgt, L + 0.6, 0xc9c2b4, { ry, rz: s * 0.32, wuv: 0.4 });
-      // 堤岸栏杆
+      // 堤岸栏杆与河堤步道：遇到公路桥、铁路桥处断开
       if (top > 1.5) {
-        for (let k = 0; k <= Math.floor(L / 2.5); k++) { const t = k / Math.floor(L / 2.5); const px = a[0] + dx * t + nx * s * 8.5, pz = a[1] + dz * t + nz * s * 8.5; WK.box('paint', px, top + 0.45, pz, 0.08, 0.9, 0.08, 0x5d6b58); }
-        WK.box('paint', mx + nx * s * 8.5, top + 0.88, mz + nz * s * 8.5, 0.07, 0.07, L, 0x5d6b58, { ry });
-        WK.box('paint', mx + nx * s * 8.5, top + 0.5, mz + nz * s * 8.5, 0.05, 0.05, L, 0x5d6b58, { ry });
-        addCollider(mx + nx * s * 8.5, mz + nz * s * 8.5, 0.08, L / 2 + 0.3, ry, top, top + 1, 'wall');
-        // 河堤步道
-        WK.box('gravel', mx + nx * s * 11, top + 0.02, mz + nz * s * 11, 4, 0.04, L + 0.3, 0xead9c0, { ry, wuv: 0.35 });
+        const N = Math.max(1, Math.floor(L / 2.5)); const runs = []; let cur = null;
+        for (let k = 0; k <= N; k++) {
+          const t = k / N; const px = a[0] + dx * t + nx * s * 8.5, pz = a[1] + dz * t + nz * s * 8.5;
+          if (crossBlocked(px, pz)) { cur = null; continue; }
+          if (!cur) { cur = []; runs.push(cur); } cur.push([px, pz, t]);
+        }
+        for (const r of runs) {
+          for (const q of r) WK.box('paint', q[0], top + 0.45, q[1], 0.08, 0.9, 0.08, 0x5d6b58);
+          if (r.length < 2) continue;
+          const q0 = r[0], q1 = r[r.length - 1]; const cx = (q0[0] + q1[0]) / 2, cz = (q0[1] + q1[1]) / 2, len = Math.hypot(q1[0] - q0[0], q1[1] - q0[1]);
+          WK.box('paint', cx, top + 0.88, cz, 0.07, 0.07, len, 0x5d6b58, { ry, noCol: true });
+          WK.box('paint', cx, top + 0.5, cz, 0.05, 0.05, len, 0x5d6b58, { ry, noCol: true });
+          addCollider(cx, cz, 0.08, len / 2 + 0.05, ry, top, top + 1, 'wall');
+          const t0 = q0[2], t1 = q1[2]; const wx = a[0] + dx * (t0 + t1) / 2 + nx * s * 11, wz = a[1] + dz * (t0 + t1) / 2 + nz * s * 11;
+          WK.box('gravel', wx, top + 0.02, wz, 4, 0.04, len + 2.5, 0xead9c0, { ry, wuv: 0.35, noCol: true });
+        }
       }
     }
   }
@@ -3449,15 +3535,22 @@ function buildRiverbanks() {
   // 樱花隧道：东岸两排、西岸一排
   for (let z = -42; z <= 82; z += 9.5) {
     const rx = riverAtZ(z); if (Math.abs(z + 20) < 4 || Math.abs(z - 40) < 4) continue;
-    sakuraTree(rx + 9.0, z + R(-1, 1), R(1.0, 1.15), { cards: 1500 });
-    sakuraTree(rx + 13.4, z + 4.5 + R(-1, 1), R(0.95, 1.1), { cards: 1500 });
-    sakuraTree(rx - 9.6, z + 2 + R(-1, 1), R(0.95, 1.1), { cards: 1400 });
+    for (const [ox, oz, sc] of [[9.0, R(-1, 1), R(1.0, 1.15)], [13.4, 4.5 + R(-1, 1), R(0.95, 1.1)], [-9.6, 2 + R(-1, 1), R(0.95, 1.1)]]) {
+      const tx = rx + ox, tz = z + oz; if (crossBlocked(tx, tz) || occNear(tx, tz, 2.5)) continue; sakuraTree(tx, tz, sc);
+    }
     // 灯笼
-    if (Math.round(z) % 2 === 0) for (const s of [1, -1]) { const lx = rx + s * 11.2, lz = z + 2.2; bankLantern(lx, lz); }
+    if (Math.round(z) % 2 === 0) for (const s of [1, -1]) { const lx = rx + s * 11.2, lz = z + 2.2; if (!crossBlocked(lx, lz)) bankLantern(lx, lz); }
   }
   // 桥
   bridge(-20, 6.0); bridge(40, 7.6);
   addPlace('樱川河堤', riverAtZ(10) + 11, 10, Math.PI, 'river');
+}
+// 河岸设施是否会挡住桥（公路桥面或铁路）
+function crossBlocked(x, z) {
+  if (roadSample(x, z) > 0.02) return true;
+  for (const r of ROADS) for (let i = 0; i < r.pts.length; i += 2) { const p = r.pts[i]; if (Math.hypot(p[0] - x, p[2] - z) < r.hw + 2.5) return true; }
+  for (let i = 0; i < RAIL.pts.length; i += 2) { const p = RAIL.pts[i]; if (Math.hypot(p.x - x, p.z - z) < railSep(p.s) / 2 + 4.5) return true; }
+  return false;
 }
 function bankLantern(x, z) {
   const y = groundAt(x, z); const K = new Kit(x, y, z, 0);
@@ -3713,26 +3806,41 @@ function buildCape() {
 const SHELLS = [];
 function buildBeach() {
   // 广场 → 沙滩台阶
-  for (let i = 0; i < 8; i++) { const z = 82 + i * 0.9; const y = groundAt(0, z + 0.45); WK.box('stone', 0, y - 0.2, z + 0.45, 6, 0.4, 0.9, 0xd8d2c6, { wuv: 0.5 }); }
+  for (let i = 0; i < 6; i++) { const z = 105.5 + i * 0.9; const y = groundAt(0, z + 0.45); WK.box('stone', 0, y - 0.2, z + 0.45, 6, 0.4, 0.9, 0xd8d2c6, { wuv: 0.5 }); }
   // 木栈道
-  for (let i = 0; i < 18; i++) { const x = -30 + i * 3.4; const z = 104; const y = groundAt(x, z) + 0.25; WK.box('wood', x, y, z, 3.3, 0.12, 2.0, 0xc9a06a, { wuv: 0.6, solid: { walk: true } }); WK.box('wood', x, y - 0.4, z + 0.9, 0.12, 0.8, 0.12, 0x8a6a4a); }
+  for (let i = 0; i < 18; i++) { const x = -30 + i * 3.4; const z = 112; const y = groundAt(x, z) + 0.25; WK.box('wood', x, y, z, 3.3, 0.12, 2.0, 0xc9a06a, { wuv: 0.6, solid: { walk: true } }); WK.box('wood', x, y - 0.4, z + 0.9, 0.12, 0.8, 0.12, 0x8a6a4a); }
   // 冰室小屋（海盐冰室）
-  const K = new Kit(26, groundAt(26, 110), 110, Math.PI);
+  const K = new Kit(26, groundAt(26, 117), 117, Math.PI);
   K.box('wood', 0, 1.4, 1.5, 5, 2.8, 3, 0xf4f1ea, { solid: true, wuv: 0.5 });
   K.box('vc', 0, 2.9, 0.6, 5.6, 0.12, 2.6, 0x2a8f8f, { rx: 0.15 });
   K.box('wood', 0, 1.0, -0.05, 4, 0.1, 0.6, 0xc9a06a);
   const iUV = drawShopSign({ id: 'ice', cn: '海盐冰室', en: 'SEA SALT ICE', tel: '0898-25-0808', font: 'round', bg: '#9fd2ee', fg: '#26375e', ac: '#ffffff' }, 480, 90);
   K.plane('sign', 0, 2.45, 0.01 + 0.0, 4.2, 0.78, 0xffffff, { uvr: iUV });
   K.cyl('vc', -2.2, 1.1, -0.6, 0.18, 0.5, 0xf4c27a, { rt: 0.02 / 0.18, seg: 12, rx: Math.PI }); K.sph('vc', -2.2, 1.45, -0.6, 0.22, 0.22, 0.22, 0xf8f4f0);
-  SHOPS.push({ def: { id: 'ice', cn: '海盐冰室', hours: [10, 19] }, x: 26, z: 108.5, door: K.w(0, 0, -0.5), ry: 0, open(h) { return h >= 10 && h < 19; } });
+  SHOPS.push({ def: { id: 'ice', cn: '海盐冰室', hours: [10, 19] }, x: 26, z: 115.5, door: K.w(0, 0, -0.5), ry: 0, open(h) { return h >= 10 && h < 19; } });
   // 遮阳伞、躺椅
-  for (const [x, z] of [[-20, 120], [-8, 126], [6, 122], [40, 124], [52, 118]]) {
+  for (const [x, z] of [[-20, 126], [-8, 131], [8, 128], [42, 129], [54, 124]]) {
     const y = groundAt(x, z); const U = new Kit(x, y, z, R(0, 3));
     U.cyl('vc', 0, 1.3, 0, 0.04, 2.6, 0xffffff, { seg: 6, rz: 0.1 });
     const cone = new THREE.ConeGeometry(1.6, 0.6, 12, 1, true);
     U.geo('paint', cone, 0.2, 2.55, 0, pick([0xe48fa6, 0x2a8f8f, 0xf6d04d, 0xd9483b]), { rz: 0.1 });
     U.box('wood', 1.4, 0.25, 0.4, 0.7, 0.06, 1.8, 0xffffff, { rx: 0.1 });
   }
+  // 海之家：木板平台、苇帘、桌椅、旗子与冲脚水龙头
+  { const hx = -52, hz = 117; const y = groundAt(hx, hz); const H = new Kit(hx, y, hz, Math.PI);
+    H.box('wood', 0, 0.35, 0, 12, 0.3, 8, 0xc9a06a, { solid: { walk: true }, wuv: 0.6 });
+    for (const [px, pz] of [[-5.8, -3.8], [5.8, -3.8], [-5.8, 3.8], [5.8, 3.8], [0, -3.8], [0, 3.8]]) H.box('wood', px, 1.7, pz, 0.16, 2.7, 0.16, 0x8a6a4a);
+    H.box('vc', 0, 3.1, 0, 12.6, 0.12, 8.6, 0x2a8f8f, { rx: 0.06 }); H.box('vc', 0, 2.9, 4.2, 12.6, 0.4, 0.06, 0xf4f1ea);
+    H.box('wood', 0, 1.7, -3.9, 12, 2.6, 0.08, 0xd8c8a0); // 后墙（苇帘）
+    for (let i = 0; i < 4; i++) { const tx = -4.2 + i * 2.8; H.box('wood', tx, 1.05, 1, 1.6, 0.06, 0.9, 0xf2f2f0); H.box('vc', tx, 0.75, 1, 0.08, 0.7, 0.08, 0x777777); for (const sz of [0.2, 1.8]) H.box('paint', tx, 0.75, sz, 0.5, 0.06, 0.4, pick([0xe9483b, 0x2c7bd8, 0xf6d04d])); }
+    H.box('wood', -3, 1.0, -3.0, 5, 1.0, 0.8, 0xb08a60); for (let i = 0; i < 5; i++) H.box('vcNoShadow', -5 + i, 1.65, -3.2, 0.5, 0.3, 0.4, pick([0xf6d04d, 0xffffff, 0xe48fa6]));
+    const hUV = allocSign(400, 90, (g, w, h2) => { g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, w, h2); g.fillStyle = '#d9483b'; g.font = `900 58px ${FONT.sans}`; g.textAlign = 'center'; g.fillText('海之家 · 汐风', w / 2, 68); });
+    H.plane('sign', 0, 2.85, 4.24, 5.4, 1.2, 0xffffff, { uvr: hUV });
+    for (const fx of [-7.5, 7.5]) { H.cyl('vc', fx, 1.6, 4.5, 0.03, 3.2, 0xdddddd, { seg: 6 }); H.box('vcNoShadow', fx + 0.4, 2.7, 4.5, 0.75, 1.2, 0.02, fx < 0 ? 0xd9483b : 0x2c6ea0); }
+    for (let i = 0; i < 6; i++) H.box('paint', -5 + i * 2, 0.9, -4.3, 0.55, 1.4, 0.1, pick([0x2c7bd8, 0xf6d04d, 0xe9483b, 0x7ac27a]), { rz: 0.15 });
+    const sh = H.w(9, 0, 1); WK.cyl('paint', sh[0], y + 1.2, sh[2], 0.05, 2.4, 0x9aa0a6, { seg: 8 }); WK.box('paint', sh[0], y + 2.35, sh[2] + 0.25, 0.1, 0.1, 0.5, 0x9aa0a6); WK.box('concrete', sh[0], y + 0.06, sh[2], 1.6, 0.12, 1.6, 0xd8d4cc); }
+  // 沙滩上的浴巾与凉鞋
+  for (const [x, z] of [[-14, 129], [2, 133], [36, 132], [50, 127]]) { WK.box('vcNoShadow', x, groundAt(x, z) + 0.02, z, 0.9, 0.01, 1.8, pick([0xe48fa6, 0xf6d04d, 0x9fd2ee, 0xffffff]), { ry: R(-0.4, 0.4), noCol: true }); }
   // 救生塔、小船
   const T = new Kit(64, groundAt(64, 128), 128, Math.PI);
   for (const sx of [-0.7, 0.7]) for (const sz of [-0.7, 0.7]) T.box('wood', sx, 1.2, sz, 0.12, 2.4, 0.12, 0xffffff);
@@ -3756,7 +3864,7 @@ function buildBeach() {
   bottle.position.set(bx, by + 0.08, bz); bottle.rotation.z = Math.PI / 2 - 0.2; scene.add(bottle);
   BEACH.bottle = bottle;
   addInteract({ x: bx, z: bz, r: 1.4, cond: () => bottle.visible, label: () => '捡起漂流瓶', act: () => GAME.bottle() });
-  addPlace('月牙沙滩', 10, 112, Math.PI, 'beach');
+  addPlace('月牙沙滩', 10, 118, Math.PI, 'beach');
 }
 const BEACH = {};
 
@@ -3769,7 +3877,7 @@ function buildResidential() {
   const eastLots = [[30, -34, -Math.PI / 2], [30, 8, -Math.PI / 2], [30, 24, -Math.PI / 2], [44, -32, 0], [44, -12, 0], [56, -30, 0], [80, -30, 0], [84, -10, Math.PI / 2], [86, 28, Math.PI / 2]];
   eastLots.forEach(([x, z, ry], i) => { if (ry === -Math.PI / 2) buildHouse(x - 2.4, z, ry, { w: 8, d: 7, yard: 2.0 }); else buildHouse(x, z, ry, { w: 9, d: 8, yard: 2.4, tree: i % 3 === 0 ? 'sakura' : 'green' }); });
   // 河西民居
-  const far = [[-100, -36, Math.PI / 2], [-100, -12, Math.PI / 2], [-100, 12, Math.PI / 2], [-104, 36, Math.PI / 2], [-122, -30, Math.PI / 2], [-124, -6, Math.PI / 2], [-126, 20, Math.PI / 2], [-112, 60, Math.PI / 2]];
+  const far = [[-100, -36, Math.PI / 2], [-100, -12, Math.PI / 2], [-100, 12, Math.PI / 2], [-104, 36, Math.PI / 2], [-110, 60, Math.PI / 2]];
   far.forEach(([x, z, ry], i) => buildHouse(x, z, ry, { w: 9, d: 8, yard: 2.6, tree: i % 2 ? 'sakura' : 'green' }));
   // 河西的小路
   WK.box('paving', -96, TOWN_Y + 0.03, 10, 4, 0.06, 110, 0xe5dccd, { wuv: 0.45 });
@@ -3784,43 +3892,48 @@ regMat('dirt', pm(TEX.ground, { roughness: 1 }), { tint: 0.4 });
 regMat('vinyl', new THREE.MeshStandardMaterial({ color: lin(0xeef2f2), roughness: 0.3, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, envMapIntensity: 1.2 }), { cast: false });
 function buildCountryside() {
   seed(314);
-  // —— 水田格 ——
-  const W = 24, D = 17;
-  for (let x = -322; x < -140; x += W + 1.6) for (let z = -36; z < 112; z += D + 1.6) {
+  // —— 水田格：环岛公路与河西民居之间 ——
+  const W = 17, D = 13;
+  for (const x of [-152, -133.8]) for (let z = -46; z < 78; z += D + 1.6) {
     const cx = x + W / 2, cz = z + D / 2;
-    if (islandC(cx, cz) < 0.1 || riverDist(cx, cz) < 16) continue;
-    let ok = true; for (const [ox, oz] of [[0, 0], [-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2], [0, -D / 2], [0, D / 2]]) { if (roadSample(cx + ox, cz + oz) > 0.01) ok = false; }
-    if (!ok || chance(0.12)) continue;
+    if (islandC(cx, cz) < 0.06 || riverDist(cx, cz) < 16) continue;
+    let ok = true; for (const [ox, oz] of [[0, 0], [-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2], [0, -D / 2], [0, D / 2]]) { if (roadSample(cx + ox, cz + oz) > 0.3 || (x > -140 && (cz > 64 || cz < -34))) ok = false; }
+    if (!ok) continue;
     let y = -1e9; for (const [ox, oz] of [[0, 0], [-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2]]) y = Math.max(y, terrainH(cx + ox, cz + oz));
-    WK.box('paddyMat', cx, y + 0.07, cz, W, 0.02, D, 0xffffff, { wuv: 0.18 });
-    for (const s of [-1, 1]) { WK.box('dirt', cx, y + 0.12, cz + s * (D / 2 + 0.4), W + 1.6, 0.36, 0.8, 0xb0a080, { wuv: 0.4 }); WK.box('dirt', cx + s * (W / 2 + 0.4), y + 0.12, cz, 0.8, 0.36, D, 0xb0a080, { wuv: 0.4 }); }
+    FARM.cells.push({ x0: x, x1: x + W, z0: z, z1: z + D, y, cx, cz });
+  }
+  // 两格改成温室
+  const gh = [FARM.cells[2], FARM.cells[FARM.cells.length - 3]].filter(Boolean);
+  for (const c of FARM.cells) {
+    const { cx, cz, y } = c;
+    for (const sd of [-1, 1]) { WK.box('dirt', cx, y + 0.12, cz + sd * (D / 2 + 0.4), W + 1.6, 0.36, 0.8, 0xb0a080, { wuv: 0.4, noCol: true }); WK.box('dirt', cx + sd * (W / 2 + 0.4), y + 0.12, cz, 0.8, 0.36, D, 0xb0a080, { wuv: 0.4, noCol: true }); }
+    if (gh.includes(c)) {
+      for (const oz of [-3.2, 3.2]) {
+        const g = new THREE.CylinderGeometry(2.8, 2.8, 15, 16, 1, true, -Math.PI / 2, Math.PI); g.rotateZ(Math.PI / 2);
+        WK.geo('vinyl', g, cx, y, cz + oz, 0xffffff);
+        for (let i = 0; i <= 5; i++) WK.geo('rail', new THREE.TorusGeometry(2.8, 0.03, 4, 16, Math.PI), cx - 7.5 + i * 3, y, cz + oz, 0xb0b4b8, { ry: Math.PI / 2 });
+        for (let i = 0; i < 3; i++) WK.box('vcNoShadow', cx, y + 0.3, cz + oz - 1.6 + i * 1.6, 14, 0.4, 0.6, 0x4f7a3a, { noCol: true });
+        addCollider(cx, cz + oz, 7.5, 2.8, 0, y, y + 2.8, 'wall');
+      }
+      WK.box('dirt', cx, y + 0.05, cz, W, 0.1, D, 0xa89878, { wuv: 0.4, noCol: true });
+      c.gh = true; continue;
+    }
+    WK.box('paddyMat', cx, y + 0.07, cz, W, 0.02, D, 0xffffff, { wuv: 0.18, noCol: true });
     addCollider(cx, cz, W / 2, D / 2, 0, y - 1, y + 0.08, { walk: true });
-    FARM.cells.push({ x0: x, x1: x + W, z0: z, z1: z + D, y });
   }
+  FARM.cells = FARM.cells.filter(c => !c.gh);
+  // 田间小路（农用道）与水渠
+  WK.box('gravel', -135.2, 2.42, 16, 1.8, 0.06, 124, 0xd8c8a8, { wuv: 0.35, noCol: true });
+  WK.box('concrete', -114.6, 1.9, 16, 1.0, 0.6, 124, 0xb8b4ac, { wuv: 0.5, noCol: true }); WK.box('vcNoShadow', -114.6, 2.18, 16, 0.6, 0.02, 124, 0x5a7a7a, { noCol: true });
   // —— 农舍与仓房 ——
-  const farmHouses = [[-205, -52, Math.PI / 2], [-262, 6, 0], [-188, 60, -Math.PI / 2], [-300, -70, Math.PI / 2], [-236, 112, Math.PI]];
-  for (const [x, z, ry] of farmHouses) {
-    if (roadSample(x, z) > 0.05 || FARM.paddy(x, z)) continue;
-    buildHouse(x, z, ry, { w: 11, d: 9, yard: 3.0, wall: chance(0.5) ? 'woodwall' : 'plaster', wc: 0xe8e2d6, roof: 0x3a3f46, balcony: false, tree: 'green' });
-    const K = new Kit(x, terrainH(x, z), z, ry);
-    // 仓房
-    K.box('metal', 8.5, 2.2, -4, 6, 4.4, 5, 0xa8b0b6, { solid: true, wuv: 0.5 }); gableRoof(K, 8.5, 4.4, -4, 6, 5, 1.2, 0x6a7a86, Math.PI / 2, 0.3);
-    K.box('wood', 8.5, 1.5, -1.45, 3.5, 3, 0.1, 0x5a4636);
-    if (chance(0.7)) { const p = K.w(-6, 0, 3.5); spawnVehicleLater('keitruck', p[0], p[2], ry + Math.PI / 2); }
-  }
-  // —— 温室 ——
-  for (const [x, z] of [[-228, -58], [-228, -48], [-228, -38], [-292, 92], [-292, 102]]) {
-    if (roadSample(x, z) > 0.05) continue; const y = terrainH(x, z);
-    const g = new THREE.CylinderGeometry(3, 3, 22, 16, 1, true, -Math.PI / 2, Math.PI); g.rotateZ(Math.PI / 2);
-    WK.geo('vinyl', g, x, y, z, 0xffffff, { ry: Math.PI / 2 });
-    for (let i = 0; i <= 5; i++) WK.geo('rail', new THREE.TorusGeometry(3, 0.03, 4, 16, Math.PI), x - 11 + i * 4.4, y, z, 0xb0b4b8, { ry: Math.PI / 2 });
-    for (let i = 0; i < 3; i++) WK.box('vcNoShadow', x, y + 0.3, z - 2 + i * 2, 21, 0.4, 0.7, 0x4f7a3a);
-    addCollider(x, z, 11, 3, 0, y, y + 3, 'wall');
+  for (const [x, z, ry] of [[-125, 78, 0], [-125, -35, 0]]) {
+    if (roadSample(x, z) > 0.05) continue;
+    buildHouse(x, z, ry, { w: 10, d: 8, yard: 2.4, wall: 'woodwall', wc: 0xe8e2d6, roof: 0x3a3f46, balcony: false, tree: 'green' });
   }
   // 地藏小祠与稻草人
-  { const x = -170, z = 20; const y = terrainH(x, z); const K = new Kit(x, y, z, 0.3); K.box('wood', 0, 0.6, 0, 1.4, 1.2, 1.0, 0x6a4a2a); K.geo('roof', PRISM, 0, 1.2, 0, 0x3a3f46, { sx: 1.8, sy: 0.6, sz: 1.4 }); jizo(x, z + 0.1, y + 0.2); }
-  for (let i = 0; i < 4; i++) { const c = FARM.cells[RI(0, FARM.cells.length - 1)]; if (!c) break; const x = (c.x0 + c.x1) / 2 + R(-6, 6), z = (c.z0 + c.z1) / 2 + R(-4, 4); const K = new Kit(x, c.y, z, R(0, 3)); K.box('wood', 0, 0.8, 0, 0.08, 1.6, 0.08, 0x8a6a4a); K.box('wood', 0, 1.3, 0, 1.2, 0.07, 0.07, 0x8a6a4a); K.box('vc', 0, 1.15, 0, 0.5, 0.6, 0.25, pick([0x3a5a8a, 0xb84a3a, 0x6a7a4a])); K.sph('vc', 0, 1.62, 0, 0.16, 0.18, 0.16, 0xe8d8b0); K.cyl('vc', 0, 1.78, 0, 0.32, 0.12, 0xd8c890, { rt: 0.1, seg: 10 }); }
-  addPlace('西部田园', -205, 20, -Math.PI / 2, 'farm');
+  { const x = -116, z = 80; const y = terrainH(x, z); const K = new Kit(x, y, z, Math.PI); K.box('wood', 0, 0.6, 0, 1.4, 1.2, 1.0, 0x6a4a2a); K.geo('roof', PRISM, 0, 1.2, 0, 0x3a3f46, { sx: 1.8, sy: 0.6, sz: 1.4 }); jizo(x, z + 0.1, y + 0.2); }
+  for (let i = 0; i < 4; i++) { const c = FARM.cells[RI(0, FARM.cells.length - 1)]; if (!c) break; const x = (c.x0 + c.x1) / 2 + R(-5, 5), z = (c.z0 + c.z1) / 2 + R(-3, 3); const K = new Kit(x, c.y, z, R(0, 3)); K.box('wood', 0, 0.8, 0, 0.08, 1.6, 0.08, 0x8a6a4a); K.box('wood', 0, 1.3, 0, 1.2, 0.07, 0.07, 0x8a6a4a); K.box('vc', 0, 1.15, 0, 0.5, 0.6, 0.25, pick([0x3a5a8a, 0xb84a3a, 0x6a7a4a])); K.sph('vc', 0, 1.62, 0, 0.16, 0.18, 0.16, 0xe8d8b0); K.cyl('vc', 0, 1.78, 0, 0.32, 0.12, 0xd8c890, { rt: 0.1, seg: 10 }); }
+  addPlace('稻穗水田', -126, 20, -Math.PI / 2, 'farm');
   buildGasStation();
   buildViewpoint();
   // 环岛公路的巴士站与自动售货机
@@ -3840,7 +3953,7 @@ function spawnVehicleLater(t, x, z, yaw) { _laterVeh.push([t, x, z, yaw]); }
 function buildGasStation() {
   const ring = ROADS[0]; if (!ring) return;
   // 选在环岛路西南段、靠近镇子的一侧
-  let best = null; for (const p of ring.pts) { const d = Math.hypot(p[0] + 150, p[2] - 96); if (!best || d < best.d) best = { p, d }; }
+  let best = null; for (const p of ring.pts) { const d = Math.hypot(p[0] + 44, p[2] - 86); if (!best || d < best.d) best = { p, d }; }
   const p = best.p; const lx = p[4], lz = -p[3]; const side = islandC(p[0] + lx * 20, p[2] + lz * 20) > islandC(p[0] - lx * 20, p[2] - lz * 20) ? 1 : -1;
   const cx = p[0] + lx * side * (ring.hw + 14), cz = p[2] + lz * side * (ring.hw + 14); const y = p[1];
   const ry = Math.atan2(-lx * side, -lz * side); // 正面朝向道路
@@ -3872,24 +3985,112 @@ function buildGasStation() {
   const pv = K.w(-6, 0, 8.5); spawnVehicleLater('sedan', pv[0], pv[2], ry + Math.PI / 2);
   const pl = K.w(0, 0, 14); addPlace('海风石油加油站', pl[0], pl[2], ry + Math.PI, 'gas');
 }
+let VIEW_TRAIL = null;
 function buildViewpoint() {
-  const ring = ROADS[0]; if (!ring) return;
-  let top = ring.pts[0]; for (const p of ring.pts) if (p[6] === 'grd' && p[1] > top[1] && p[5] > 200 && p[5] < ring.len - 200) top = p;
-  const lx = top[4], lz = -top[3]; const side = islandC(top[0] + lx * 30, top[2] + lz * 30) < islandC(top[0] - lx * 30, top[2] - lz * 30) ? 1 : -1;
-  const cx = top[0] + lx * side * (ring.hw + 9), cz = top[2] + lz * side * (ring.hw + 9);
-  const K = new Kit(cx, top[1], cz, Math.atan2(lx * side, lz * side));
-  K.box('concrete', 0, -0.4, 0, 22, 0.9, 12, 0xc8c4bc, { solid: { walk: true }, wuv: 0.3 });
-  K.box('asphalt', 0, 0.06, -1, 22, 0.02, 9, 0xffffff, { wuv: 0.22 });
-  for (let i = -5; i <= 5; i++) K.box('marking', i * 2.2, 0.075, -1, 0.12, 0.01, 4.5, 0xf2f2ee);
-  K.box('wood', 0, 0.06, 4.6, 22, 0.12, 2.6, 0xb08a60, { wuv: 0.6 });
-  for (let i = 0; i <= 11; i++) K.box('rail', -11 + i * 2, 0.6, 5.9, 0.08, 1.2, 0.08, 0x9aa0a6);
-  K.box('rail', 0, 1.15, 5.9, 22, 0.08, 0.1, 0x9aa0a6); addCollider(...K.w(0, 0, 5.9).filter((_, i) => i !== 1), 11, 0.1, K.ry, top[1], top[1] + 1.2, 'wall');
-  const tp = K.w(3, 0, 5.0); const T = new Kit(tp[0], top[1], tp[2], K.ry); T.cyl('paint', 0, 0.6, 0, 0.08, 1.2, 0x3a6a4a, { seg: 8 }); T.cyl('paint', 0, 1.3, 0.1, 0.12, 0.5, 0x3a6a4a, { rx: 1.3, seg: 10 });
-  const b1 = K.w(-4, 0, 4.3); parkBench(b1[0], b1[2], K.ry, top[1] + 0.12);
+  // 神社东侧的山道：石阶沿等高线绕上星见山顶
+  let pk = [0, 0, -1]; for (let x = -60; x < 30; x += 2) for (let z = -190; z < -130; z += 2) { const h = terrainH(x, z); if (h > pk[2] && islandC(x, z) > 0.08) pk = [x, z, h]; }
+  const trail = [[-23, -126], [-12, -134], [-5, -146], [-9, -156], [pk[0] + 6, pk[1] + 4]];
+  const pts = catmull(trail, 0.7); let lastY = -1e9; VIEW_TRAIL = pts;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x, z] = pts[i], [x2, z2] = pts[i + 1]; const y = terrainH(x, z); const ry = Math.atan2(x2 - x, z2 - z);
+    WK.box('gravel', x, y + 0.02, z, 1.6, 0.05, 0.9, 0xd8cdb8, { ry, wuv: 0.4, noCol: true });
+    if (y - lastY > 0.32) { WK.box('wood', x, y + 0.06, z, 1.7, 0.14, 0.14, 0x6a4a2a, { ry, noCol: true }); lastY = y; }
+    if (i % 4 === 0) for (const sd of [-1, 1]) { const px = x + Math.cos(ry) * sd * 1.0, pz = z - Math.sin(ry) * sd * 1.0; WK.cyl('wood', px, terrainH(px, pz) + 0.3, pz, 0.05, 0.6, 0x7a5a3a, { seg: 6, noCol: true }); }
+  }
+  const top = [pk[0], pk[2], pk[1]];
+  const cx = pk[0], cz = pk[1]; const ry = Math.atan2(20 - cx, 10 - cz); // 面向镇子
+  const lx = Math.sin(ry), lz = Math.cos(ry);
+  const K = new Kit(cx, pk[2] + 0.1, cz, ry + Math.PI);
+  K.box('wood', 0, -0.2, 0, 9, 0.4, 6, 0xb08a60, { solid: { walk: true }, wuv: 0.6 });
+  for (let i = 0; i <= 9; i++) K.box('wood', -4.5 + i, 0.55, -2.95, 0.09, 1.1, 0.09, 0x6a4a2a);
+  K.box('wood', 0, 1.1, -2.95, 9, 0.09, 0.12, 0x6a4a2a, { noCol: true }); addCollider(...K.w(0, 0, -2.95).filter((_, i) => i !== 1), 4.5, 0.1, K.ry, pk[2], pk[2] + 1.2, 'wall');
+  for (const sd of [-1, 1]) { K.box('wood', sd * 4.45, 1.1, 0, 0.12, 0.09, 6, 0x6a4a2a, { noCol: true }); addCollider(...K.w(sd * 4.45, 0, 0).filter((_, i) => i !== 1), 0.1, 3, K.ry, pk[2], pk[2] + 1.2, 'wall'); }
+  const tp = K.w(2, 0, -2.2); const T = new Kit(tp[0], pk[2] + 0.1, tp[2], K.ry); T.cyl('paint', 0, 0.6, 0, 0.08, 1.2, 0x3a6a4a, { seg: 8 }); T.cyl('paint', 0, 1.3, 0.1, 0.12, 0.5, 0x3a6a4a, { rx: 1.3, seg: 10 });
+  const b1 = K.w(-2, 0, -1.6); parkBench(b1[0], b1[2], K.ry + Math.PI, pk[2] + 0.1);
   const sUV = allocSign(360, 140, (g, w, h) => { g.fillStyle = '#5a3a20'; g.fillRect(0, 0, w, h); g.fillStyle = '#f6efe0'; g.font = `400 52px ${FONT.wei}`; g.textAlign = 'center'; g.fillText('星见山观景台', w / 2, 70); g.font = `500 20px ${FONT.sans}`; g.fillText('海拔 ' + Math.round(top[1]) + ' m', w / 2, 112); });
-  K.box('wood', -8, 1.1, 3.4, 0.12, 2.2, 0.12, 0x5a3a20); K.plane('sign', -8, 2.0, 3.48, 1.6, 0.62, 0xffffff, { uvr: sUV });
-  const pl = K.w(0, 0, 1.5); addPlace('星见山观景台', pl[0], pl[2], K.ry, 'view');
-  addInteract({ x: tp[0], z: tp[2], r: 1.6, label: () => '看看投币望远镜', act: () => { if (S().coins < 1) { UI.toast('需要一枚贝壳币。'); return; } GAME.coins(-1); PLAYER.camDist = 9; PLAYER.camYaw = K.ry + Math.PI; PLAYER.camPitch = 0.05; UI.toast('镜头里，樱丘町的屋顶连成一片，电车正从隧道里钻出来。'); } });
+  K.box('wood', 3.6, 1.1, 2.4, 0.12, 2.2, 0.12, 0x5a3a20); K.plane('sign', 3.6, 2.0, 2.46, 1.6, 0.62, 0xffffff, { uvr: sUV });
+  const pl = K.w(0, 0, 1.2); addPlace('星见山观景台', pl[0], pl[2], K.ry + Math.PI, 'view');
+  addInteract({ x: tp[0], z: tp[2], r: 1.6, label: () => '看看投币望远镜', act: () => { if (S().coins < 1) { UI.toast('需要一枚贝壳币。'); return; } GAME.coins(-1); PLAYER.camDist = 9; PLAYER.camYaw = K.ry + Math.PI; PLAYER.camPitch = 0.05; UI.toast('镜头里，樱丘町的屋顶连成一片，电车正沿着海边慢慢开过。'); } });
+}
+
+// ---- 07c_infill.js ----
+/* ==========================================================================
+   填空：沿道路补齐住宅、便利店、船屋等，让镇子没有空地
+   每块地先检查占地范围内没有道路、铁路、河道、水田与已有建筑，再盖房子
+   ========================================================================== */
+function lotFree(x, z, ry, w, d, yard, margin = 0.8) {
+  const K = new Kit(x, 0, z, ry);
+  for (let lx = -w / 2 - 0.6 - margin; lx <= w / 2 + 0.6 + margin + 1e-3; lx += 1.5) for (let lz = -d - 0.6 - margin; lz <= yard + margin + 1e-3; lz += 1.5) {
+    const [px, , pz] = K.w(lx, 0, lz);
+    if (islandC(px, pz) < 0.07 || roadSample(px, pz) > 0.6 || riverDist(px, pz) < 12 || FARM.paddy(px, pz)) return false;
+    if (polyDist(CAPE_PATH, px, pz) < 3 || (VIEW_TRAIL && polyDist(VIEW_TRAIL, px, pz) < 3) || (Math.abs(px + 40) < 6 && pz < -82 && pz > -114)) return false;
+    if (Math.hypot(px - PLAZA.x, pz - PLAZA.z) < 25) return false;
+    for (let i = 0; i < RAIL.pts.length; i += 2) { const p = RAIL.pts[i]; if (Math.abs(p.x - px) < 12 && Math.abs(p.z - pz) < 12 && Math.hypot(p.x - px, p.z - pz) < railSep(p.s) / 2 + 5.5) return false; }
+    for (const c of nearCols(px, pz)) {
+      if (c.walk || c.ramp || c.y1 - c.y0 < 0.4) continue;
+      const l = localOf(c, px, pz); if (c.round ? Math.hypot(l[0], l[1]) <= c.hw + 0.3 : Math.abs(l[0]) <= c.hw + 0.3 && Math.abs(l[1]) <= c.hd + 0.3) return false;
+    }
+  }
+  return true;
+}
+// 沿一条直线排一列房子（正面朝 +z 方向的局部坐标 → 由 ry 决定）
+function houseRow(x0, x1, z, ry, o = {}) {
+  const step = o.step || 12; let n = 0;
+  for (let x = x0; x <= x1; x += step) {
+    const w = R(8, 10), d = R(7, 8.5), yard = o.yard != null ? o.yard : 2.2;
+    const px = ry === 0 || ry === Math.PI ? x : z, pz = ry === 0 || ry === Math.PI ? z : x;
+    if (!lotFree(px, pz, ry, w, d, yard)) continue;
+    buildHouse(px, pz, ry, Object.assign({ w, d, yard, tree: chance(0.35) ? 'sakura' : 'green' }, o.house || {}));
+    n++;
+  }
+  return n;
+}
+/* 便利店：平顶、整面玻璃、招牌色带、门口停车格与垃圾桶 */
+function convenienceStore(x, z, ry) {
+  const K = new Kit(x, TOWN_Y, z, ry); const w = 14, d = 10;
+  K.box('concrete', 0, 0.05, 2.5, w + 6, 0.1, 5, 0xc8c4bc, { wuv: 0.3, noCol: true });
+  for (let i = -3; i <= 3; i++) K.box('marking', i * 2.6, 0.11, 2.6, 0.1, 0.01, 4.2, 0xf2f2ee);
+  K.box('plaster', 0, 2.1, -d / 2, w, 4.2, d, 0xf6f4ef, { solid: true, wuv: 0.4 });
+  K.box('vc', 0, 4.3, -d / 2, w + 0.3, 0.2, d + 0.3, 0xdedbd4);
+  for (const [c, y] of [[0x2a9a5a, 3.55], [0xf2f2f0, 3.25], [0x2c6ea0, 2.98]]) K.box('vc', 0, y, 0.03, w, 0.28, 0.08, c);
+  K.plane('glass', 0, 1.35, 0.06, w - 1.2, 2.3, 0xffffff); K.box('glow', 0, 2.62, -0.4, w - 1.5, 0.05, 0.5, 0xffffff);
+  for (let i = 0; i < 5; i++) K.box('vcNoShadow', -5 + i * 2.5, 0.85, -1.6, 1.8, 1.5, 0.5, pick([0xf6d04d, 0x2c7bd8, 0xe9483b, 0xffffff, 0x7ac27a]));
+  const uv = allocSign(700, 110, (g, W, H) => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H); g.fillStyle = '#2a9a5a'; g.font = `900 64px ${FONT.sans}`; g.textAlign = 'center'; g.fillText('海风便利店  24H', W / 2, 80); });
+  K.plane('sign', 0, 3.25, 0.09, 7, 1.1, 0xffffff, { uvr: uv });
+  for (const sx of [5.2, 6.0]) K.box('paint', sx, 0.5, 0.6, 0.6, 1.0, 0.5, sx < 5.5 ? 0x3a7a4a : 0x2c6ea0);
+  vendingMachine(new Kit(...K.w(-6.4, 0, 0.5), K.ry), 0, 0, 0, 0xd9483b);
+  const hp = K.w(0, 3.0, 0.8); addHalo(hp[0], hp[1], hp[2], 5, 0xf4f8ff); addLightPool(hp[0], TOWN_Y, hp[2] + 2, 7, 0xf0f6ff);
+  bicycleStatic(K, -4, 1.4, 0.3, 0xffffff); bicycleStatic(K, -3.2, 1.4, 0.3, 0xd9483b);
+}
+/* 船屋：海边的木结构棚子，里面放着小船与渔具 */
+function boatShed(x, z, ry) {
+  const K = new Kit(x, groundAt(x, z), z, ry);
+  K.box('concrete', 0, 0.1, -4, 9, 0.2, 9, 0xc4c0b8, { solid: { walk: true }, wuv: 0.4 });
+  for (const sx of [-4.2, 4.2]) K.box('woodwall', sx, 1.8, -4, 0.15, 3.6, 8.6, 0x8a7a66, { solid: true, wuv: 0.5 });
+  K.box('woodwall', 0, 1.8, -8.2, 8.6, 3.6, 0.15, 0x8a7a66, { solid: true, wuv: 0.5 });
+  gableRoof(K, 0, 3.6, -4, 8.6, 8.6, 1.4, 0x6a7a86, 0, 0.4);
+  const hs = new THREE.Shape(); hs.moveTo(-2.4, 0.6); hs.lineTo(2.6, 0.7); hs.quadraticCurveTo(2.4, 0, 1.4, -0.25); hs.lineTo(-2.2, -0.25); hs.lineTo(-2.4, 0.6);
+  const g = new THREE.ExtrudeGeometry(hs, { depth: 1.5, bevelEnabled: false }); g.translate(0, 0, -0.75);
+  K.geo('paint', g, 0, 0.6, -4, 0xf2f2f0, { ry: Math.PI / 2 }); K.box('wood', 0, 1.15, -4, 1.3, 0.06, 4.4, 0xc9a06a);
+  for (let i = 0; i < 4; i++) K.box('wood', R(-3.5, 3.5), 0.35, R(-1, 0.6), 0.8, 0.5, 0.55, 0xa07850, { solid: true });
+  for (let i = 0; i < 6; i++) K.sph('paint', R(-3.8, -2.8), 0.3 + i * 0.2, -7.6, 0.25, 0.25, 0.25, pick([0xf39a3d, 0xd9483b, 0xffffff]));
+  K.sph('vc', 3, 0.3, -7, 1.1, 0.3, 0.8, 0x3d6b5a, { lo: true });
+}
+function buildInfill() {
+  seed(4242);
+  // 北路北侧：背靠神社后山的住宅（前院朝南，对着北路）
+  houseRow(-114, 94, -93, 0, { step: 12.5 });
+  // 广场东侧：南路以南一排朝北、海岸路以北一排朝南，中间夹一家便利店
+  if (lotFree(36, 56, Math.PI, 14, 10, 4.5)) convenienceStore(36, 56, Math.PI);
+  houseRow(26, 94, 51.5, Math.PI, { step: 11.5 });
+  houseRow(26, 94, 78.5, 0, { step: 11.5 });
+  // 广场西侧（加油站以外的空地）
+  houseRow(-60, -24, 51.5, Math.PI, { step: 11.5 });
+  // 港口东南角：几户渔家与船屋
+  houseRow(110, 160, 70, 0, { step: 13, house: { wall: 'woodwall', balcony: false } });
+  for (const [x, z, ry] of [[150, 64, Math.PI], [166, 66, Math.PI]]) if (lotFree(x, z, ry, 9, 9, 0)) boatShed(x, z, ry);
+  // 港口北侧、灯塔岬下：渔协宿舍与住宅
+  houseRow(108, 132, -86, 0, { step: 12 });
 }
 
 // ---- 08_chars.js ----
@@ -4582,7 +4783,7 @@ function buildPaths() {
   const rv = []; for (let z = -40; z <= 82; z += 6) rv.push([riverAtZ(z) + 11.0, z]); PATHS.river = { loop: false, pts: rv };
   PATHS.harbor = { loop: false, pts: [[110, -22], [110, 56]] };
   PATHS.south = { loop: false, pts: [[-55, 45.6], [96, 45.6], [106, 45.6], [106, -60]] };
-  PATHS.beach = { loop: false, pts: [[-40, 112], [60, 116]] };
+  PATHS.beach = { loop: false, pts: [[-40, 120], [60, 124]] };
 }
 function pathLen(P) { let L = 0; const n = P.pts.length; for (let i = 0; i < (P.loop ? n : n - 1); i++) { const a = P.pts[i], b = P.pts[(i + 1) % n]; L += Math.hypot(b[0] - a[0], b[1] - a[1]); } return L; }
 function pathAt(P, s) {
@@ -4877,8 +5078,9 @@ function buildTrafficPaths() {
   TRAFFIC_PATHS.town = CAR_PATH;
   const ring = ROADS.find(r => r.def.id === 'ring'); if (!ring) return;
   const fw = roadLane(ring, 0, false), rv = roadLane(ring, 0, true);
-  TRAFFIC_PATHS.ringF = { loop: true, pts: [[98.2, 36], [98.2, -60], ...fw.slice(2), [-84, 38.2], [-60, 38.2], [60, 38.2], [95.5, 38.2]] };
-  TRAFFIC_PATHS.ringR = { loop: true, pts: [[95.5, 41.8], [-60, 41.8], [-84, 41.8], ...rv.slice(0, -2), [101.8, -66], [101.8, 36]] };
+  // 外环：港口路北上 → 北路西行 → 环岛公路（过樱川、穿铁路、沿水田、沿海岸）→ 回到港口路南端
+  TRAFFIC_PATHS.ringF = { loop: true, pts: [[98.2, 40], [98.2, -74.5], [94.5, -78.2], [-38, -78.2], ...fw.slice(3, -2)] };
+  TRAFFIC_PATHS.ringR = { loop: true, pts: [[101.8, -74.5], [101.8, 40], ...rv.slice(2, -3), [-38, -81.8], [98, -81.8]] };
 }
 function spawnTraffic() {
   addRingCrossingStops();
@@ -5560,7 +5762,7 @@ function whereIs(id) {
 }
 
 /* ---------------- 地图 ---------------- */
-let mapBase = null; const MAP = { cx: -70, cz: -95, S: 820, PX: 1024 };
+let mapBase = null; const MAP = { cx: 5, cz: -8, S: 460, PX: 1024 };
 const WP = { on: false, x: 0, z: 0, mesh: null };
 function buildMapBase() {
   const N = MAP.PX, c = makeCanvas(N, N); const g = c.getContext('2d'); const img = g.createImageData(N, N); const d = img.data;
@@ -5762,9 +5964,8 @@ function scatterNature() {
   // 草丛与野花（镇外、河堤）
   for (let i = 0; i < 5200; i++) {
     const x = R(WORLD.x0, WORLD.x1), z = R(WORLD.z0, WORLD.z1); if (islandC(x, z) < 0.04) continue; const h = terrainH(x, z); if (h < 1.4) continue;
-    const town = (x > -114 && x < 110 && z > -86 && z < 74) || (x > 96 && x < 132 && z > -36 && z < 66) || (z > 84 && Math.abs(x - 10) < 120); if (town && !(riverDist(x, z) > 8.6 && riverDist(x, z) < 15)) continue;
-    if (Math.abs(z + 60) < 9 && x > -170 && x < 140) continue;
-    if (roadSample(x, z) > 0.3 || flatW(x, z, -320, -130, -40, 110, 0) > 0.5 && FARM.paddy(x, z)) continue;
+    const town = (x > -114 && x < 132 && z > -92 && z < 92) || (z > 100 && Math.abs(x - 10) < 120); if (town && !(riverDist(x, z) > 8.6 && riverDist(x, z) < 15)) continue;
+    if (roadSample(x, z) > 0.3 || FARM.paddy(x, z)) continue;
     if (polyDist(CAPE_PATH, x, z) < 2.2 || (Math.abs(x + 40) < 24 && z < -84 && z > -152 && h > 13)) continue;
     if (occNear(x, z, 1.4)) continue;
     grassPatch(x, z, null, RI(4, 8), 1.4);
@@ -5795,7 +5996,7 @@ async function build() {
   progress(0.62, '正在种樱花……'); await tick();
   buildPlaza(); buildRiverbanks(); buildShrine();
   progress(0.68, '正在修港口与灯塔……'); await tick();
-  buildHarbor(); buildCape(); buildBeach();
+  buildHarbor(); buildCape(); buildBeach(); buildInfill();
   progress(0.74, '正在长出森林……'); await tick();
   flushBatches(scene); buildOccupancy();
   scatterNature(); buildForest(); addTreeColliders();

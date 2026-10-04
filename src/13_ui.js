@@ -35,7 +35,7 @@ function whereIs(id) {
 }
 
 /* ---------------- 地图 ---------------- */
-let mapBase = null; const MAP = { cx: -70, cz: -95, S: 820, PX: 1024 };
+let mapBase = null; const MAP = { cx: 5, cz: -8, S: 460, PX: 1024 };
 const WP = { on: false, x: 0, z: 0, mesh: null };
 function buildMapBase() {
   const N = MAP.PX, c = makeCanvas(N, N); const g = c.getContext('2d'); const img = g.createImageData(N, N); const d = img.data;
