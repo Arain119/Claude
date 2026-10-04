@@ -84,10 +84,12 @@ function buildHouse(x, z, ry, o = {}) {
   if (yard > 0) {
     const fz = yard; const gw = 1.6;
     const wallCol = pick([0xcfc8bc, 0xd8d2c8, 0xbdb6aa]);
-    const seg = (x0, x1, zz) => { if (x1 - x0 > 0.1) K.box('concrete', (x0 + x1) / 2, 0.55, zz, x1 - x0, 1.1, 0.15, wallCol, { solid: true, wuv: 0.5 }); };
+    const capCol = 0x8f887c;
+    const seg = (x0, x1, zz) => { if (x1 - x0 > 0.1) { K.box('concrete', (x0 + x1) / 2, 0.55, zz, x1 - x0, 1.1, 0.15, wallCol, { solid: true, wuv: 0.5 }); K.box('concrete', (x0 + x1) / 2, 1.16, zz, x1 - x0 + 0.04, 0.12, 0.24, capCol, { wuv: 0.5 }); } };
     seg(-w / 2 - 0.6, dx - gw / 2, fz); seg(dx + gw / 2, w / 2 + 0.6, fz);
-    for (const s of [-1, 1]) K.box('concrete', s * (w / 2 + 0.6), 0.55, (fz - d - 0.6) / 2, 0.15, 1.1, fz + d + 0.6, wallCol, { solid: true, wuv: 0.5 });
+    for (const s of [-1, 1]) { K.box('concrete', s * (w / 2 + 0.6), 0.55, (fz - d - 0.6) / 2, 0.15, 1.1, fz + d + 0.6, wallCol, { solid: true, wuv: 0.5 }); K.box('concrete', s * (w / 2 + 0.6), 1.16, (fz - d - 0.6) / 2, 0.24, 0.12, fz + d + 0.6, capCol, { wuv: 0.5 }); }
     K.box('concrete', 0, 0.55, -d - 0.6, w + 1.2, 1.1, 0.15, wallCol, { solid: true, wuv: 0.5 });
+    K.box('concrete', 0, 1.16, -d - 0.6, w + 1.24, 0.12, 0.24, capCol, { wuv: 0.5 });
     for (const s of [-1, 1]) K.box('concrete', dx + s * gw / 2, 0.7, fz, 0.3, 1.4, 0.3, 0xb8b0a4);
     K.box('paving', dx, 0.03, fz / 2 + 0.6, 1.4, 0.06, fz - 0.9, 0xe0d8cc, { wuv: 0.5 });
     houseMailbox(K, dx + gw / 2 + 0.35, fz + 0.15, fam);

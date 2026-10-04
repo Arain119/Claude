@@ -337,6 +337,10 @@ function warehouse(x, z, col, label) {
   K.box('vc', 0, 2.5, 0.05, 6, 5, 0.1, 0x55606a);
   const uv = allocSign(400, 70, (g, W, H) => { g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, W, H); g.fillStyle = '#26375e'; g.font = `400 40px ${FONT.wei}`; g.textAlign = 'center'; g.fillText(label, W / 2, 50); });
   K.plane('sign', 0, 5.8, 0.06, 5, 0.9, 0xffffff, { uvr: uv });
+  // 背立面（朝街的一面）：人员门/百叶/雨水管，免得整面光板
+  for (const lx of [-6.5, 5.5]) { K.box('vc', lx, 1.35, -d - 0.04, 1.5, 2.7, 0.08, 0x4a545e); K.box('paint', lx, 2.9, -d - 0.05, 1.9, 0.28, 0.1, 0x8a959e); }
+  for (const lx of [-2, 8]) K.box('vc', lx, 5.2, -d - 0.05, 1.3, 1.3, 0.1, 0x39424c);
+  for (const lx of [-8.9, 8.9]) K.cyl('metal', lx, h / 2, -d - 0.14, 0.07, h, 0x9aa4ac, { seg: 6 });
 }
 function fishingBoat(x, z, ry) {
   if (MODELS.boat) { const M = MODELS.boat; if (!M.toon) M.toon = animeToon(M.mat, false); const g = new THREE.Mesh(M.geo, M.toon); addOutline(g, 0.02); g.castShadow = true; g.receiveShadow = true; g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g); return { g, x, z, ry, ph: R(0, TAU), sink: 0.75 }; }
