@@ -829,6 +829,24 @@ function buildPools() {
   POOLS.mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, fog: true });
   const m = new THREE.Mesh(g, POOLS.mat); m.renderOrder = 3; m.frustumCulled = false; scene.add(m);
 }
+/* --- 路灯光锥（夜间廉价体积光：顶点色上亮下灭 + 加色混合） --- */
+const CONES = { pos: [], mat: null };
+function addLampCone(x, y, z, gy) { CONES.pos.push([x, y, z, gy]); }
+function buildLampCones() {
+  if (!CONES.pos.length) return;
+  const pos = [], col = [], idx = []; const SEG = 10;
+  for (const [x, y, z, gy] of CONES.pos) {
+    const b = pos.length / 3;
+    for (const [yy, rr] of [[y, 0.24], [lerp(y, gy, 0.3), 1.0], [lerp(y, gy, 0.72), 2.0], [gy, 2.8]]) {
+      const a = clamp((y - yy) / Math.max(y - gy, 0.001), 0, 1), fade = 1.0 - a * 0.92;
+      for (let i = 0; i < SEG; i++) { const t = i / SEG * TAU; pos.push(x + Math.cos(t) * rr, yy, z + Math.sin(t) * rr); col.push(fade, fade, fade); }
+    }
+    for (let j = 0; j < 3; j++) for (let i = 0; i < SEG; i++) { const q = b + j * SEG + i, q2 = b + j * SEG + (i + 1) % SEG, q3 = b + (j + 1) * SEG + i, q4 = b + (j + 1) * SEG + (i + 1) % SEG; idx.push(q, q3, q2, q2, q3, q4); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+  CONES.mat = new THREE.MeshBasicMaterial({ color: 0xffd9a8, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: true });
+  const m = new THREE.Mesh(g, CONES.mat); m.renderOrder = 4; m.frustumCulled = false; scene.add(m);
+}
 /* --- 接地阴影（廉价的接触 AO，让建筑「长」在地里而不是浮在上面） ---
    与 buildPools 同套路：所有调用先攒进 GSH.pos，建完场景后一次性铺成贴地网格。
    顶点色通道复用为「强度」：col 里存 a，材质基色是暗绿黑，vColor 相乘即阴影深浅。 */
@@ -1222,6 +1240,17 @@ function buildSky() {
           col += vec3(1.0, 0.97, 0.9) * disc * night * 3.0; a = max(a, disc * night);
           float halo = pow(max(md, 0.0), 80.0) * 0.35 * night; col += vec3(0.6, 0.7, 0.9) * halo; a = max(a, halo);
         }
+        if (night < 0.98) {
+          // 落日本体+暖色光晕（画在云层之前，云会自然遮日）
+          float sd2 = max(dot(d, normalize(sunDir)), 0.0);
+          float lowSun = 1.0 - smoothstep(0.02, 0.32, sunDir.y);
+          vec3 sunTint = mix(vec3(1.0, 0.96, 0.88), vec3(1.0, 0.5, 0.22), lowSun);
+          float sdisc = smoothstep(0.99985, 0.99996, sd2);
+          float sglow = pow(sd2, 200.0) * mix(0.1, 0.3, lowSun);
+          float k = (1.0 - night) * smoothstep(-0.05, 0.015, sunDir.y);
+          col += sunTint * (sdisc * 3.0 + sglow) * k;
+          a = max(a, clamp(sdisc + sglow, 0.0, 1.0) * k);
+        }
         if (y > 0.0) {
           vec2 uv = d.xz / (y + 0.12) * 1.3 + vec2(time * 0.004, time * 0.0015);
           vec2 w = vec2(fbm(uv * 0.7), fbm(uv * 0.7 + 5.2));
@@ -1303,7 +1332,8 @@ function buildSea() {
         vec3 body = mix(shallowCol, deepCol, smoothstep(0.3, 7.0, depth)) * (0.35 + 0.65 * light) + shallowCol * sss * light;
         vec3 col = mix(body, refl, fr);
         vec3 h = normalize(sunDir + v); float sp = (pow(max(dot(n, h), 0.0), 600.0) * 40.0) * smoothstep(400.0, 60.0, vDist) + pow(max(dot(n, h), 0.0), 120.0) * 0.5;
-        col += sunCol * sp * (1.0 - night) * smoothstep(-0.05, 0.1, sunDir.y);
+        float lowSun = 1.0 - smoothstep(0.03, 0.38, sunDir.y); // 低日角：宽瓣金光水路
+        col += sunCol * (sp + pow(max(dot(n, h), 0.0), 55.0) * 2.4 * lowSun) * (1.0 - night) * smoothstep(-0.05, 0.1, sunDir.y);
         float shore = 1.0 - smoothstep(0.0, 0.9, depth);
         float bands = smoothstep(0.55, 0.85, sin(depth * 14.0 - time * 1.6 + sin(vW.x * 0.13) * 2.0) * 0.5 + 0.5) * smoothstep(3.2, 0.2, depth);
         float foam = clamp(shore * 0.85 + bands * 0.55, 0.0, 1.0) * (0.7 + 0.3 * sin(time * 2.0 + vW.x * 0.3));
@@ -1504,7 +1534,7 @@ function buildRoadMeshes() {
         K.cyl('paint', 0, 4.2, 0, 0.09, 8.4, 0x8a9096, { rt: 0.6, seg: 10 });
         K.rod('paint', [0, 8.2, 0], [0, 8.5, -1.8], 0.05, 0x8a9096);
         K.box('paint', 0, 8.45, -2.0, 0.35, 0.12, 0.7, 0x6a7076); K.box('glow', 0, 8.38, -2.0, 0.26, 0.03, 0.55, 0xfff1d6);
-        const hp = K.w(0, 8.2, -2.0); addHalo(hp[0], hp[1], hp[2], 6, 0xffe2b8); ROAD_LIGHTS.push(hp); addLightPool(hp[0], p[1], hp[2], 6.5, 0xffd29a);
+        const hp = K.w(0, 8.2, -2.0); addHalo(hp[0], hp[1], hp[2], 6, 0xffe2b8); ROAD_LIGHTS.push(hp); addLightPool(hp[0], p[1], hp[2], 6.5, 0xffd29a); addLampCone(hp[0], hp[1] - 0.1, hp[2], p[1] + 0.05);
         addCollider(ox, oz, 0.15, 0.15, 0, p[1], p[1] + 8, 'wall');
       }
       if (s - lastPole >= 36) {
@@ -1512,6 +1542,9 @@ function buildRoadMeshes() {
         const gy = terrainH(ox, oz);
         WK.cyl('concrete', ox, gy + 5, oz, 0.16, 10, 0xc9c9c4, { rt: 0.7, seg: 8 });
         WK.box('vc', ox, gy + 9.1, oz, 1.4, 0.1, 0.1, 0x707478, { ry: Math.atan2(p[3], p[4]) });
+        WK.cyl('vc', ox, gy + 8.55, oz, 0.175, 0.55, 0xe8e6de, { seg: 8 }); // 白环带
+        if (chance(0.4)) WK.box('vc', ox, gy + 7.2, oz, 0.55, 0.85, 0.5, 0x8a8f94, { ry: R(0, TAU) }); // 变压器
+        if (chance(0.75)) WK.box('vcNoShadow', ox - lx * side * 0.15, gy + 2.6, oz - lz * side * 0.15, 0.3, 0.5, 0.02, 0xf2f2ee, { ry: Math.atan2(p[3], p[4]) }); // 住号牌
         poles.push([ox, gy + 9.15, oz]);
         addCollider(ox, oz, 0.2, 0.2, 0, gy, gy + 10, 'wall');
       }
@@ -2651,19 +2684,20 @@ function buildStreets() {
     for (let z = -46; z < 36; z += 6) if (z < -24 || z > -16) WK.box('vc', s * 3.75, TOWN_Y + 0.155, z, 0.28, 0.02, 0.9, 0x55575c);
   }
   // 白色边线
-  for (const s of [-1, 1]) WK.box('vcNoShadow', s * 3.2, TOWN_Y + 0.045, -20, 0.12, 0.01, 128, 0xf4f4f0);
+  for (const s of [-1, 1]) WK.box('vcNoShadow', s * 3.2, TOWN_Y + 0.045, -20, 0.12, 0.01, 128, new THREE.Color().setHSL(0.12, 0.02, R(0.76, 0.88)));
   // 北路、港口路、南路
   road(-46, 104, -84, -76); road(96, 104, -76, 44); road(-62, 104, 36, 44);
   walk(104, 108, -76, 46); walk(-62, 104, 44, 47);
   walk(7, 96, 34, 36); walk(-62, -7, 34, 36);
   // 后巷
   road(22, 26, -50, 36); road(-26, -22, -17, 36);
-  // 斑马线
-  const zebra = (cx, cz, w, len, alongX) => { for (let i = 0; i < Math.floor(w / 0.9); i++) { const o = -w / 2 + 0.45 + i * 0.9; WK.box('vcNoShadow', alongX ? cx + o : cx, TOWN_Y + 0.045, alongX ? cz : cz + o, alongX ? 0.45 : len, 0.01, alongX ? len : 0.45, 0xf4f4f0); } };
+  // 斑马线（磨损做旧：每条明暗/暖度不同）
+  const wornW = () => new THREE.Color().setHSL(0.12, R(0.0, 0.05), R(0.7, 0.9));
+  const zebra = (cx, cz, w, len, alongX) => { for (let i = 0; i < Math.floor(w / 0.9); i++) { const o = -w / 2 + 0.45 + i * 0.9; WK.box('vcNoShadow', alongX ? cx + o : cx, TOWN_Y + 0.045, alongX ? cz : cz + o, alongX ? 0.45 : len, 0.01, alongX ? len : 0.45, wornW()); } };
   zebra(0, 31, 7, 3, true); zebra(0, -20, 7, 4, true); zebra(100, 48, 8, 3, true);
   // 停止线与「止まれ」
-  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -73.5, 3.2, 0.01, 0.4, 0xf4f4f0);
-  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -47.2, 3.2, 0.01, 0.4, 0xf4f4f0);
+  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -73.5, 3.2, 0.01, 0.4, wornW());
+  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -47.2, 3.2, 0.01, 0.4, wornW());
   const tUV = allocSignAlpha(256, 128, (g, w, h) => { g.fillStyle = '#ffffff'; g.font = `900 92px ${FONT.sans}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('止まれ', w / 2, h / 2 + 4); });
   WK.plane('paint2d', -1.6, TOWN_Y + 0.05, -42.5, 2.6, 3.6, 0xffffff, { rx: -Math.PI / 2, rz: 0, ry: 0, uvr: tUV });
   stopSign(-4.2, -46, 0);
@@ -3252,7 +3286,7 @@ function buildTracks() {
     buildCrossingAt('W', c.x, c.y, c.z, Math.atan2(-p.tz, p.tx), railSep(c.s) / 2 + 4.2, 4.6, c.s);
     // 公路侧停止线（与 AI 车停靠位一致，靠左车道）
     { const rp = c.road, tx = rp[3], tz = rp[4], lx = tz, lz = -tx, dd = railSep(c.s) / 2 + 5, cry = Math.atan2(-tz, tx);
-      for (const [sx, sz] of [[c.x - tx * dd + lx * 1.85, c.z - tz * dd + lz * 1.85], [c.x + tx * dd - lx * 1.85, c.z + tz * dd - lz * 1.85]]) WK.box('vcNoShadow', sx, rp[1] + 0.045, sz, 0.5, 0.012, 3.2, 0xf4f4f0, { ry: cry }); }
+      for (const [sx, sz] of [[c.x - tx * dd + lx * 1.85, c.z - tz * dd + lz * 1.85], [c.x + tx * dd - lx * 1.85, c.z + tz * dd - lz * 1.85]]) WK.box('vcNoShadow', sx, rp[1] + 0.045, sz, 0.5, 0.012, 3.2, new THREE.Color().setHSL(0.12, 0.03, R(0.74, 0.88)), { ry: cry }); }
   }
   // 人行道口：铺板 + 警报器 + 栏杆
   for (const c of RAIL.xings) {
@@ -3833,7 +3867,7 @@ function buildShrine() {
   // 大鸟居（参道下）
   torii(-40, -85, TOWN_Y, 1.35, 0xd8432f);
   // 千本鸟居
-  for (let i = 0; i < 11; i++) { const z = -88.5 - i * 2.1; torii(-40, z, groundAt(-40, z) - 0.05, 0.62, 0xe0502f, true); }
+  for (let i = 0; i < 11; i++) { const z = -88.5 - i * 2.1; torii(-40, z, groundAt(-40, z) - 0.05, 0.62, new THREE.Color(0xe0502f).multiplyScalar(R(0.82, 1.06)).getHex(), true); }
   // 台地：砂石、石灯笼、狐狸像
   WK.box('gravel', sx, sy + 0.02, sz + 4, 44, 0.04, 40, 0xe8e1d4, { wuv: 0.3 });
   WK.box('stone', sx, sy + 0.04, sz + 6, 3.2, 0.06, 26, 0xd9d2c4, { wuv: 0.5 });
@@ -5568,6 +5602,7 @@ function applyTimeOfDay(h) {
   if (LIGHTHOUSE.beamM) LIGHTHOUSE.beamM.opacity = smooth(0.3, 0.9, night) * 0.5;
   scene.environment && (envIntensity(lerp(1, 0.6, night)));
   if (POOLS.mat) POOLS.mat.opacity = smooth(0.3, 0.85, night) * 0.75;
+  if (CONES.mat) CONES.mat.opacity = smooth(0.3, 0.85, night) * 0.14;
   if (SKY.cubeRT) updateSkyEnv(false);
 }
 let _envI = -1; function envIntensity(k) { if (Math.abs(k - _envI) < 0.03) return; _envI = k; for (const key in MATS) { const m = MATS[key].material; if (m.isMeshStandardMaterial) m.envMapIntensity = (m.userData.envBase || (m.userData.envBase = m.envMapIntensity || 1)) * k; } toonMat.envMapIntensity = 0.7 * k; }
@@ -6345,7 +6380,7 @@ async function build() {
   flushBatches(scene); buildOccupancy();
   scatterNature(); buildForest(); addTreeColliders();
   progress(0.82, '正在合并网格……'); await tick();
-  flushBatches(scene); flushCards(); buildWires(); buildHalos(); buildPetals(); buildPools(); buildGroundShadows(); buildWallFades(); buildDecals(); buildPuddles();
+  flushBatches(scene); flushCards(); buildWires(); buildHalos(); buildPetals(); buildPools(); buildLampCones(); buildGroundShadows(); buildWallFades(); buildDecals(); buildPuddles();
   TEX_SIGN.needsUpdate = true;
   progress(0.9, '居民和车流正在醒来……'); await tick();
   seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic(); buildGulls();

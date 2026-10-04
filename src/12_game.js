@@ -98,6 +98,7 @@ function applyTimeOfDay(h) {
   if (LIGHTHOUSE.beamM) LIGHTHOUSE.beamM.opacity = smooth(0.3, 0.9, night) * 0.5;
   scene.environment && (envIntensity(lerp(1, 0.6, night)));
   if (POOLS.mat) POOLS.mat.opacity = smooth(0.3, 0.85, night) * 0.75;
+  if (CONES.mat) CONES.mat.opacity = smooth(0.3, 0.85, night) * 0.14;
   if (SKY.cubeRT) updateSkyEnv(false);
 }
 let _envI = -1; function envIntensity(k) { if (Math.abs(k - _envI) < 0.03) return; _envI = k; for (const key in MATS) { const m = MATS[key].material; if (m.isMeshStandardMaterial) m.envMapIntensity = (m.userData.envBase || (m.userData.envBase = m.envMapIntensity || 1)) * k; } toonMat.envMapIntensity = 0.7 * k; }

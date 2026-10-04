@@ -260,6 +260,17 @@ function buildSky() {
           col += vec3(1.0, 0.97, 0.9) * disc * night * 3.0; a = max(a, disc * night);
           float halo = pow(max(md, 0.0), 80.0) * 0.35 * night; col += vec3(0.6, 0.7, 0.9) * halo; a = max(a, halo);
         }
+        if (night < 0.98) {
+          // 落日本体+暖色光晕（画在云层之前，云会自然遮日）
+          float sd2 = max(dot(d, normalize(sunDir)), 0.0);
+          float lowSun = 1.0 - smoothstep(0.02, 0.32, sunDir.y);
+          vec3 sunTint = mix(vec3(1.0, 0.96, 0.88), vec3(1.0, 0.5, 0.22), lowSun);
+          float sdisc = smoothstep(0.99985, 0.99996, sd2);
+          float sglow = pow(sd2, 200.0) * mix(0.1, 0.3, lowSun);
+          float k = (1.0 - night) * smoothstep(-0.05, 0.015, sunDir.y);
+          col += sunTint * (sdisc * 3.0 + sglow) * k;
+          a = max(a, clamp(sdisc + sglow, 0.0, 1.0) * k);
+        }
         if (y > 0.0) {
           vec2 uv = d.xz / (y + 0.12) * 1.3 + vec2(time * 0.004, time * 0.0015);
           vec2 w = vec2(fbm(uv * 0.7), fbm(uv * 0.7 + 5.2));
@@ -341,7 +352,8 @@ function buildSea() {
         vec3 body = mix(shallowCol, deepCol, smoothstep(0.3, 7.0, depth)) * (0.35 + 0.65 * light) + shallowCol * sss * light;
         vec3 col = mix(body, refl, fr);
         vec3 h = normalize(sunDir + v); float sp = (pow(max(dot(n, h), 0.0), 600.0) * 40.0) * smoothstep(400.0, 60.0, vDist) + pow(max(dot(n, h), 0.0), 120.0) * 0.5;
-        col += sunCol * sp * (1.0 - night) * smoothstep(-0.05, 0.1, sunDir.y);
+        float lowSun = 1.0 - smoothstep(0.03, 0.38, sunDir.y); // 低日角：宽瓣金光水路
+        col += sunCol * (sp + pow(max(dot(n, h), 0.0), 55.0) * 2.4 * lowSun) * (1.0 - night) * smoothstep(-0.05, 0.1, sunDir.y);
         float shore = 1.0 - smoothstep(0.0, 0.9, depth);
         float bands = smoothstep(0.55, 0.85, sin(depth * 14.0 - time * 1.6 + sin(vW.x * 0.13) * 2.0) * 0.5 + 0.5) * smoothstep(3.2, 0.2, depth);
         float foam = clamp(shore * 0.85 + bands * 0.55, 0.0, 1.0) * (0.7 + 0.3 * sin(time * 2.0 + vW.x * 0.3));

@@ -165,7 +165,7 @@ function buildShrine() {
   // 大鸟居（参道下）
   torii(-40, -85, TOWN_Y, 1.35, 0xd8432f);
   // 千本鸟居
-  for (let i = 0; i < 11; i++) { const z = -88.5 - i * 2.1; torii(-40, z, groundAt(-40, z) - 0.05, 0.62, 0xe0502f, true); }
+  for (let i = 0; i < 11; i++) { const z = -88.5 - i * 2.1; torii(-40, z, groundAt(-40, z) - 0.05, 0.62, new THREE.Color(0xe0502f).multiplyScalar(R(0.82, 1.06)).getHex(), true); }
   // 台地：砂石、石灯笼、狐狸像
   WK.box('gravel', sx, sy + 0.02, sz + 4, 44, 0.04, 40, 0xe8e1d4, { wuv: 0.3 });
   WK.box('stone', sx, sy + 0.04, sz + 6, 3.2, 0.06, 26, 0xd9d2c4, { wuv: 0.5 });

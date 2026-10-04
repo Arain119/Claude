@@ -204,7 +204,7 @@ function buildTracks() {
     buildCrossingAt('W', c.x, c.y, c.z, Math.atan2(-p.tz, p.tx), railSep(c.s) / 2 + 4.2, 4.6, c.s);
     // 公路侧停止线（与 AI 车停靠位一致，靠左车道）
     { const rp = c.road, tx = rp[3], tz = rp[4], lx = tz, lz = -tx, dd = railSep(c.s) / 2 + 5, cry = Math.atan2(-tz, tx);
-      for (const [sx, sz] of [[c.x - tx * dd + lx * 1.85, c.z - tz * dd + lz * 1.85], [c.x + tx * dd - lx * 1.85, c.z + tz * dd - lz * 1.85]]) WK.box('vcNoShadow', sx, rp[1] + 0.045, sz, 0.5, 0.012, 3.2, 0xf4f4f0, { ry: cry }); }
+      for (const [sx, sz] of [[c.x - tx * dd + lx * 1.85, c.z - tz * dd + lz * 1.85], [c.x + tx * dd - lx * 1.85, c.z + tz * dd - lz * 1.85]]) WK.box('vcNoShadow', sx, rp[1] + 0.045, sz, 0.5, 0.012, 3.2, new THREE.Color().setHSL(0.12, 0.03, R(0.74, 0.88)), { ry: cry }); }
   }
   // 人行道口：铺板 + 警报器 + 栏杆
   for (const c of RAIL.xings) {

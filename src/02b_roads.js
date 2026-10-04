@@ -123,7 +123,7 @@ function buildRoadMeshes() {
         K.cyl('paint', 0, 4.2, 0, 0.09, 8.4, 0x8a9096, { rt: 0.6, seg: 10 });
         K.rod('paint', [0, 8.2, 0], [0, 8.5, -1.8], 0.05, 0x8a9096);
         K.box('paint', 0, 8.45, -2.0, 0.35, 0.12, 0.7, 0x6a7076); K.box('glow', 0, 8.38, -2.0, 0.26, 0.03, 0.55, 0xfff1d6);
-        const hp = K.w(0, 8.2, -2.0); addHalo(hp[0], hp[1], hp[2], 6, 0xffe2b8); ROAD_LIGHTS.push(hp); addLightPool(hp[0], p[1], hp[2], 6.5, 0xffd29a);
+        const hp = K.w(0, 8.2, -2.0); addHalo(hp[0], hp[1], hp[2], 6, 0xffe2b8); ROAD_LIGHTS.push(hp); addLightPool(hp[0], p[1], hp[2], 6.5, 0xffd29a); addLampCone(hp[0], hp[1] - 0.1, hp[2], p[1] + 0.05);
         addCollider(ox, oz, 0.15, 0.15, 0, p[1], p[1] + 8, 'wall');
       }
       if (s - lastPole >= 36) {
@@ -131,6 +131,9 @@ function buildRoadMeshes() {
         const gy = terrainH(ox, oz);
         WK.cyl('concrete', ox, gy + 5, oz, 0.16, 10, 0xc9c9c4, { rt: 0.7, seg: 8 });
         WK.box('vc', ox, gy + 9.1, oz, 1.4, 0.1, 0.1, 0x707478, { ry: Math.atan2(p[3], p[4]) });
+        WK.cyl('vc', ox, gy + 8.55, oz, 0.175, 0.55, 0xe8e6de, { seg: 8 }); // 白环带
+        if (chance(0.4)) WK.box('vc', ox, gy + 7.2, oz, 0.55, 0.85, 0.5, 0x8a8f94, { ry: R(0, TAU) }); // 变压器
+        if (chance(0.75)) WK.box('vcNoShadow', ox - lx * side * 0.15, gy + 2.6, oz - lz * side * 0.15, 0.3, 0.5, 0.02, 0xf2f2ee, { ry: Math.atan2(p[3], p[4]) }); // 住号牌
         poles.push([ox, gy + 9.15, oz]);
         addCollider(ox, oz, 0.2, 0.2, 0, gy, gy + 10, 'wall');
       }

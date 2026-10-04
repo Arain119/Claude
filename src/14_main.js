@@ -54,7 +54,7 @@ async function build() {
   flushBatches(scene); buildOccupancy();
   scatterNature(); buildForest(); addTreeColliders();
   progress(0.82, '正在合并网格……'); await tick();
-  flushBatches(scene); flushCards(); buildWires(); buildHalos(); buildPetals(); buildPools(); buildGroundShadows(); buildWallFades(); buildDecals(); buildPuddles();
+  flushBatches(scene); flushCards(); buildWires(); buildHalos(); buildPetals(); buildPools(); buildLampCones(); buildGroundShadows(); buildWallFades(); buildDecals(); buildPuddles();
   TEX_SIGN.needsUpdate = true;
   progress(0.9, '居民和车流正在醒来……'); await tick();
   seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic(); buildGulls();

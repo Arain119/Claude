@@ -383,19 +383,20 @@ function buildStreets() {
     for (let z = -46; z < 36; z += 6) if (z < -24 || z > -16) WK.box('vc', s * 3.75, TOWN_Y + 0.155, z, 0.28, 0.02, 0.9, 0x55575c);
   }
   // 白色边线
-  for (const s of [-1, 1]) WK.box('vcNoShadow', s * 3.2, TOWN_Y + 0.045, -20, 0.12, 0.01, 128, 0xf4f4f0);
+  for (const s of [-1, 1]) WK.box('vcNoShadow', s * 3.2, TOWN_Y + 0.045, -20, 0.12, 0.01, 128, new THREE.Color().setHSL(0.12, 0.02, R(0.76, 0.88)));
   // 北路、港口路、南路
   road(-46, 104, -84, -76); road(96, 104, -76, 44); road(-62, 104, 36, 44);
   walk(104, 108, -76, 46); walk(-62, 104, 44, 47);
   walk(7, 96, 34, 36); walk(-62, -7, 34, 36);
   // 后巷
   road(22, 26, -50, 36); road(-26, -22, -17, 36);
-  // 斑马线
-  const zebra = (cx, cz, w, len, alongX) => { for (let i = 0; i < Math.floor(w / 0.9); i++) { const o = -w / 2 + 0.45 + i * 0.9; WK.box('vcNoShadow', alongX ? cx + o : cx, TOWN_Y + 0.045, alongX ? cz : cz + o, alongX ? 0.45 : len, 0.01, alongX ? len : 0.45, 0xf4f4f0); } };
+  // 斑马线（磨损做旧：每条明暗/暖度不同）
+  const wornW = () => new THREE.Color().setHSL(0.12, R(0.0, 0.05), R(0.7, 0.9));
+  const zebra = (cx, cz, w, len, alongX) => { for (let i = 0; i < Math.floor(w / 0.9); i++) { const o = -w / 2 + 0.45 + i * 0.9; WK.box('vcNoShadow', alongX ? cx + o : cx, TOWN_Y + 0.045, alongX ? cz : cz + o, alongX ? 0.45 : len, 0.01, alongX ? len : 0.45, wornW()); } };
   zebra(0, 31, 7, 3, true); zebra(0, -20, 7, 4, true); zebra(100, 48, 8, 3, true);
   // 停止线与「止まれ」
-  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -73.5, 3.2, 0.01, 0.4, 0xf4f4f0);
-  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -47.2, 3.2, 0.01, 0.4, 0xf4f4f0);
+  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -73.5, 3.2, 0.01, 0.4, wornW());
+  WK.box('vcNoShadow', -1.6, TOWN_Y + 0.045, -47.2, 3.2, 0.01, 0.4, wornW());
   const tUV = allocSignAlpha(256, 128, (g, w, h) => { g.fillStyle = '#ffffff'; g.font = `900 92px ${FONT.sans}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('止まれ', w / 2, h / 2 + 4); });
   WK.plane('paint2d', -1.6, TOWN_Y + 0.05, -42.5, 2.6, 3.6, 0xffffff, { rx: -Math.PI / 2, rz: 0, ry: 0, uvr: tUV });
   stopSign(-4.2, -46, 0);

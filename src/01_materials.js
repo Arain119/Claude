@@ -221,6 +221,24 @@ function buildPools() {
   POOLS.mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, fog: true });
   const m = new THREE.Mesh(g, POOLS.mat); m.renderOrder = 3; m.frustumCulled = false; scene.add(m);
 }
+/* --- 路灯光锥（夜间廉价体积光：顶点色上亮下灭 + 加色混合） --- */
+const CONES = { pos: [], mat: null };
+function addLampCone(x, y, z, gy) { CONES.pos.push([x, y, z, gy]); }
+function buildLampCones() {
+  if (!CONES.pos.length) return;
+  const pos = [], col = [], idx = []; const SEG = 10;
+  for (const [x, y, z, gy] of CONES.pos) {
+    const b = pos.length / 3;
+    for (const [yy, rr] of [[y, 0.24], [lerp(y, gy, 0.3), 1.0], [lerp(y, gy, 0.72), 2.0], [gy, 2.8]]) {
+      const a = clamp((y - yy) / Math.max(y - gy, 0.001), 0, 1), fade = 1.0 - a * 0.92;
+      for (let i = 0; i < SEG; i++) { const t = i / SEG * TAU; pos.push(x + Math.cos(t) * rr, yy, z + Math.sin(t) * rr); col.push(fade, fade, fade); }
+    }
+    for (let j = 0; j < 3; j++) for (let i = 0; i < SEG; i++) { const q = b + j * SEG + i, q2 = b + j * SEG + (i + 1) % SEG, q3 = b + (j + 1) * SEG + i, q4 = b + (j + 1) * SEG + (i + 1) % SEG; idx.push(q, q3, q2, q2, q3, q4); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+  CONES.mat = new THREE.MeshBasicMaterial({ color: 0xffd9a8, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: true });
+  const m = new THREE.Mesh(g, CONES.mat); m.renderOrder = 4; m.frustumCulled = false; scene.add(m);
+}
 /* --- 接地阴影（廉价的接触 AO，让建筑「长」在地里而不是浮在上面） ---
    与 buildPools 同套路：所有调用先攒进 GSH.pos，建完场景后一次性铺成贴地网格。
    顶点色通道复用为「强度」：col 里存 a，材质基色是暗绿黑，vColor 相乘即阴影深浅。 */
