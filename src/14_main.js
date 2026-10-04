@@ -170,7 +170,7 @@ function renderFrame() {
 }
 
 /* ---------------- 主循环 ---------------- */
-let last = performance.now(), T = 0, hudT = 0, mmT = 0, saveT = 0, envT = 0; const ENV = { sea: 0, trees: 0, night: 0, crossing: 0, train: 0, trainSpeed: 0, windy: 0.3, height: 0, musicOn: true };
+let last = performance.now(), T = 0, hudT = 0, mmT = 0, saveT = 0, envT = 0; const ENV = { sea: 0, trees: 0, night: 0, crossing: 0, train: 0, trainSpeed: 0, windy: 0.3, height: 0, musicOn: true, rain: 0 };
 let petalNear = 0;
 function frame(now) {
   requestAnimationFrame(frame);
@@ -182,6 +182,7 @@ function frame(now) {
     if (st.min >= 24 * 60) { st.min = 24 * 60 - 1; if (!GAME._passing) { GAME._passing = true; if (DRIVE.v) { DRIVE.v.v = 0; exitVehicle(); } UI.toast('太晚了……你迷迷糊糊地回到了家。'); GAME.sleep(false); setTimeout(() => GAME._passing = false, 3000); } }
   }
   const hour = st.min / 60;
+  updateWeather(dt);
   applyTimeOfDay(hour);
   SKY_U.time.value = T; FOGX.p[0] = T; animeUpdate(NIGHT.v);
   if (GAME.started) {
@@ -229,9 +230,10 @@ function frame(now) {
     const c = islandC(PLAYER.pos.x, PLAYER.pos.z); ENV.sea = Math.max(smooth(0.2, 0.02, c), PLAYER.pos.x > 112 && PLAYER.pos.z > -40 && PLAYER.pos.z < 65 ? 0.8 : 0);
     let cr = 0; for (const C of CROSSINGS) if (C.active) cr = Math.max(cr, smooth(160, 15, Math.hypot(PLAYER.pos.x - C.x, PLAYER.pos.z - C.z)));
     ENV.crossing = cr; ENV.train = smooth(220, 10, nearestTrainDist(PLAYER.pos.x, PLAYER.pos.z)); ENV.trainSpeed = TRAIN.v;
-    ENV.night = NIGHT.v; ENV.height = PLAYER.pos.y - TOWN_Y; ENV.windy = 0.3 + Math.max(0, Math.sin(T * 0.11)) * 0.5;
+    ENV.night = NIGHT.v; ENV.height = PLAYER.pos.y - TOWN_Y; ENV.windy = (0.3 + Math.max(0, Math.sin(T * 0.11)) * 0.5) * WX.wind;
+    ENV.rain = WEATHER.rain * (inside ? 0.3 : 1);
   }
-  PETAL_U.density.value += (petalNear - PETAL_U.density.value) * Math.min(1, dt * 2);
+  PETAL_U.density.value += (petalNear * (1 - WEATHER.rain * 0.9) - PETAL_U.density.value) * Math.min(1, dt * 2);
   if (GAME.started) AUDIO.update(dt, ENV);
   renderFrame();
 }

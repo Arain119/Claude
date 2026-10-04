@@ -16,7 +16,7 @@ UI.toast = (msg, ms = 3400) => {
 function phaseName(h) { return h < 5 ? '深夜' : h < 7 ? '清晨' : h < 11 ? '上午' : h < 13 ? '正午' : h < 17 ? '下午' : h < 19 ? '黄昏' : h < 22 ? '夜樱' : '深夜'; }
 UI.refreshHUD = () => {
   const st = S();
-  $('hudDay').textContent = '第 ' + st.day + ' 天 · ' + WEEK[(st.day - 1) % 7] + ' · 晴';
+  $('hudDay').textContent = '第 ' + st.day + ' 天 · ' + WEEK[(st.day - 1) % 7] + ' · ' + (W_P[WEATHER.tgt] || W_P.sun).cn;
   $('hudTime').textContent = fmtTime(st.min); $('hudPhase').textContent = phaseName(st.min / 60);
   $('hudCoins').textContent = st.coins;
   const ul = $('taskList'); ul.innerHTML = '';
@@ -165,6 +165,7 @@ function renderPanel(extra) {
     body.innerHTML = `<div class="set">
       <div class="set-row"><span>画质</span><div class="seg" id="sQ">${['high', 'mid', 'low'].map(k => `<button data-v="${k}" aria-pressed="${q === k}">${QUALITY[k].label}</button>`).join('')}</div></div>
       <div class="set-row"><span>时间</span><div class="seg" id="sT"><button data-v="900">下午</button><button data-v="1080">黄昏</button><button data-v="1260">夜樱</button><button data-v="420">清晨</button></div></div>
+      <div class="set-row"><span>天气</span><div class="seg" id="sW">${[['sun','晴'],['cloud','阴'],['rain','雨'],['fog','雾'],['','自动']].map(w => `<button data-v="${w[0]}" aria-pressed="${(WEATHER.manual || '') === w[0]}">${w[1]}</button>`).join('')}</div></div>
       <div class="set-row"><span>时间流速</span><div class="seg" id="sF">${[[0, '暂停'], [0.5, '慢'], [1, '正常'], [3, '快']].map(([v, l]) => `<button data-v="${v}" aria-pressed="${tf == v}">${l}</button>`).join('')}</div></div>
       <div class="set-row"><span>音乐（八音盒）</span><div class="seg" id="sM"><button data-v="1" aria-pressed="${AUDIO.music}">开</button><button data-v="0" aria-pressed="${!AUDIO.music}">关</button></div></div>
       <div class="set-row"><label for="sVol">音量</label><input id="sVol" type="range" min="0" max="1" step="0.05" value="${AUDIO.vol}"></div>
@@ -174,6 +175,7 @@ function renderPanel(extra) {
     </div>`;
     body.querySelectorAll('#sQ button').forEach(b => b.onclick = () => { setQuality(b.dataset.v); renderPanel(); });
     body.querySelectorAll('#sT button').forEach(b => b.onclick = () => { GAME.setTime(+b.dataset.v); UI.toast('时间来到 ' + fmtTime(+b.dataset.v)); });
+    body.querySelectorAll('#sW button').forEach(b => b.onclick = () => { GAME.setWeather(b.dataset.v || null); renderPanel(); });
     body.querySelectorAll('#sF button').forEach(b => b.onclick = () => { GAME.timeFlow = +b.dataset.v; store.set('timeFlow', GAME.timeFlow); renderPanel(); });
     body.querySelectorAll('#sM button').forEach(b => b.onclick = () => { AUDIO.music = b.dataset.v === '1'; store.set('music', AUDIO.music); renderPanel(); });
     $('sVol').oninput = (e) => AUDIO.setVol(+e.target.value);

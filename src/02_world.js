@@ -220,7 +220,7 @@ function buildDepthTex() {
 }
 
 /* ---------------- 天空：物理大气（Preetham）+ 云层 + 星空 ---------------- */
-const SKY = { sky: null, skyB: null, overlay: null, overlayB: null, scene: new THREE.Scene(), cubeRT: null, cubeCam: null, pmrem: null, envRT: null, lastSun: new THREE.Vector3(), lastNight: -1 };
+const SKY = { sky: null, skyB: null, overlay: null, overlayB: null, scene: new THREE.Scene(), cubeRT: null, cubeCam: null, pmrem: null, envRT: null, lastSun: new THREE.Vector3(), lastNight: -1, lastCover: -1 };
 const SKY_U = {
   time: { value: 0 }, sunDir: { value: new THREE.Vector3(0.3, 0.6, 0.4) }, moonDir: { value: new THREE.Vector3(-0.4, 0.45, 0.6) }, night: { value: 0 },
   cloudLit: { value: new THREE.Color(1, 1, 1) }, cloudShade: { value: new THREE.Color(0.6, 0.65, 0.75) }, cover: { value: 0.5 }
@@ -279,8 +279,8 @@ function buildSky() {
 /* 太阳方向或昼夜明显变化时，重新烘焙环境光（反射 + 漫反射） */
 function updateSkyEnv(force) {
   const sd = SKY_U.sunDir.value; const n = SKY_U.night.value;
-  if (!force && sd.distanceTo(SKY.lastSun) < 0.035 && Math.abs(n - SKY.lastNight) < 0.06) return;
-  SKY.lastSun.copy(sd); SKY.lastNight = n;
+  if (!force && sd.distanceTo(SKY.lastSun) < 0.035 && Math.abs(n - SKY.lastNight) < 0.06 && Math.abs(SKY_U.cover.value - SKY.lastCover) < 0.05) return;
+  SKY.lastSun.copy(sd); SKY.lastNight = n; SKY.lastCover = SKY_U.cover.value;
   const tm = renderer.toneMapping; renderer.toneMapping = THREE.NoToneMapping;
   SKY.cubeCam.update(renderer, SKY.scene);
   if (SKY.envRT) SKY.envRT.dispose();

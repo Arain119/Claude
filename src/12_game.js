@@ -65,22 +65,22 @@ function applyTimeOfDay(h) {
   if (isDay) { const az = lerp(-0.35, Math.PI + 0.35, dayT), el = Math.sin(dayT * Math.PI) * 1.0 + 0.02; sd.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el) * 0.75 + 0.25).normalize(); }
   else { const nt = (h < 12 ? h + 24 : h) - 18.9; const el = clamp(Math.sin(nt / 10.7 * Math.PI), 0, 1) * 0.15 - 0.12; sd.set(-0.6, el, 0.5).normalize(); }
   SKY_U.sunDir.value.copy(sd); SKY_U.moonDir.value.set(-0.45, 0.42, 0.62).normalize(); SKY_U.night.value = night;
-  if (SKY.sky) { const u = SKY.sky.material.uniforms; u.sunPosition.value.copy(sd).multiplyScalar(4000); u.turbidity.value = turb * 0.7; u.rayleigh.value = lerp(1.1, 2.2, smooth(16.5, 18.6, h) * (1 - night)); u.skyGain.value = lerp(0.42, 0.6, smooth(16.5, 18.8, h)); }
-  SKY_U.cloudLit.value.copy(LT.cl).multiplyScalar(lerp(1.4, 0.25, night)); SKY_U.cloudShade.value.copy(LT.cs).multiplyScalar(lerp(1.0, 0.3, night)); SKY_U.cover.value = 0.52;
-  sun.color.copy(LT.sun); sun.intensity = sunI; LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);
-  hemi.color.copy(LT.hs); hemi.groundColor.copy(LT.hg); hemi.intensity = hemiI;
-  scene.fog.color.copy(LT.fog); scene.fog.density = fogD * (Q === QUALITY.low ? 1.5 : 1);
+  if (SKY.sky) { const u = SKY.sky.material.uniforms; u.sunPosition.value.copy(sd).multiplyScalar(4000); u.turbidity.value = turb * 0.7 + WX.grey * 6; u.rayleigh.value = lerp(1.1, 2.2, smooth(16.5, 18.6, h) * (1 - night)); u.skyGain.value = lerp(0.42, 0.6, smooth(16.5, 18.8, h)) * (1 - WX.grey * 0.4); }
+  SKY_U.cloudLit.value.copy(LT.cl).multiplyScalar(lerp(1.4, 0.25, night) * (1 - WX.grey * 0.35)); SKY_U.cloudShade.value.copy(LT.cs).multiplyScalar(lerp(1.0, 0.3, night) * (1 - WX.grey * 0.4)); SKY_U.cover.value = WX.cover;
+  sun.color.copy(LT.sun); sun.intensity = sunI * WX.sun; LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);
+  hemi.color.copy(LT.hs); hemi.groundColor.copy(LT.hg); hemi.intensity = hemiI * (1 - WX.dark * 0.45);
+  scene.fog.color.copy(LT.fog).lerp(_grey503, WX.grey * 0.5); scene.fog.density = fogD * WX.fog * (Q === QUALITY.low ? 1.5 : 1);
   SEA_U.sunCol.value.copy(LT.sun).multiplyScalar(isDay ? 1 : 0.3); SEA_U.light.value = lerp(1.0, 0.18, night);
   SEA_U.fogColor.value.copy(LT.fog); SEA_U.fogDensity.value = scene.fog.density;
   PETAL_U.light.value = lerp(1, 0.3, night);
   // 空气透视 / 云影 / 叶片透光
   const dayK = isDay ? smooth(0, 0.12, sd.y) : 0;
   FOGX.sun[0] = sd.x; FOGX.sun[1] = sd.y; FOGX.sun[2] = sd.z;
-  FOGX.sunCol[0] = LT.sun.r * 0.55 * dayK; FOGX.sunCol[1] = LT.sun.g * 0.45 * dayK; FOGX.sunCol[2] = LT.sun.b * 0.3 * dayK;
-  FOGX.leafCol[0] = LT.sun.r * sunI * 0.22 * dayK; FOGX.leafCol[1] = LT.sun.g * sunI * 0.22 * dayK; FOGX.leafCol[2] = LT.sun.b * sunI * 0.16 * dayK;
-  FOGX.p[1] = night; FOGX.p[2] = 2; FOGX.p[3] = 0.4 * dayK * (1 - night);
+  FOGX.sunCol[0] = LT.sun.r * 0.55 * dayK * WX.sun; FOGX.sunCol[1] = LT.sun.g * 0.45 * dayK * WX.sun; FOGX.sunCol[2] = LT.sun.b * 0.3 * dayK * WX.sun;
+  FOGX.leafCol[0] = LT.sun.r * sunI * 0.22 * dayK * WX.sun; FOGX.leafCol[1] = LT.sun.g * sunI * 0.22 * dayK * WX.sun; FOGX.leafCol[2] = LT.sun.b * sunI * 0.16 * dayK * WX.sun;
+  FOGX.p[1] = night; FOGX.p[2] = 2 * WX.wind; FOGX.p[3] = 0.4 * dayK * (1 - night);
   if (farMat) farMat.color.copy(LT.fog).multiplyScalar(0.75);
-  renderer.toneMappingExposure = expo;
+  renderer.toneMappingExposure = expo * (1 - WX.dark * 0.2);
   // 夜灯
   winMat.emissiveIntensity = night * 1.6; signMat.emissiveIntensity = 0.02 + night * 0.9; SAK_M.m.emissiveIntensity = 1 + night * 1.2;
   glowMat.color.setScalar(lerp(0.85, 6, night));
@@ -328,7 +328,7 @@ GAME.sellFish = () => { let total = 0; for (const [n, p] of FISH_KINDS) { const 
 GAME.fish = () => {
   const F = GAME.fishing;
   if (!F) {
-    const p = HARBOR.fish; GAME.fishing = { t: R(3, 8), bite: 0 };
+    const p = HARBOR.fish; GAME.fishing = { t: R(3, 8) * (WEATHER.rain > 0.4 ? 0.55 : 1), bite: 0 };
     PLAYER.pos.set(p.x + 0.4, p.y + 0.05, p.z); PLAYER.yaw = Math.PI / 2; PLAYER.fly = false;
     rod.visible = fishLine.visible = bobber.visible = true; AUDIO.splash(); UI.toast('抛竿……等浮标沉下去时按 E 收竿');
     return;
@@ -347,7 +347,7 @@ function updateFishing(dt, t) {
   const bp = new THREE.Vector3(HARBOR.fish.x + 4.2, 0.05 + Math.sin(t * 2) * 0.03 - (F.bite > 0 ? 0.12 : 0), HARBOR.fish.z + 0.6);
   bobber.position.copy(bp);
   fishLine.geometry.setFromPoints([tip, bp]);
-  if (F.bite > 0) { F.bite -= dt; if (F.bite <= 0) { UI.toast('鱼跑掉了……'); F.t = R(3, 8); UI.bite(false); } }
+  if (F.bite > 0) { F.bite -= dt; if (F.bite <= 0) { UI.toast('鱼跑掉了……'); F.t = R(3, 8) * (WEATHER.rain > 0.4 ? 0.55 : 1); UI.bite(false); } }
   else { F.t -= dt; if (F.t <= 0) { F.bite = 1.3; AUDIO.splash(); UI.bite(true); } }
 }
 
