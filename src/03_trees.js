@@ -434,6 +434,7 @@ function buildForest() {
   for (let i = 0; i < 40000 && placed < 2400; i++) {
     const x = R(WORLD.x0 + 10, WORLD.x1 - 10), z = R(WORLD.z0 + 10, WORLD.z1 - 10); const c = islandC(x, z); if (c < 0.035) continue;
     if (x > -116 && x < 132 && z > -92 && z < 96) continue; // 镇区
+    if (x > 126 && x < 168 && z > -64 && z < -24) continue; // 港区作业面（码头背场、防波堤走道外侧不长树）
     if (Math.abs(x + 40) < 25 && z < -100 && z > -151) continue; // 神社台地
     if (Math.hypot(x - CAPE.x, z - CAPE.z) < 20 || polyDist(CAPE_PATH, x, z) < 4.5) continue;
     if (FARM.paddy(x, z) || (x < -112 && x > -158 && z > -50 && z < 92)) continue;

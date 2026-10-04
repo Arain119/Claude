@@ -115,8 +115,10 @@ function buildRoadMeshes() {
       if (!grd(p)) continue;
       const dl = terrainNatural(p[0] + lx * (hw + 5), p[2] + lz * (hw + 5)) - p[1], dr = terrainNatural(p[0] - lx * (hw + 5), p[2] - lz * (hw + 5)) - p[1];
       const seaSide = islandC(p[0] + lx * 30, p[2] + lz * 30) < islandC(p[0] - lx * 30, p[2] - lz * 30) ? 1 : -1;
-      // 护栏：低的一侧或靠海一侧
-      for (const side of [1, -1]) { const drop = side > 0 ? dl : dr; if (drop < -1.0 || side === seaSide) needRail[side > 0 ? 0 : 1][i] = 1; }
+      // 护栏：有落差的一侧，或靠海且有明显落差的一侧（平直海侧留作滩涂/便道开口，不挡路）
+      for (const side of [1, -1]) { const drop = side > 0 ? dl : dr; if (drop < -1.0 || (side === seaSide && drop < -0.55)) needRail[side > 0 ? 0 : 1][i] = 1; }
+      // 铁路道口铺面开口处不设护栏（梁端不横穿道口）
+      if (RAIL.cross && Math.hypot(p[0] - RAIL.cross.x, p[2] - RAIL.cross.z) < 14) { needRail[0][i] = needRail[1][i] = 0; }
       if (s - lastLamp >= 42) {
         lastLamp = s; const side = -seaSide; const ox = p[0] + lx * side * (hw + 1.2), oz = p[2] + lz * side * (hw + 1.2);
         const K = new Kit(ox, p[1], oz, Math.atan2(lx * side, lz * side));
