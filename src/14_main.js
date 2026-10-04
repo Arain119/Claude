@@ -57,6 +57,7 @@ async function build() {
   seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic();
   scene.updateMatrixWorld(true); buildGrass();
   mailboxInteractables(); shopInteractables(); homeInteractables();
+  initLiveWorld(); // 天气 / 乘降 / 巴士 / 通勤
   const ORDER = ['home', 'post', 'station', 'plaza', 'shrine', 'river', 'harbor', 'cape', 'beach', 'platform', 'park', 'school', 'farm', 'gas', 'view', 'station2'];
   PLACES.sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
   buildMapBase(); refreshHomeBoard(); applyShadowQuality(); setQuality(qName, true);

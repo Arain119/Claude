@@ -1037,7 +1037,7 @@ function buildDepthTex() {
 }
 
 /* ---------------- 天空：物理大气（Preetham）+ 云层 + 星空 ---------------- */
-const SKY = { sky: null, skyB: null, overlay: null, overlayB: null, scene: new THREE.Scene(), cubeRT: null, cubeCam: null, pmrem: null, envRT: null, lastSun: new THREE.Vector3(), lastNight: -1 };
+const SKY = { sky: null, skyB: null, overlay: null, overlayB: null, scene: new THREE.Scene(), cubeRT: null, cubeCam: null, pmrem: null, envRT: null, lastSun: new THREE.Vector3(), lastNight: -1, lastCover: -1 };
 const SKY_U = {
   time: { value: 0 }, sunDir: { value: new THREE.Vector3(0.3, 0.6, 0.4) }, moonDir: { value: new THREE.Vector3(-0.4, 0.45, 0.6) }, night: { value: 0 },
   cloudLit: { value: new THREE.Color(1, 1, 1) }, cloudShade: { value: new THREE.Color(0.6, 0.65, 0.75) }, cover: { value: 0.5 }
@@ -1096,8 +1096,8 @@ function buildSky() {
 /* 太阳方向或昼夜明显变化时，重新烘焙环境光（反射 + 漫反射） */
 function updateSkyEnv(force) {
   const sd = SKY_U.sunDir.value; const n = SKY_U.night.value;
-  if (!force && sd.distanceTo(SKY.lastSun) < 0.035 && Math.abs(n - SKY.lastNight) < 0.06) return;
-  SKY.lastSun.copy(sd); SKY.lastNight = n;
+  if (!force && sd.distanceTo(SKY.lastSun) < 0.035 && Math.abs(n - SKY.lastNight) < 0.06 && Math.abs(SKY_U.cover.value - SKY.lastCover) < 0.05) return;
+  SKY.lastSun.copy(sd); SKY.lastNight = n; SKY.lastCover = SKY_U.cover.value;
   const tm = renderer.toneMapping; renderer.toneMapping = THREE.NoToneMapping;
   SKY.cubeCam.update(renderer, SKY.scene);
   if (SKY.envRT) SKY.envRT.dispose();
@@ -4812,6 +4812,7 @@ function spawnNPCs() {
     if (d.mode === 'sit') n.sitY = d.sitY != null ? groundAt(n.home[0], n.home[1]) + 0.05 : TOWN_Y + 0.5;
     if (d.bike) { const b = makeBike(d.bike); b.g.scale.setScalar(1); holder.add(b.g); n.bikeObj = b; c.root.position.set(0, 0.86, -0.12); }
     if (n.home) { n.pos.set(n.home[0], groundAt(n.home[0], n.home[1]), n.home[1]); n.yaw = n.home[2]; }
+    if (typeof makeUmbrella === 'function') { n.umb = makeUmbrella(n); n.holder.add(n.umb); }
     NPCS.push(n);
   }
 }
@@ -4823,11 +4824,20 @@ function npcActive(n, hour) {
 function updateNPCs(dt, t, hour, ppos) {
   for (const n of NPCS) {
     const active = npcActive(n, hour);
-    if (!active) { if (n.holder.visible) n.holder.visible = false; continue; }
+    // 通勤：到点沿路线走进场，下班沿路线走回家（而不是瞬移/消失）
+    if (n.com) {
+      const C = n.com;
+      if (C.day !== S().day) { C.day = S().day; C.done = false; C.left = false; C.i = 0; C.mode = ''; }
+      if (active && !C.done && C.mode !== 'in') { C.mode = 'in'; C.i = 0; const w = C.route[0]; if (Math.hypot(n.pos.x - w[0], n.pos.z - w[1]) > 3) { n.pos.set(w[0], groundAt(w[0], w[1]), w[1]); } }
+      else if (!active && C.done && !C.left && C.mode !== 'out') { C.mode = 'out'; C.i = 0; }
+    }
+    const walking = n.com && n.com.mode;
+    if (!active && !walking) { if (n.holder.visible) n.holder.visible = false; continue; }
     const dist = Math.hypot(n.pos.x - ppos.x, n.pos.z - ppos.z);
     let mode = n.override ? n.override.mode : n.mode; let speed = 0;
     // 位置更新（即使很远也推进路径）
-    if (n.override && n.override.pos) { n.pos.set(n.override.pos[0], n.override.pos[1], n.override.pos[2]); n.yaw = n.override.yaw; }
+    if (walking) { if (commuteStep(n, dt, n.com.mode === 'out')) { if (n.com.mode === 'in') n.com.done = true; else n.com.left = true; n.com.mode = ''; } else { mode = 'commute'; speed = Math.max(n.speed, 1.1); } }
+    else if (n.override && n.override.pos) { n.pos.set(n.override.pos[0], n.override.pos[1], n.override.pos[2]); n.yaw = n.override.yaw; }
     else if (mode === 'path' || mode === 'bike') {
       const P = PATHS[n.d.path]; const blocked = dist < 1.3 && mode === 'path' && Math.cos(Math.atan2(ppos.x - n.pos.x, ppos.z - n.pos.z) - n.yaw) > 0.5;
       if (!blocked) { n.s += n.speed * dt; speed = n.speed; }
@@ -4841,7 +4851,7 @@ function updateNPCs(dt, t, hour, ppos) {
       n.pos.y = groundAt(n.pos.x, n.pos.z, n.pos.y + 0.6);
     } else if (n.home && !n.override) { n.pos.set(n.home[0], n.pos.y || groundAt(n.home[0], n.home[1]), n.home[1]); }
     // 正在交谈：面向玩家
-    if (GAME.talkingTo === n) { const want = Math.atan2(ppos.x - n.pos.x, ppos.z - n.pos.z); let dy = want - n.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); n.yaw += dy * Math.min(1, dt * 6); if (mode === 'path' || mode === 'wander' || mode === 'idle' || mode === 'phone') { mode = 'talk'; speed = 0; } }
+    if (GAME.talkingTo === n) { const want = Math.atan2(ppos.x - n.pos.x, ppos.z - n.pos.z); let dy = want - n.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); n.yaw += dy * Math.min(1, dt * 6); if (mode === 'path' || mode === 'wander' || mode === 'idle' || mode === 'phone' || mode === 'commute') { mode = 'talk'; speed = 0; } }
     const vis = dist < Q.npc;
     n.holder.visible = vis;
     if (!vis) continue;
@@ -4849,9 +4859,10 @@ function updateNPCs(dt, t, hour, ppos) {
     if (mode === 'sit' || n.override && n.override.mode === 'sit') { n.c.root.position.y = (n.override && n.override.sitY != null ? n.override.sitY : n.sitY) - n.pos.y; }
     setOutline(n.c, dist < Q.outline);
     if (dist > 60 && (n._skip = !n._skip)) continue;
-    let st = mode === 'path' || mode === 'wander' ? (speed > 0.1 ? (speed > 2 ? 'run' : 'walk') : 'idle') : mode === 'bike' ? 'bike' : mode;
+    let st = mode === 'path' || mode === 'wander' || mode === 'commute' ? (speed > 0.1 ? (speed > 2 ? 'run' : 'walk') : 'idle') : mode === 'bike' ? 'bike' : mode;
     if (st === 'run' && n.d.look.age !== 'kid' && speed < 2.6) st = 'walk';
     poseCharacter(n.c, dt * (dist > 60 ? 2 : 1), st, speed, t);
+    if (n.umb) n.umb.visible = WEATHER.rain > 0.45 && (st === 'walk' || st === 'run' || st === 'idle' || st === 'talk');
     if (n.bikeObj) for (const w of n.bikeObj.wheels) w.rotation.x += speed * dt / 0.33;
   }
 }
@@ -4878,6 +4889,7 @@ AUDIO.init = function () {
   AUDIO.waves = noise('lowpass', 700);
   AUDIO.rumble = noise('lowpass', 180);
   AUDIO.leaves = noise('highpass', 3500);
+  AUDIO.rain = noise('bandpass', 2400, 0.4);
   // 虫鸣
   const cr = ctx.createOscillator(); cr.frequency.value = 4600; const crG = ctx.createGain(); crG.gain.value = 0; const crL = ctx.createOscillator(); crL.frequency.value = 18; const crLG = ctx.createGain(); crLG.gain.value = 1; crL.connect(crLG); const am = ctx.createGain(); am.gain.value = 0; crLG.connect(am.gain); cr.connect(am); am.connect(crG); crG.connect(master); cr.start(); crL.start(); AUDIO.cricket = crG;
   AUDIO.nextBird = 1; AUDIO.nextBell = 0; AUDIO.bellSide = 0; AUDIO.nextClack = 0; AUDIO.musicT = ctx.currentTime + 1; AUDIO.noteI = 0;
@@ -4934,11 +4946,12 @@ AUDIO.update = function (dt, env) {
   const day = 1 - env.night;
   AUDIO.wind.g.gain.setTargetAtTime(0.05 + env.windy * 0.06 + (env.height > 10 ? 0.05 : 0), now, k);
   AUDIO.wind.f.frequency.setTargetAtTime(380 + Math.sin(now * 0.3) * 120, now, k);
-  AUDIO.waves.g.gain.setTargetAtTime(env.sea * (0.22 + Math.sin(now * 0.5) * 0.08), now, k);
+  if (AUDIO.rain) { AUDIO.rain.g.gain.setTargetAtTime(env.rain * 0.09, now, 0.6); AUDIO.rain.f.frequency.setTargetAtTime(2000 + Math.sin(now * 0.23) * 500, now, k); }
+  AUDIO.waves.g.gain.setTargetAtTime(env.sea * (0.22 + Math.sin(now * 0.5) * 0.08) * (1 + env.rain * 0.4), now, k);
   AUDIO.leaves.g.gain.setTargetAtTime(env.trees * 0.012 * (0.6 + Math.sin(now * 0.7) * 0.4), now, k);
   AUDIO.cricket.gain.setTargetAtTime(env.night * 0.012 * (1 - env.sea * 0.5), now, 0.5);
   // 鸟鸣
-  AUDIO.nextBird -= dt; if (AUDIO.nextBird < 0) { AUDIO.nextBird = R(1.5, 6); if (day > 0.4 && env.trees > 0.1) chirp(now + 0.05, 0.035 * env.trees * day); if (env.sea > 0.4 && day > 0.5 && chance(0.35)) { tone(R(900, 1200), now, 0.35, 0.03 * env.sea, 'sawtooth'); } }
+  AUDIO.nextBird -= dt; if (AUDIO.nextBird < 0) { AUDIO.nextBird = R(1.5, 6); if (day > 0.4 && env.trees > 0.1 && env.rain < 0.4) chirp(now + 0.05, 0.035 * env.trees * day); if (env.sea > 0.4 && day > 0.5 && chance(0.35)) { tone(R(900, 1200), now, 0.35, 0.03 * env.sea, 'sawtooth'); } }
   // 道口铃
   const bell = env.crossing; if (bell > 0.01) { AUDIO.nextBell -= dt; if (AUDIO.nextBell < 0) { AUDIO.nextBell = 0.42; AUDIO.bellSide ^= 1; const f = AUDIO.bellSide ? 760 : 860; const o = tone(f, now, 0.28, 0.06 * bell, 'square'); tone(f * 2.76, now, 0.18, 0.02 * bell, 'sine'); } }
   // 列车
@@ -5108,6 +5121,7 @@ function updateTraffic(dt, ppos) {
     { const dx = ppos.x - v.x, dz = ppos.z - v.z; const ah = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx); if (!DRIVE.v && ah > 0 && ah < 11 && lat < 1.9 && Math.abs(ppos.y - v.y) < 3) { target = Math.min(target, Math.max(0, (ah - v.M.L / 2 - 1.5) * 1.5)); if (ah < v.M.L / 2 + 2.5 && !v.honked) { v.honked = true; AUDIO.horn && AUDIO.horn(0.6); } } else if (ah > 14) v.honked = false; }
     // 道口
     for (const st of CAR_STOPS) { const C = CROSSINGS.find(k => k.id === st.cx); if (!C) continue; const dx = st.x - v.x, dz = st.z - v.z; const ah = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx); if (lat < 2 && ah > -0.5 && ah < 32 && (C.active || C.arm > 0.02)) target = Math.min(target, Math.max(0, (ah - v.M.L / 2 - 0.3) * 1.2)); }
+    if (v.busHook) target = Math.min(target, v.busHook(v, dt));
     const prevV = v.v; v.v += clamp(target - v.v, -7 * dt, 2.2 * dt); v.v = Math.max(0, v.v); v.brake = prevV - v.v > 0.02 ? 1 : 0;
     v.s = (v.s + v.v * dt) % L;
     const q = pathAt(P, v.s); v.x = q[0]; v.z = q[1];
@@ -5188,7 +5202,15 @@ function freshState() { return { v: 1, day: 1, min: 9 * 60, coins: 20, inv: {}, 
 GAME.S = store.get('save', null);
 if (!GAME.S || GAME.S.v !== 1) GAME.S = freshState();
 const S = () => GAME.S;
-GAME.save = () => { S().pos = [PLAYER.pos.x, PLAYER.pos.y, PLAYER.pos.z, PLAYER.yaw]; store.set('save', S()); };
+GAME.save = () => {
+  if (GAME.ride) { // 乘车中存档记在乘车站台上，读档时站在站台上
+    const r = GAME.ride; let p;
+    if (r.kind === 'train') { const a = railAt(RAIL.stops[r.boardSi].s); p = [a.x, a.y + 1.3, a.z, PLAYER.yaw]; }
+    else { const b = BUS_STOPS[r.boardSi]; p = [b.sx, 0, b.sz, PLAYER.yaw]; p[1] = groundAt(b.sx, b.sz, 3); }
+    S().pos = p;
+  } else S().pos = [PLAYER.pos.x, PLAYER.pos.y, PLAYER.pos.z, PLAYER.yaw];
+  store.set('save', S());
+};
 GAME.hour = () => S().min / 60;
 const fmtTime = (m) => { const h = Math.floor(m / 60) % 24, mm = Math.floor(m % 60); return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0'); };
 GAME.diary = (text) => { S().diary.push({ day: S().day, t: fmtTime(S().min), text }); if (S().diary.length > 80) S().diary.shift(); };
@@ -5243,22 +5265,22 @@ function applyTimeOfDay(h) {
   if (isDay) { const az = lerp(-0.35, Math.PI + 0.35, dayT), el = Math.sin(dayT * Math.PI) * 1.0 + 0.02; sd.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el) * 0.75 + 0.25).normalize(); }
   else { const nt = (h < 12 ? h + 24 : h) - 18.9; const el = clamp(Math.sin(nt / 10.7 * Math.PI), 0, 1) * 0.15 - 0.12; sd.set(-0.6, el, 0.5).normalize(); }
   SKY_U.sunDir.value.copy(sd); SKY_U.moonDir.value.set(-0.45, 0.42, 0.62).normalize(); SKY_U.night.value = night;
-  if (SKY.sky) { const u = SKY.sky.material.uniforms; u.sunPosition.value.copy(sd).multiplyScalar(4000); u.turbidity.value = turb * 0.7; u.rayleigh.value = lerp(1.1, 2.2, smooth(16.5, 18.6, h) * (1 - night)); u.skyGain.value = lerp(0.42, 0.6, smooth(16.5, 18.8, h)); }
-  SKY_U.cloudLit.value.copy(LT.cl).multiplyScalar(lerp(1.4, 0.25, night)); SKY_U.cloudShade.value.copy(LT.cs).multiplyScalar(lerp(1.0, 0.3, night)); SKY_U.cover.value = 0.52;
-  sun.color.copy(LT.sun); sun.intensity = sunI; LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);
-  hemi.color.copy(LT.hs); hemi.groundColor.copy(LT.hg); hemi.intensity = hemiI;
-  scene.fog.color.copy(LT.fog); scene.fog.density = fogD * (Q === QUALITY.low ? 1.5 : 1);
+  if (SKY.sky) { const u = SKY.sky.material.uniforms; u.sunPosition.value.copy(sd).multiplyScalar(4000); u.turbidity.value = turb * 0.7 + WX.grey * 6; u.rayleigh.value = lerp(1.1, 2.2, smooth(16.5, 18.6, h) * (1 - night)); u.skyGain.value = lerp(0.42, 0.6, smooth(16.5, 18.8, h)) * (1 - WX.grey * 0.4); }
+  SKY_U.cloudLit.value.copy(LT.cl).multiplyScalar(lerp(1.4, 0.25, night) * (1 - WX.grey * 0.35)); SKY_U.cloudShade.value.copy(LT.cs).multiplyScalar(lerp(1.0, 0.3, night) * (1 - WX.grey * 0.4)); SKY_U.cover.value = WX.cover;
+  sun.color.copy(LT.sun); sun.intensity = sunI * WX.sun; LIGHT_DIR.copy(isDay ? sd : SKY_U.moonDir.value);
+  hemi.color.copy(LT.hs); hemi.groundColor.copy(LT.hg); hemi.intensity = hemiI * (1 - WX.dark * 0.45);
+  scene.fog.color.copy(LT.fog).lerp(_grey503, WX.grey * 0.5); scene.fog.density = fogD * WX.fog * (Q === QUALITY.low ? 1.5 : 1);
   SEA_U.sunCol.value.copy(LT.sun).multiplyScalar(isDay ? 1 : 0.3); SEA_U.light.value = lerp(1.0, 0.18, night);
   SEA_U.fogColor.value.copy(LT.fog); SEA_U.fogDensity.value = scene.fog.density;
   PETAL_U.light.value = lerp(1, 0.3, night);
   // 空气透视 / 云影 / 叶片透光
   const dayK = isDay ? smooth(0, 0.12, sd.y) : 0;
   FOGX.sun[0] = sd.x; FOGX.sun[1] = sd.y; FOGX.sun[2] = sd.z;
-  FOGX.sunCol[0] = LT.sun.r * 0.55 * dayK; FOGX.sunCol[1] = LT.sun.g * 0.45 * dayK; FOGX.sunCol[2] = LT.sun.b * 0.3 * dayK;
-  FOGX.leafCol[0] = LT.sun.r * sunI * 0.22 * dayK; FOGX.leafCol[1] = LT.sun.g * sunI * 0.22 * dayK; FOGX.leafCol[2] = LT.sun.b * sunI * 0.16 * dayK;
-  FOGX.p[1] = night; FOGX.p[2] = 2; FOGX.p[3] = 0.4 * dayK * (1 - night);
+  FOGX.sunCol[0] = LT.sun.r * 0.55 * dayK * WX.sun; FOGX.sunCol[1] = LT.sun.g * 0.45 * dayK * WX.sun; FOGX.sunCol[2] = LT.sun.b * 0.3 * dayK * WX.sun;
+  FOGX.leafCol[0] = LT.sun.r * sunI * 0.22 * dayK * WX.sun; FOGX.leafCol[1] = LT.sun.g * sunI * 0.22 * dayK * WX.sun; FOGX.leafCol[2] = LT.sun.b * sunI * 0.16 * dayK * WX.sun;
+  FOGX.p[1] = night; FOGX.p[2] = 2 * WX.wind; FOGX.p[3] = 0.4 * dayK * (1 - night);
   if (farMat) farMat.color.copy(LT.fog).multiplyScalar(0.75);
-  renderer.toneMappingExposure = expo;
+  renderer.toneMappingExposure = expo * (1 - WX.dark * 0.2);
   // 夜灯
   winMat.emissiveIntensity = night * 1.6; signMat.emissiveIntensity = 0.02 + night * 0.9; SAK_M.m.emissiveIntensity = 1 + night * 1.2;
   glowMat.color.setScalar(lerp(0.85, 6, night));
@@ -5345,10 +5367,10 @@ canvasEl.addEventListener('touchmove', (e) => {
 const endTouch = (e) => { for (const t of e.changedTouches) { if (TOUCH.move && t.identifier === TOUCH.move.id) { TOUCH.move = null; UI.joy(false); } if (TOUCH.look && t.identifier === TOUCH.look.id) TOUCH.look = null; } };
 canvasEl.addEventListener('touchend', endTouch); canvasEl.addEventListener('touchcancel', endTouch);
 
-GAME.vehicleKey = () => { if (DRIVE.v) { exitVehicle(); return; } if (GAME.sitting || GAME.fishing) return; const v = nearestVehicle(PLAYER.pos); if (v) enterVehicle(v); else UI.toast('附近没有可以驾驶的车辆。'); };
+GAME.vehicleKey = () => { if (GAME.ride) { leaveRide(); return; } if (DRIVE.v) { exitVehicle(); return; } if (GAME.sitting || GAME.fishing) return; const v = nearestVehicle(PLAYER.pos); if (v) enterVehicle(v); else UI.toast('附近没有可以驾驶的车辆。'); };
 GAME.cycleTime = () => { const presets = [[15 * 60, '下午'], [18 * 60, '黄昏'], [21 * 60, '夜樱']]; const h = S().min; let i = presets.findIndex(p => p[0] > h + 1); if (i < 0) i = 0; GAME.setTime(presets[i][0]); UI.toast('时间来到「' + presets[i][1] + '」'); };
 GAME.setTime = (m) => { if (m < S().min - 60 && m < 6 * 60) { } S().min = m; UI.refreshHUD(); };
-GAME.teleport = (i) => { const p = PLACES[i]; if (!p) return; GAME.standUp(); PLAYER.fly = false; PLAYER.pos.set(p.x, 0, p.z); PLAYER.pos.y = groundAt(p.x, p.z, terrainH(p.x, p.z) + 1.5); PLAYER.yaw = p.ry; PLAYER.camYaw = p.ry; PLAYER.vy = 0; UI.toast('来到「' + p.name + '」'); UI.closeAll(); };
+GAME.teleport = (i) => { const p = PLACES[i]; if (!p) return; GAME.standUp(); if (GAME.ride) { GAME.ride = null; scene.add(playerHolder); playerHolder.scale.setScalar(1); playerHolder.rotation.set(0, 0, 0); playerHolder.visible = true; } PLAYER.fly = false; PLAYER.pos.set(p.x, 0, p.z); PLAYER.pos.y = groundAt(p.x, p.z, terrainH(p.x, p.z) + 1.5); PLAYER.yaw = p.ry; PLAYER.camYaw = p.ry; PLAYER.vy = 0; UI.toast('来到「' + p.name + '」'); UI.closeAll(); };
 
 /* ---------------- 坐下 / 起身 ---------------- */
 GAME.sit = (x, y, z, ry, onLeave, attach) => {
@@ -5371,7 +5393,7 @@ GAME.standUp = () => {
 let currentInteract = null;
 function findInteract() {
   const p = PLAYER.pos; let best = null, bd = 1e9;
-  if (GAME.sitting || DRIVE.v) return null;
+  if (GAME.sitting || DRIVE.v || GAME.ride) return null;
   { const v = nearestVehicle(p, 2.6); if (v) { const d = Math.hypot(v.x - p.x, v.z - p.z) - v.M.halfW; best = { kind: 'veh', v, label: '驾驶「' + v.T.name + '」', key: 'F' }; bd = d + 0.6; } }
   // 居民
   for (const n of NPCS) {
@@ -5388,6 +5410,7 @@ function findInteract() {
 }
 GAME.interact = () => {
   if (GAME.fishing) { GAME.fish(); return; }
+  if (GAME.ride) { leaveRide(); return; }
   if (GAME.sitting) { GAME.standUp(); return; }
   if (DRIVE.v) { exitVehicle(); return; }
   const c = currentInteract; if (!c) return; AUDIO.click();
@@ -5506,7 +5529,7 @@ GAME.sellFish = () => { let total = 0; for (const [n, p] of FISH_KINDS) { const 
 GAME.fish = () => {
   const F = GAME.fishing;
   if (!F) {
-    const p = HARBOR.fish; GAME.fishing = { t: R(3, 8), bite: 0 };
+    const p = HARBOR.fish; GAME.fishing = { t: R(3, 8) * (WEATHER.rain > 0.4 ? 0.55 : 1), bite: 0 };
     PLAYER.pos.set(p.x + 0.4, p.y + 0.05, p.z); PLAYER.yaw = Math.PI / 2; PLAYER.fly = false;
     rod.visible = fishLine.visible = bobber.visible = true; AUDIO.splash(); UI.toast('抛竿……等浮标沉下去时按 E 收竿');
     return;
@@ -5525,7 +5548,7 @@ function updateFishing(dt, t) {
   const bp = new THREE.Vector3(HARBOR.fish.x + 4.2, 0.05 + Math.sin(t * 2) * 0.03 - (F.bite > 0 ? 0.12 : 0), HARBOR.fish.z + 0.6);
   bobber.position.copy(bp);
   fishLine.geometry.setFromPoints([tip, bp]);
-  if (F.bite > 0) { F.bite -= dt; if (F.bite <= 0) { UI.toast('鱼跑掉了……'); F.t = R(3, 8); UI.bite(false); } }
+  if (F.bite > 0) { F.bite -= dt; if (F.bite <= 0) { UI.toast('鱼跑掉了……'); F.t = R(3, 8) * (WEATHER.rain > 0.4 ? 0.55 : 1); UI.bite(false); } }
   else { F.t -= dt; if (F.t <= 0) { F.bite = 1.3; AUDIO.splash(); UI.bite(true); } }
 }
 
@@ -5637,6 +5660,7 @@ function homeInteractables() {
 const _fw = new THREE.Vector3();
 function updatePlayer(dt, t) {
   const P = PLAYER;
+  if (GAME.ride) { INPUT.jump = false; return; } // 乘车中：坐标与姿态由 updateRide 接管
   // 移动输入
   let mx = 0, mz = 0;
   if (KEYS.has('w') || KEYS.has('arrowup')) mz += 1; if (KEYS.has('s') || KEYS.has('arrowdown')) mz -= 1;
@@ -5695,6 +5719,7 @@ const CAM = { lastLook: -10, fov: 58, T: 0 };
 const _side = new THREE.Vector3();
 function updateCamera(dt) {
   const P = PLAYER; const v = DRIVE.v; CAM.T += dt;
+  if (GAME.ride) { updateRideCam(dt); return; }
   if (INPUT.lookX || INPUT.lookY) { CAM.lastLook = CAM.T; P.camYaw -= INPUT.lookX; P.camPitch = clamp(P.camPitch + INPUT.lookY * (store.get('invertY', false) ? -1 : 1), -0.9, 1.2); INPUT.lookX = INPUT.lookY = 0; }
   const idle = CAM.T - CAM.lastLook > (v ? 1.2 : 2.2);
   const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -5743,7 +5768,7 @@ UI.toast = (msg, ms = 3400) => {
 function phaseName(h) { return h < 5 ? '深夜' : h < 7 ? '清晨' : h < 11 ? '上午' : h < 13 ? '正午' : h < 17 ? '下午' : h < 19 ? '黄昏' : h < 22 ? '夜樱' : '深夜'; }
 UI.refreshHUD = () => {
   const st = S();
-  $('hudDay').textContent = '第 ' + st.day + ' 天 · ' + WEEK[(st.day - 1) % 7] + ' · 晴';
+  $('hudDay').textContent = '第 ' + st.day + ' 天 · ' + WEEK[(st.day - 1) % 7] + ' · ' + (W_P[WEATHER.tgt] || W_P.sun).cn;
   $('hudTime').textContent = fmtTime(st.min); $('hudPhase').textContent = phaseName(st.min / 60);
   $('hudCoins').textContent = st.coins;
   const ul = $('taskList'); ul.innerHTML = '';
@@ -5892,6 +5917,7 @@ function renderPanel(extra) {
     body.innerHTML = `<div class="set">
       <div class="set-row"><span>画质</span><div class="seg" id="sQ">${['high', 'mid', 'low'].map(k => `<button data-v="${k}" aria-pressed="${q === k}">${QUALITY[k].label}</button>`).join('')}</div></div>
       <div class="set-row"><span>时间</span><div class="seg" id="sT"><button data-v="900">下午</button><button data-v="1080">黄昏</button><button data-v="1260">夜樱</button><button data-v="420">清晨</button></div></div>
+      <div class="set-row"><span>天气</span><div class="seg" id="sW">${[['sun','晴'],['cloud','阴'],['rain','雨'],['fog','雾'],['','自动']].map(w => `<button data-v="${w[0]}" aria-pressed="${(WEATHER.manual || '') === w[0]}">${w[1]}</button>`).join('')}</div></div>
       <div class="set-row"><span>时间流速</span><div class="seg" id="sF">${[[0, '暂停'], [0.5, '慢'], [1, '正常'], [3, '快']].map(([v, l]) => `<button data-v="${v}" aria-pressed="${tf == v}">${l}</button>`).join('')}</div></div>
       <div class="set-row"><span>音乐（八音盒）</span><div class="seg" id="sM"><button data-v="1" aria-pressed="${AUDIO.music}">开</button><button data-v="0" aria-pressed="${!AUDIO.music}">关</button></div></div>
       <div class="set-row"><label for="sVol">音量</label><input id="sVol" type="range" min="0" max="1" step="0.05" value="${AUDIO.vol}"></div>
@@ -5901,6 +5927,7 @@ function renderPanel(extra) {
     </div>`;
     body.querySelectorAll('#sQ button').forEach(b => b.onclick = () => { setQuality(b.dataset.v); renderPanel(); });
     body.querySelectorAll('#sT button').forEach(b => b.onclick = () => { GAME.setTime(+b.dataset.v); UI.toast('时间来到 ' + fmtTime(+b.dataset.v)); });
+    body.querySelectorAll('#sW button').forEach(b => b.onclick = () => { GAME.setWeather(b.dataset.v || null); renderPanel(); });
     body.querySelectorAll('#sF button').forEach(b => b.onclick = () => { GAME.timeFlow = +b.dataset.v; store.set('timeFlow', GAME.timeFlow); renderPanel(); });
     body.querySelectorAll('#sM button').forEach(b => b.onclick = () => { AUDIO.music = b.dataset.v === '1'; store.set('music', AUDIO.music); renderPanel(); });
     $('sVol').oninput = (e) => AUDIO.setVol(+e.target.value);
@@ -6007,6 +6034,7 @@ async function build() {
   seed(2024); spawnNPCs(); initPlayer(); initAnimals(); spawnTraffic();
   scene.updateMatrixWorld(true); buildGrass();
   mailboxInteractables(); shopInteractables(); homeInteractables();
+  initLiveWorld(); // 天气 / 乘降 / 巴士 / 通勤
   const ORDER = ['home', 'post', 'station', 'plaza', 'shrine', 'river', 'harbor', 'cape', 'beach', 'platform', 'park', 'school', 'farm', 'gas', 'view', 'station2'];
   PLACES.sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
   buildMapBase(); refreshHomeBoard(); applyShadowQuality(); setQuality(qName, true);
@@ -6120,7 +6148,7 @@ function renderFrame() {
 }
 
 /* ---------------- 主循环 ---------------- */
-let last = performance.now(), T = 0, hudT = 0, mmT = 0, saveT = 0, envT = 0; const ENV = { sea: 0, trees: 0, night: 0, crossing: 0, train: 0, trainSpeed: 0, windy: 0.3, height: 0, musicOn: true };
+let last = performance.now(), T = 0, hudT = 0, mmT = 0, saveT = 0, envT = 0; const ENV = { sea: 0, trees: 0, night: 0, crossing: 0, train: 0, trainSpeed: 0, windy: 0.3, height: 0, musicOn: true, rain: 0 };
 let petalNear = 0;
 function frame(now) {
   requestAnimationFrame(frame);
@@ -6132,6 +6160,7 @@ function frame(now) {
     if (st.min >= 24 * 60) { st.min = 24 * 60 - 1; if (!GAME._passing) { GAME._passing = true; if (DRIVE.v) { DRIVE.v.v = 0; exitVehicle(); } UI.toast('太晚了……你迷迷糊糊地回到了家。'); GAME.sleep(false); setTimeout(() => GAME._passing = false, 3000); } }
   }
   const hour = st.min / 60;
+  updateWeather(dt);
   applyTimeOfDay(hour);
   SKY_U.time.value = T; FOGX.p[0] = T; animeUpdate(NIGHT.v);
   if (GAME.started) {
@@ -6143,10 +6172,12 @@ function frame(now) {
     const a = T * 0.04; camera.position.set(PLAZA.x + Math.cos(a) * 70, TOWN_Y + 32, PLAZA.z - 30 + Math.sin(a) * 70); camera.lookAt(PLAZA.x, TOWN_Y + 6, PLAZA.z - 30);
     playerHolder.position.copy(PLAYER.pos); poseCharacter(playerChar, dt, 'idle', 0, T);
   }
-  updateNPCs(dt, T, hour, PLAYER.pos); updateTrain(dt); updateCrossings(dt, T); updateTraffic(dt, PLAYER.pos);
+  updateNPCs(dt, T, hour, PLAYER.pos); updateTrain(dt); updateCrossings(dt, T); updateTraffic(dt, PLAYER.pos); updateRide(dt, T);
   updateAnimals(dt, T, hour); updateDate(dt, T, hour); updateFishing(dt, T); updateSparks(dt);
   for (const f of UPDATERS) f(dt, T);
-  SEA_U.time.value = T; WIND.uTime.value = T; WIND.uWind.value = 0.8 + Math.sin(T * 0.23) * 0.35 + Math.sin(T * 0.071) * 0.25;
+  SEA_U.time.value = T; WIND.uTime.value = T; WIND.uWind.value = (0.8 + Math.sin(T * 0.23) * 0.35 + Math.sin(T * 0.071) * 0.25) * WX.wind;
+  SEA_U.waves.value = Q.waves * WX.waves;
+  RAIN_U.time.value = T; RAIN_U.camPos.value.copy(camera.position); RAIN_U.amt.value = WEATHER.rain * (insideHome(PLAYER.pos.x, PLAYER.pos.z) ? 0 : 1); RAIN_U.tilt.value.x = 0.08 + WX.wind * 0.14;
   PETAL_U.camPos.value.copy(camera.position); updateGrass();
   // 阴影相机跟随（按纹素对齐，避免闪烁）
   const tp = PLAYER.pos; const snap = 0.5; sun.target.position.set(Math.round(tp.x / snap) * snap, Math.round(tp.y), Math.round(tp.z / snap) * snap); sun.position.copy(sun.target.position).addScaledVector(LIGHT_DIR, 200); sun.target.updateMatrixWorld();
@@ -6166,6 +6197,7 @@ function frame(now) {
     if (GAME.sitting) { pr.hidden = false; $('promptText').textContent = '起身'; pr.firstChild.textContent = k('空格'); }
     else if (GAME.fishing) { pr.hidden = false; $('promptText').textContent = GAME.fishing.bite > 0 ? '快收竿！' : '收竿'; pr.firstChild.textContent = k('E'); }
     else if (DRIVE.v) { pr.hidden = Math.abs(DRIVE.v.v) > 2; $('promptText').textContent = '下车'; pr.firstChild.textContent = k('F'); }
+    else if (GAME.ride) { pr.hidden = false; const r = GAME.ride; const open = r.kind === 'train' ? r.T.state === 'stop' : r.v.dwell > 0; $('promptText').textContent = open ? '下车' : (r.kind === 'train' ? '列车行驶中…' : '巴士行驶中…'); pr.firstChild.textContent = k('F'); }
     else if (currentInteract) { pr.hidden = false; $('promptText').textContent = currentInteract.label; pr.firstChild.textContent = k(currentInteract.key || 'E'); }
     else pr.hidden = true;
     if (hudT < 0) { hudT = 0.25; UI.tickHUD(st, hour); }
@@ -6179,9 +6211,10 @@ function frame(now) {
     const c = islandC(PLAYER.pos.x, PLAYER.pos.z); ENV.sea = Math.max(smooth(0.2, 0.02, c), PLAYER.pos.x > 112 && PLAYER.pos.z > -40 && PLAYER.pos.z < 65 ? 0.8 : 0);
     let cr = 0; for (const C of CROSSINGS) if (C.active) cr = Math.max(cr, smooth(160, 15, Math.hypot(PLAYER.pos.x - C.x, PLAYER.pos.z - C.z)));
     ENV.crossing = cr; ENV.train = smooth(220, 10, nearestTrainDist(PLAYER.pos.x, PLAYER.pos.z)); ENV.trainSpeed = TRAIN.v;
-    ENV.night = NIGHT.v; ENV.height = PLAYER.pos.y - TOWN_Y; ENV.windy = 0.3 + Math.max(0, Math.sin(T * 0.11)) * 0.5;
+    ENV.night = NIGHT.v; ENV.height = PLAYER.pos.y - TOWN_Y; ENV.windy = (0.3 + Math.max(0, Math.sin(T * 0.11)) * 0.5) * WX.wind;
+    ENV.rain = WEATHER.rain * (inside ? 0.3 : 1);
   }
-  PETAL_U.density.value += (petalNear - PETAL_U.density.value) * Math.min(1, dt * 2);
+  PETAL_U.density.value += (petalNear * (1 - WEATHER.rain * 0.9) - PETAL_U.density.value) * Math.min(1, dt * 2);
   if (GAME.started) AUDIO.update(dt, ENV);
   renderFrame();
 }
@@ -6198,5 +6231,329 @@ addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; cam
 document.addEventListener('visibilitychange', () => { if (document.hidden && GAME.started) GAME.save(); });
 
 build().then(() => { requestAnimationFrame(frame); }).catch((e) => { console.error(e); progress(1, '加载出错：' + e.message); });
+
+// ---- 15a_weather.js ----
+/* ==========================================================================
+   天气：按日种子生成的天气表（晴/阴/雨/雾）· 平滑过渡 · 雨粒子 · 湿地面
+   ========================================================================== */
+const W_P = {
+  sun:   { cover: 0.52, fog: 1.0, sun: 1.00, dark: 0.00, grey: 0.00, rain: 0, wind: 1.00, waves: 1.00, cn: '晴' },
+  cloud: { cover: 0.36, fog: 1.9, sun: 0.60, dark: 0.15, grey: 0.40, rain: 0, wind: 1.30, waves: 1.25, cn: '阴' },
+  rain:  { cover: 0.27, fog: 2.6, sun: 0.32, dark: 0.32, grey: 0.75, rain: 1, wind: 1.55, waves: 1.70, cn: '雨' },
+  fog:   { cover: 0.40, fog: 6.5, sun: 0.45, dark: 0.12, grey: 0.55, rain: 0, wind: 0.65, waves: 0.85, cn: '雾' },
+};
+const W_KEYS = ['cover', 'fog', 'sun', 'dark', 'grey', 'rain', 'wind', 'waves'];
+const WX = {}; for (const k of W_KEYS) WX[k] = W_P.sun[k];
+const _grey503 = new THREE.Color(0x9aa4ae);
+const WEATHER = { tgt: 'sun', from: null, k: 1, day: -1, plan: [], manual: null, rain: 0, wet: 0 };
+function weatherPlan(day) {
+  seed(day * 7919 + 13);
+  const segs = []; let w = chance(0.62) ? 'sun' : 'cloud';
+  for (let h = 0; h < 24; h += 3) {
+    const r = R();
+    if (w === 'rain') w = r < 0.55 ? 'cloud' : r < 0.85 ? 'sun' : 'rain';
+    else if (w === 'fog') w = r < 0.7 ? 'sun' : 'cloud';
+    else w = r < 0.5 ? w : r < 0.68 ? 'sun' : r < 0.85 ? 'cloud' : r < 0.94 ? 'rain' : 'fog';
+    segs.push([h, w]);
+  }
+  return segs;
+}
+function weatherNow(min) {
+  let w = WEATHER.plan[0] ? WEATHER.plan[0][1] : 'sun';
+  for (const [h, x] of WEATHER.plan) if (min >= h * 60) w = x;
+  return WEATHER.manual || w;
+}
+GAME.setWeather = (w) => { // 设置页 / 控制台调试用；传 null 恢复自动天气
+  if (w && !W_P[w]) return;
+  WEATHER.manual = w; UI.toast(w ? '天气切换为「' + W_P[w].cn + '」（进入下个时段时恢复自动）' : '恢复自动天气'); UI.refreshHUD();
+};
+function updateWeather(dt) {
+  const st = S(); if (!st) return;
+  if (WEATHER.day !== st.day) { WEATHER.day = st.day; WEATHER.plan = weatherPlan(st.day); WEATHER.manual = null; }
+  const w = weatherNow(st.min);
+  if (w !== WEATHER.tgt) { WEATHER.from = Object.assign({}, WX); WEATHER.tgt = w; WEATHER.k = 0; }
+  WEATHER.k = Math.min(1, WEATHER.k + dt / 14);
+  const B = W_P[w], t = smooth(0, 1, WEATHER.k), A = WEATHER.from || B;
+  for (const kk of W_KEYS) WX[kk] = lerp(A[kk], B[kk], t);
+  WEATHER.rain += (WX.rain - WEATHER.rain) * Math.min(1, dt * 0.5);
+  // 地面湿度：下雨时快速变湿，停后慢慢晒干
+  WEATHER.wet += (clamp(WEATHER.rain * 1.5, 0, 1) - WEATHER.wet) * Math.min(1, dt * (WEATHER.rain > 0.03 ? 0.5 : 0.035));
+  applyWet();
+}
+/* 雨点：相机周围盒子里的粒子雨（细长雨丝，随风倾斜） */
+const RAIN_U = { time: { value: 0 }, camPos: { value: new THREE.Vector3() }, amt: { value: 0 }, tilt: { value: new THREE.Vector2(0.18, 0) } };
+function buildRain() {
+  const N = 4200; const pos = new Float32Array(N * 3), rnd = new Float32Array(N * 4);
+  for (let i = 0; i < N; i++) { pos[i * 3] = R(0, 1); pos[i * 3 + 1] = R(0, 1); pos[i * 3 + 2] = R(0, 1); for (let k = 0; k < 4; k++) rnd[i * 4 + k] = R(); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('rnd', new THREE.BufferAttribute(rnd, 4));
+  const m = new THREE.ShaderMaterial({
+    uniforms: RAIN_U, transparent: true, depthWrite: false,
+    vertexShader: `attribute vec4 rnd; uniform float time; uniform vec3 camPos; uniform vec2 tilt; varying float vA;
+      void main(){ vec3 box=vec3(48.0,26.0,48.0);
+        vec3 p=position*box;
+        p.y = mod(p.y - time*(20.0+rnd.z*10.0) - camPos.y + box.y*0.5, box.y) - box.y*0.5 + camPos.y;
+        p.x = mod(p.x + time*(tilt.x*22.0+rnd.y*3.0) - camPos.x + box.x*0.5, box.x) - box.x*0.5 + camPos.x;
+        p.z = mod(p.z + time*(tilt.y*22.0) - camPos.z + box.z*0.5, box.z) - box.z*0.5 + camPos.z;
+        vec4 mv=viewMatrix*vec4(p,1.0); gl_Position=projectionMatrix*mv; float d=-mv.z;
+        gl_PointSize = (0.26+rnd.x*0.18)*900.0/max(d,0.5); vA=smoothstep(38.0,14.0,d)*smoothstep(0.5,1.6,d); }`,
+    fragmentShader: `uniform float amt; uniform vec2 tilt; varying float vA;
+      void main(){ if(amt<0.01) discard; vec2 c=gl_PointCoord-0.5;
+        vec2 d=normalize(vec2(tilt.x*0.25,-1.0)); vec2 u=vec2(dot(c,d), c.x*d.y-c.y*d.x);
+        if(abs(u.y)>0.055 || abs(u.x)>0.46) discard;
+        float a=vA*amt*0.7*(1.0-abs(u.x)*1.4);
+        gl_FragColor=vec4(0.75,0.82,0.92, a); }`
+  });
+  const pts = new THREE.Points(g, m); pts.frustumCulled = false; pts.renderOrder = 7; scene.add(pts);
+}
+/* 湿了的路面：粗糙度下降 + 环境反射增强 + 变暗；雨后慢慢晒干 */
+const WET_SET = ['asphalt', 'concrete', 'paving', 'stone', 'metal'];
+let _wetApplied = -1;
+function applyWet() {
+  const wet = WEATHER.wet; if (Math.abs(wet - _wetApplied) < 0.02) return; _wetApplied = wet;
+  for (const key of WET_SET) {
+    const rec = MATS[key]; if (!rec) continue; const m = rec.material; if (!m.isMeshStandardMaterial) continue;
+    const u = m.userData; if (u.wetB == null) { u.wetB = m.roughness; u.wetE = m.envMapIntensity || 1; u.wetC = m.color.clone(); }
+    m.roughness = lerp(u.wetB, 0.3, wet); m.envMapIntensity = u.wetE * lerp(1, 2.4, wet);
+    m.color.copy(u.wetC).multiplyScalar(lerp(1, 0.55, wet));
+  }
+}
+
+// ---- 15b_ride.js ----
+/* ==========================================================================
+   乘降：可乘坐的环岛电车与循环巴士
+   GAME.ride = { kind:'train'|'bus', ... } — 乘车中 playerHolder 挂在车厢/车身上，
+   相机为靠窗座位的自由环视视角；到站开门时按 F/E 下车。
+   ========================================================================== */
+GAME.ride = null;
+const _rideV = new THREE.Vector3(), _rideL = new THREE.Vector3();
+function boardTrain(T, si) {
+  let carIdx = 0, bd = 1e9;
+  for (let i = 0; i < T.cars.length; i++) { const b = T.boxes[i]; const d = Math.hypot(b.x - PLAYER.pos.x, b.z - PLAYER.pos.z); if (d < bd) { bd = d; carIdx = i; } }
+  const car = T.cars[carIdx], side = T.doorSide;
+  GAME.standUp();
+  GAME.ride = { kind: 'train', T, car: carIdx, side, boardSi: si, lastState: 'stop', seat: [1.6, 1.56, side * 1.02], eye: [1.6, 2.12, side * 0.92] };
+  car.g.add(playerHolder); playerHolder.position.set(1.6, 1.56, side * 1.02); playerHolder.rotation.set(0, side > 0 ? 0 : Math.PI, 0); playerHolder.scale.setScalar(0.9); playerHolder.visible = true;
+  PLAYER.camYaw = car.g.rotation.y + (side > 0 ? 0 : Math.PI); PLAYER.camPitch = 0.02;
+  UI.toast('你坐上了窗边的座位。列车各站停车，到站开门时按 F 下车。');
+  GAME.diary('坐上了环岛线的电车。');
+}
+function boardBus(v, si) {
+  GAME.standUp();
+  GAME.ride = { kind: 'bus', v, side: -1, boardSi: si, lastDwell: true, seat: [0.62, 1.05, -0.9], eye: [0.62, 1.62, -0.9] };
+  v.g.add(playerHolder); playerHolder.position.set(0.62, 1.05, -0.9); playerHolder.rotation.set(0, 0, 0); playerHolder.scale.setScalar(0.9); playerHolder.visible = true;
+  PLAYER.camYaw = v.yaw; PLAYER.camPitch = 0.04;
+  UI.toast('你上了巴士。沿途各站停靠，到站停稳后按 F 下车。');
+  GAME.diary('坐上了岛内循环巴士。');
+}
+function leaveRide() {
+  const r = GAME.ride; if (!r) return;
+  let wp = null;
+  if (r.kind === 'train') {
+    const T = r.T; if (T.state !== 'stop') { UI.toast('列车行驶中——到站开门后再下车。'); return; }
+    wp = T.cars[r.car].g.localToWorld(new THREE.Vector3(0, 1.0, r.side * 2.4));
+  } else {
+    const v = r.v; if (!(v.dwell > 0)) { UI.toast('巴士行驶中——到站停稳后再下车。'); return; }
+    wp = v.g.localToWorld(new THREE.Vector3(v.M.halfW + 0.5, 0.9, 0.8));
+  }
+  scene.add(playerHolder); playerHolder.scale.setScalar(1); playerHolder.rotation.set(0, 0, 0); playerHolder.visible = true;
+  GAME.ride = null;
+  PLAYER.pos.set(wp.x, 0, wp.z); PLAYER.pos.y = groundAt(wp.x, wp.z, wp.y + 0.5); PLAYER.onGround = true;
+  UI.toast('下车了。');
+}
+function updateRide(dt, t) {
+  const r = GAME.ride; if (!r) return;
+  const g = r.kind === 'train' ? r.T.cars[r.car].g : r.v.g;
+  _rideV.set(r.seat[0], r.seat[1], r.seat[2]); g.localToWorld(_rideV); PLAYER.pos.set(_rideV.x, _rideV.y - 0.5, _rideV.z); // 同步坐标供地图/存档
+  poseCharacter(playerChar, dt, 'sit', 0, t);
+  if (r.kind === 'train') {
+    const T = r.T;
+    if (r.lastState !== T.state) {
+      r.lastState = T.state;
+      const st = RAIL.stops[T.next];
+      if (T.state === 'stop') { UI.toast('到站：' + st.name + '站。按 F 下车。'); AUDIO.trainChime && AUDIO.trainChime(); }
+      else UI.toast('发车了。下一站：' + st.name + '站。');
+    }
+  } else {
+    const v = r.v;
+    if ((v.dwell > 0) !== r.lastDwell) {
+      r.lastDwell = v.dwell > 0;
+      if (v.dwell > 0 && v.atStop != null) UI.toast('到站：' + BUS_STOPS[v.atStop].name + '。按 F 下车。');
+      else if (!(v.dwell > 0)) UI.toast('发车了。下一站：' + BUS_STOPS[v.nextStop].name + '。');
+    }
+  }
+}
+/* 乘车视角：相机固定在窗边座位，鼠标自由环视 */
+function updateRideCam(dt) {
+  const r = GAME.ride; const g = r.kind === 'train' ? r.T.cars[r.car].g : r.v.g;
+  const P = PLAYER;
+  if (INPUT.lookX || INPUT.lookY) { P.camYaw -= INPUT.lookX; P.camPitch = clamp(P.camPitch + INPUT.lookY * (store.get('invertY', false) ? -1 : 1), -1.1, 1.1); INPUT.lookX = INPUT.lookY = 0; }
+  _rideV.set(r.eye[0], r.eye[1], r.eye[2]); g.localToWorld(_rideV);
+  camera.position.lerp(_rideV, Math.min(1, dt * 10));
+  const cy = Math.cos(P.camPitch);
+  _rideL.set(_rideV.x + Math.sin(P.camYaw) * cy, _rideV.y - Math.sin(P.camPitch), _rideV.z + Math.cos(P.camYaw) * cy);
+  camera.lookAt(_rideL);
+  if (Math.abs(62 - camera.fov) > 0.05) { camera.fov += (62 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
+}
+/* 站台候车交互：sd=0 岛式站台（双向），±1 相对式站台（一侧服务一个方向） */
+function trainServing(si, sd) {
+  for (const T of TRAINS) {
+    if (sd === 0 || (sd > 0 ? T.dir > 0 : T.dir < 0)) if (T.state === 'stop' && T.next === si) return T;
+  }
+  return null;
+}
+function trainETA(si, sd) {
+  let best = 1e9;
+  for (const T of TRAINS) {
+    if (sd !== 0 && (sd > 0 ? T.dir < 0 : T.dir > 0)) continue;
+    const d = T.dir > 0 ? loopD(T.s, RAIL.stops[si].s) : loopD(RAIL.stops[si].s, T.s);
+    best = Math.min(best, d / Math.max(T.v, 6) + (T.state === 'stop' ? T.timer : 0));
+  }
+  return best > 900 ? 0 : best;
+}
+function initTrainBoarding() {
+  RAIL.stops.forEach((st, si) => {
+    const p = railAt(st.s);
+    if (st.island) {
+      addInteract({ x: p.x, z: p.z, y: p.y + 1.3, r: 26, label: () => trainServing(si, 0) ? '乘电车（' + st.name + ' 停靠中）' : '等电车（约 ' + Math.ceil(trainETA(si, 0)) + ' 秒进站）', act: () => { const T = trainServing(si, 0); if (T) boardTrain(T, si); else UI.toast('还没有列车进站。'); } });
+    } else for (const sd of [1, -1]) {
+      const lat = sd * (railSep(st.s) / 2 + 3.0);
+      addInteract({
+        x: p.x + p.lx * lat, z: p.z + p.lz * lat, y: p.y + 1.3, r: st.half,
+        label: () => trainServing(si, sd) ? '乘电车（' + st.name + ' 停靠中）' : '等电车（约 ' + Math.ceil(trainETA(si, sd)) + ' 秒进站）',
+        act: () => { const T = trainServing(si, sd); if (T) boardTrain(T, si); else UI.toast('还没有列车进站。'); }
+      });
+    }
+  });
+}
+
+/* ---------------- 环岛巴士 ----------------
+   站前 → 沿海南路 → 环岛公路一圈 → 回到站前。每个站牌停靠约 9 秒。 */
+const BUS_PATH = { loop: true, pts: [] };
+const BUS_STOPS = []; // {name, s, x, z, sx, sz}
+function busNearestS(x, z) { let best = 1e9, bs = 0; for (const q of BUS_PATH.pts2 || []) { const d = (q.x - x) ** 2 + (q.z - z) ** 2; if (d < best) { best = d; bs = q.s; } } return bs; }
+function busStopSign(x, z, ry, name) {
+  const g = new THREE.Group(); g.position.set(x, groundAt(x, z, terrainH(x, z) + 2), z); g.rotation.y = ry;
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.6, 8), new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.6, metalness: 0.5 })); pole.position.y = 1.3; pole.castShadow = true; g.add(pole);
+  const uv = allocSign(150, 150, (c, w, h) => {
+    c.fillStyle = '#f6d04d'; c.beginPath(); c.arc(75, 75, 72, 0, TAU); c.fill(); c.strokeStyle = '#2c5aa0'; c.lineWidth = 8; c.stroke();
+    c.fillStyle = '#2c5aa0'; c.font = `900 ${name.length > 3 ? 24 : 30}px ${FONT.sans}`; c.textAlign = 'center'; c.fillText(name, 75, 70); c.font = '700 14px ' + FONT.sans; c.fillText('岛内循环巴士', 75, 98);
+  });
+  const geo = new THREE.PlaneGeometry(0.6, 0.6); const uvA = geo.attributes.uv;
+  for (let i = 0; i < uvA.count; i++) uvA.setXY(i, uv[0] + uvA.getX(i) * (uv[2] - uv[0]), uv[1] + uvA.getY(i) * (uv[3] - uv[1]));
+  const mat = new THREE.MeshStandardMaterial({ map: TEX_SIGN, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 });
+  for (const s of [0, Math.PI]) { const disc = new THREE.Mesh(geo, mat); disc.rotation.y = s; disc.position.y = 2.5; g.add(disc); }
+  scene.add(g);
+}
+function initBus() {
+  const ring = TRAFFIC_PATHS.ringF; if (!ring) return;
+  TRAFFIC_PATHS.bus = BUS_PATH;
+  // 站前 ↔ 港口的城里联络段 + 完整环线
+  BUS_PATH.pts = [[12, 44.6], [60, 44.2], [96, 43.2]].concat(ring.pts, [[96, 43.2], [60, 44.2]]);
+  // 逐点累计里程，供站牌定位与 ETA
+  BUS_PATH.pts2 = []; let s = 0; const P = BUS_PATH.pts;
+  for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; BUS_PATH.pts2.push({ x: a[0], z: a[1], s }); s += Math.hypot(b[0] - a[0], b[1] - a[1]); }
+  BUS_PATH.L = s;
+  // 站牌：樱丘站前复用已有道具，其余新建站牌
+  for (const [name, ax, az, old] of [['樱丘站前', 12.5, 44.6, true], ['星见港', 101.5, 12, false], ['汐见浜', 62, 96, false], ['田园', -160, 10, false], ['北町', -40, -78.2, false], ['灯塔岬口', 98, -74, false]]) {
+    const ss = busNearestS(ax, az); const p = pathAt(BUS_PATH, ss);
+    const sx = p[0] + Math.cos(p[2]) * 3.4, sz = p[1] - Math.sin(p[2]) * 3.4; // 行进方向左侧
+    const st = { name, s: ss, x: p[0], z: p[1], sx, sz }; const idx = BUS_STOPS.length; BUS_STOPS.push(st);
+    if (!old) busStopSign(sx, sz, Math.atan2(-Math.cos(p[2]), Math.sin(p[2])), name);
+    addInteract({
+      x: sx, z: sz, r: 2.6,
+      label: () => busAtStop(idx) ? '乘巴士（' + name + ' 停靠中）' : '等巴士（下一班约 ' + busETA(st) + ' 秒）',
+      act: () => { const v = busAtStop(idx); if (v) boardBus(v, idx); else UI.toast('还没有巴士进站。'); }
+    });
+  }
+  TEX_SIGN.needsUpdate = true; // 新站牌已画进图集
+  // 两辆错开半环的巴士
+  for (const s of [BUS_PATH.L * 0.05, BUS_PATH.L * 0.55]) {
+    const p = pathAt(BUS_PATH, s);
+    const v = spawnVehicle('bus', p[0], p[1], p[2], { ai: 'bus', s, vmax: 8.5, driverLook: { gender: 'm', age: 'adult', top: 0x2c5aa0, hair: 'short' } });
+    if (v) { v.bus = true; v.nextStop = busNextStop(s); v.busHook = busHook; }
+  }
+}
+function busNextStop(s) { const L = BUS_PATH.L; let bi = 0, bd = 1e9; BUS_STOPS.forEach((b, i) => { const d = ((b.s - s) % L + L) % L; if (d > 0.5 && d < bd) { bd = d; bi = i; } }); return bi; }
+function busAtStop(i) { for (const v of VEHICLES) if (v.bus && v.dwell > 0 && v.atStop === i) return v; return null; }
+function busETA(st) {
+  let best = 1e9; for (const v of VEHICLES) { if (!v.bus) continue; const d = ((st.s - v.s) % BUS_PATH.L + BUS_PATH.L) % BUS_PATH.L; best = Math.min(best, d / Math.max(v.v, 7) + (v.dwell || 0)); }
+  return best > 900 ? 0 : Math.ceil(best);
+}
+/* 巴士停靠决策：挂在 updateTraffic 上（v.busHook(v, dt) 返回目标车速） */
+function busHook(v, dt) {
+  if (v.dwell > 0) { v.dwell -= dt; if (v.dwell < 0) v.dwell = 0; return 0; }
+  const st = BUS_STOPS[v.nextStop]; const L = BUS_PATH.L;
+  const ahead = ((st.s - v.s) % L + L) % L;
+  if (ahead < 16) {
+    if (ahead < 1.4 || (ahead < 4 && v.v < 1.6)) { v.dwell = 9; v.atStop = v.nextStop; v.nextStop = busNextStop(st.s + 1); return 0; }
+    return Math.max(0.6, ahead * 0.4);
+  }
+  v.atStop = null; return 99;
+}
+
+// ---- 15c_commute.js ----
+/* ==========================================================================
+   居民通勤：店员早上从车站方向沿商店街走进店里、下班再走回去；
+   手写的路线保证全程走在路面/广场上。雨天步行者会撑伞。
+   ========================================================================== */
+function commuteRoute(n) {
+  const d = n.d, id = d.id;
+  if (d.at && d.at.shop) {
+    const sh = SHOPS.find(s => s.def.id === d.at.shop); if (!sh) return null;
+    const E = sh.def.side === 'E'; const sx = E ? 4.5 : -4.5;
+    return [[26, -47], [sx, -44], [sx, clamp(n.home[1], -42, 34)], [n.home[0], n.home[1]]];
+  }
+  switch (id) {
+    case 'laohai': return [[110, -22], [110, 8], [n.home[0], n.home[1]]];
+    case 'qianhe': return [[-40, -86], [-40, -112], [n.home[0], n.home[1]]];
+    case 'chengcheng': return [[-40, -86], [-40, -112], [n.home[0], n.home[1]]];
+    case 'yezi': return [[-62, -20], [-62, 10], [n.home[0], n.home[1]]];
+    case 'alan': return [[60, 124], [28, 121], [n.home[0], n.home[1]]];
+    case 'xiaozhou': return [[-40, 120], [-13, 119], [n.home[0], n.home[1]]];
+    case 'wenye': case 'wennai': return [[4.5, 35], [2, 56], [n.home[0], n.home[1]]];
+  }
+  return null;
+}
+/* 沿通勤路线走一步；返回 true 表示走完 */
+function commuteStep(n, dt, back) {
+  const C = n.com, rt = C.route;
+  const wp = rt[back ? rt.length - 1 - C.i : C.i];
+  const dx = wp[0] - n.pos.x, dz = wp[1] - n.pos.z, d = Math.hypot(dx, dz);
+  if (d < 0.45) { C.i++; return C.i >= rt.length; }
+  const sp = Math.max(n.speed, 1.1) * (WEATHER.rain > 0.4 ? 1.35 : 1);
+  n.pos.x += dx / d * sp * dt; n.pos.z += dz / d * sp * dt;
+  n.pos.y = groundAt(n.pos.x, n.pos.z, n.pos.y + 0.6);
+  let dy = Math.atan2(dx, dz) - n.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); n.yaw += dy * Math.min(1, dt * 8);
+  return false;
+}
+function initCommutes() {
+  const hour = S().min / 60, day = S().day;
+  for (const n of NPCS) {
+    const route = commuteRoute(n); if (!route) continue;
+    const h = n.d.hours; const active = npcActive(n, hour);
+    const after = h[0] <= h[1] ? hour >= h[1] : (hour >= h[1] && hour < h[0]);
+    n.com = { route, i: 0, mode: '', day, done: active || after, left: !active && after };
+  }
+}
+/* 小伞：雨天里在外行走的居民会撑伞 */
+function makeUmbrella(n) {
+  const g = new THREE.Group();
+  const m1 = new THREE.MeshToonMaterial({ color: 0x3a3a3a, gradientMap: TOON_GRAD });
+  const m2 = new THREE.MeshToonMaterial({ color: pick([0x4a6fa0, 0xd95f6e, 0x4a8a6a, 0xe8a04a, 0x7a6ab0]), gradientMap: TOON_GRAD, side: THREE.DoubleSide });
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.95, 6), m1); stick.position.y = 1.12;
+  const can = new THREE.Mesh(new THREE.ConeGeometry(0.56, 0.24, 10, 1, true), m2); can.position.y = 1.66;
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.008, 0.14, 6), m1); tip.position.y = 1.86;
+  g.add(stick, can, tip); g.position.set(0.26, 0, 0.1); g.rotation.z = -0.1;
+  g.scale.setScalar((n.d.look.scale || 1) * (n.d.look.age === 'kid' ? 0.85 : 1));
+  g.visible = false; return g;
+}
+
+/* ---------------- 总入口 ---------------- */
+function initLiveWorld() {
+  if (typeof buildRain === 'function') buildRain();
+  if (typeof initTrainBoarding === 'function') initTrainBoarding();
+  if (typeof initBus === 'function') initBus();
+  if (typeof initCommutes === 'function') initCommutes();
+}
 
 </script>

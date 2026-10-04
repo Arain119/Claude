@@ -153,6 +153,7 @@ function updateTraffic(dt, ppos) {
     { const dx = ppos.x - v.x, dz = ppos.z - v.z; const ah = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx); if (!DRIVE.v && ah > 0 && ah < 11 && lat < 1.9 && Math.abs(ppos.y - v.y) < 3) { target = Math.min(target, Math.max(0, (ah - v.M.L / 2 - 1.5) * 1.5)); if (ah < v.M.L / 2 + 2.5 && !v.honked) { v.honked = true; AUDIO.horn && AUDIO.horn(0.6); } } else if (ah > 14) v.honked = false; }
     // 道口
     for (const st of CAR_STOPS) { const C = CROSSINGS.find(k => k.id === st.cx); if (!C) continue; const dx = st.x - v.x, dz = st.z - v.z; const ah = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx); if (lat < 2 && ah > -0.5 && ah < 32 && (C.active || C.arm > 0.02)) target = Math.min(target, Math.max(0, (ah - v.M.L / 2 - 0.3) * 1.2)); }
+    if (v.busHook) target = Math.min(target, v.busHook(v, dt));
     const prevV = v.v; v.v += clamp(target - v.v, -7 * dt, 2.2 * dt); v.v = Math.max(0, v.v); v.brake = prevV - v.v > 0.02 ? 1 : 0;
     v.s = (v.s + v.v * dt) % L;
     const q = pathAt(P, v.s); v.x = q[0]; v.z = q[1];
