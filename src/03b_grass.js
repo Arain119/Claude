@@ -91,13 +91,14 @@ function buildGrass() {
   const U = GRASS.U = {
     gCam: { value: new THREE.Vector2() }, gSize: { value: S }, gField: { value: field }, gFieldBox: { value: new THREE.Vector4(G.x0, G.z0, G.dx, G.dz) }, gFieldN: { value: new THREE.Vector2(G.nx, G.nz) },
     gCover: { value: cover }, gCoverBox: { value: new THREE.Vector4(WORLD.x0, WORLD.z0, WORLD.x1 - WORLD.x0, WORLD.z1 - WORLD.z0) },
-    gH: { value: 0.36 }, gW: { value: 0.028 }, uTime: WIND.uTime, uWind: WIND.uWind, gTex: TERRAIN_U.tGrass
+    gH: { value: 0.36 }, gW: { value: 0.028 }, uTime: WIND.uTime, uWind: WIND.uWind, gTex: TERRAIN_U.tGrass,
+    gPlayer: { value: new THREE.Vector3(1e6, 0, 1e6) }, gNPC: { value: new THREE.Vector3(1e6, 0, 1e6) }
   };
   const m = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = `attribute vec4 aBlade;
-      uniform vec2 gCam; uniform float gSize, gH, gW, uTime, uWind; uniform sampler2D gField, gCover; uniform vec4 gFieldBox, gCoverBox; uniform vec2 gFieldN;
+      uniform vec2 gCam; uniform float gSize, gH, gW, uTime, uWind; uniform sampler2D gField, gCover; uniform vec4 gFieldBox, gCoverBox; uniform vec2 gFieldN; uniform vec3 gPlayer, gNPC;
       varying float vGT, vGust, vGRand, vGMacro, vFlower; varying vec2 vGXZ;
       vec4 gTexel(vec2 i){ return texture2D(gField, (clamp(i, vec2(0.0), gFieldN - 1.0) + 0.5) / gFieldN); }
       vec4 fieldAt(vec2 p){ vec2 u = (p - gFieldBox.xy) / gFieldBox.zw; vec2 i = floor(u), f = u - i;
@@ -130,12 +131,22 @@ function buildGrass() {
         float flutter = sin(uTime * 4.3 + aBlade.z * 40.0) * 0.06;
         vec2 lean = (wdir * (0.12 + gust * 0.8) + vec2(cos(ang * 1.7), sin(ang * 1.7)) * 0.2 + flutter) * t * t * hgt;
         vec3 transformed = vec3(gwp.x, gf.x - 0.03, gwp.y) + sideV * position.x * w * mix(1.0 - t * 0.9, 1.0 + t * 2.2, vFlower) + vec3(lean.x, t * hgt * (1.0 - 0.3 * gust * t), lean.y);
+        // 踩倒：玩家与最近 NPC 脚下的草叶向外压倒
+        for (int gi = 0; gi < 2; gi++) {
+          vec3 gp = gi == 0 ? gPlayer : gNPC;
+          vec2 away = gwp - gp.xz; float pd = length(away);
+          float press = (1.0 - smoothstep(0.1, 0.75, pd)) * step(abs(gp.y - gf.x), 2.5);
+          transformed.xz += normalize(away + vec2(0.001)) * press * 0.3 * t * t;
+          transformed.y -= press * hgt * 0.55 * t * t;
+        }
         vGT = t; vGust = gust; vGRand = aBlade.w; vGMacro = macro; vGXZ = gwp;`);
     sh.fragmentShader = `uniform sampler2D gTex; varying float vGT, vGust, vGRand, vGMacro, vFlower; varying vec2 vGXZ;
       ` + sh.fragmentShader.replace('#include <color_fragment>', `
         // 根部取地面草色，向上提亮并偏黄绿；阵风经过的草叶翻出亮面
         vec3 gb = pow(mix(texture2D(gTex, vGXZ / 4.5).rgb, texture2D(gTex, vGXZ / 13.0).rgb, 0.35), vec3(2.2));
         vec3 gc = gb * mix(0.38, 1.28, smoothstep(0.0, 0.9, vGT)) * mix(0.82, 1.15, vGRand) * mix(0.85, 1.12, vGMacro);
+        // 每根草的色相微抖（青黄↔草绿↔偏褐），消除同色的塑料感
+        gc *= mix(vec3(0.86, 1.0, 0.78), vec3(1.04, 0.93, 0.8), fract(vGRand * 6.7));
         gc = mix(gc, gc * vec3(1.22, 1.12, 0.62), vGT * vGT * 0.55);
         gc = mix(gc, gc * vec3(1.3, 1.25, 0.9), vGust * vGT * 0.7);
         // 零星野花：白、黄、淡紫
@@ -151,5 +162,8 @@ function updateGrass() {
   if (!GRASS.mesh) return;
   camera.getWorldDirection(_gFwd); const k = Math.hypot(_gFwd.x, _gFwd.z) || 1; const a = GRASS.size * 0.22;
   GRASS.U.gCam.value.set(camera.position.x + _gFwd.x / k * a, camera.position.z + _gFwd.z / k * a);
+  if (typeof PLAYER !== 'undefined' && PLAYER.pos) GRASS.U.gPlayer.value.copy(PLAYER.pos); else GRASS.U.gPlayer.value.set(1e6, 0, 1e6);
+  let np = null, nd = 1e9; for (const n of NPCS) { if (!n.g || !n.g.visible) continue; const d = (n.pos.x - PLAYER.pos.x) ** 2 + (n.pos.z - PLAYER.pos.z) ** 2; if (d < nd) { nd = d; np = n; } }
+  if (np && nd < 900) GRASS.U.gNPC.value.copy(np.pos); else GRASS.U.gNPC.value.set(1e6, 0, 1e6);
   GRASS.mesh.visible = camera.position.y - groundAt(camera.position.x, camera.position.z) < 60;
 }

@@ -184,6 +184,8 @@ function buildShop(d) {
   for (let i = 0; i <= 3; i++) K.box('vc', -gw / 2 + i * gw / 3, (F0 - 0.5) / 2, -RD, 0.07, F0 - 0.5, 0.1, 0x55575d);
   addCollider(...K.w(0, 0, -RD - 0.05).filter((_, i) => i !== 1), gw / 2, 0.15, ry, SW_Y, SW_Y + F0, 'wall');
   // 招牌
+  // 接地阴影：沿街立面的落地感
+  const sp = K.w(0, 0, -D / 2 - 0.4); addGroundShadow(sp[0], sp[2], w + 1.8, D + 2.2, ry, 0.55);
   const sW = w - 0.3; const sUV = drawShopSign(d, sW * 110, 1.05 * 110);
   K.box('vc', 0, F0 + 0.35, 0.1, sW + 0.1, 1.15, 0.2, 0x3a3a3e);
   K.plane('sign', 0, F0 + 0.35, 0.205, sW, 1.05, 0xffffff, { uvr: sUV });

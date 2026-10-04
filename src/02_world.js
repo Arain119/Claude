@@ -177,6 +177,8 @@ function buildTerrain() {
     // 色调：高处偏暗绿、低处偏黄绿
     tmp.setRGB(1, 1, 1).lerp(new THREE.Color(0.8, 0.88, 0.75), smooth(10, 60, h)).lerp(new THREE.Color(1.05, 1.0, 0.85), smooth(0.65, 0.8, fbm(x * 0.01 + 5, z * 0.01, 2)) * 0.5);
     tmp.multiplyScalar(lerp(1, 0.55, smooth(0.3, -2.5, h)));
+    // 微色斑块：打破大片匀色的塑料感
+    tmp.multiplyScalar(0.9 + 0.15 * fbm(x * 0.11 + 9.7, z * 0.11 - 4.2, 2) + 0.07 * fbm(x * 0.55, z * 0.55, 1));
     col.set([tmp.r, tmp.g, tmp.b], i * 3);
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('splat', new THREE.BufferAttribute(spl, 4));

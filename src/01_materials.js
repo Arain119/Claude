@@ -192,6 +192,28 @@ function buildPools() {
   POOLS.mat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, fog: true });
   const m = new THREE.Mesh(g, POOLS.mat); m.renderOrder = 3; m.frustumCulled = false; scene.add(m);
 }
+/* --- 接地阴影（廉价的接触 AO，让建筑「长」在地里而不是浮在上面） ---
+   与 buildPools 同套路：所有调用先攒进 GSH.pos，建完场景后一次性铺成贴地网格。
+   顶点色通道复用为「强度」：col 里存 a，材质基色是暗绿黑，vColor 相乘即阴影深浅。 */
+const GSH = { pos: [] };
+function addGroundShadow(x, z, w, d, ry = 0, a = 0.8) { GSH.pos.push([x, z, w, d, ry, a]); }
+function buildGroundShadows() {
+  if (!GSH.pos.length) return;
+  const tex = canvasTex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,0.9)'); gr.addColorStop(0.5, 'rgba(0,0,0,0.42)'); gr.addColorStop(0.8, 'rgba(0,0,0,0.12)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); }, { data: true });
+  const pos = [], uv = [], col = [], idx = []; const N = 5; // 细分成网格，逐顶点贴地
+  for (const [x, z, w, d, ry, a] of GSH.pos) {
+    const b = pos.length / 3, c = Math.cos(ry), s = Math.sin(ry);
+    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+      const lx = (i / N - 0.5) * w, lz = (j / N - 0.5) * d;
+      const px = x + lx * c + lz * s, pz = z - lx * s + lz * c;
+      pos.push(px, terrainH(px, pz) + 0.05, pz); uv.push(i / N, j / N); col.push(a, a, a);
+    }
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = b + j * (N + 1) + i; idx.push(q, q + N + 1, q + 1, q + 1, q + N + 1, q + N + 2); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, color: 0x2a3226, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, fog: true }));
+  m.renderOrder = 2; m.frustumCulled = false; scene.add(m);
+}
 /* --- 电线 --- */
 const wirePos = [];
 function addWire(a, b, sag = 0.6, seg = 10) {
