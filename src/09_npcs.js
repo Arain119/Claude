@@ -146,6 +146,7 @@ function spawnNPCs() {
     if (d.mode === 'sit') n.sitY = d.sitY != null ? groundAt(n.home[0], n.home[1]) + 0.05 : TOWN_Y + 0.5;
     if (d.bike) { const b = makeBike(d.bike); b.g.scale.setScalar(1); holder.add(b.g); n.bikeObj = b; c.root.position.set(0, 0.86, -0.12); }
     if (n.home) { n.pos.set(n.home[0], groundAt(n.home[0], n.home[1]), n.home[1]); n.yaw = n.home[2]; }
+    if (typeof makeUmbrella === 'function') { n.umb = makeUmbrella(n); n.holder.add(n.umb); }
     NPCS.push(n);
   }
 }
@@ -157,11 +158,20 @@ function npcActive(n, hour) {
 function updateNPCs(dt, t, hour, ppos) {
   for (const n of NPCS) {
     const active = npcActive(n, hour);
-    if (!active) { if (n.holder.visible) n.holder.visible = false; continue; }
+    // 通勤：到点沿路线走进场，下班沿路线走回家（而不是瞬移/消失）
+    if (n.com) {
+      const C = n.com;
+      if (C.day !== S().day) { C.day = S().day; C.done = false; C.left = false; C.i = 0; C.mode = ''; }
+      if (active && !C.done && C.mode !== 'in') { C.mode = 'in'; C.i = 0; const w = C.route[0]; if (Math.hypot(n.pos.x - w[0], n.pos.z - w[1]) > 3) { n.pos.set(w[0], groundAt(w[0], w[1]), w[1]); } }
+      else if (!active && C.done && !C.left && C.mode !== 'out') { C.mode = 'out'; C.i = 0; }
+    }
+    const walking = n.com && n.com.mode;
+    if (!active && !walking) { if (n.holder.visible) n.holder.visible = false; continue; }
     const dist = Math.hypot(n.pos.x - ppos.x, n.pos.z - ppos.z);
     let mode = n.override ? n.override.mode : n.mode; let speed = 0;
     // 位置更新（即使很远也推进路径）
-    if (n.override && n.override.pos) { n.pos.set(n.override.pos[0], n.override.pos[1], n.override.pos[2]); n.yaw = n.override.yaw; }
+    if (walking) { if (commuteStep(n, dt, n.com.mode === 'out')) { if (n.com.mode === 'in') n.com.done = true; else n.com.left = true; n.com.mode = ''; } else { mode = 'commute'; speed = Math.max(n.speed, 1.1); } }
+    else if (n.override && n.override.pos) { n.pos.set(n.override.pos[0], n.override.pos[1], n.override.pos[2]); n.yaw = n.override.yaw; }
     else if (mode === 'path' || mode === 'bike') {
       const P = PATHS[n.d.path]; const blocked = dist < 1.3 && mode === 'path' && Math.cos(Math.atan2(ppos.x - n.pos.x, ppos.z - n.pos.z) - n.yaw) > 0.5;
       if (!blocked) { n.s += n.speed * dt; speed = n.speed; }
@@ -175,7 +185,7 @@ function updateNPCs(dt, t, hour, ppos) {
       n.pos.y = groundAt(n.pos.x, n.pos.z, n.pos.y + 0.6);
     } else if (n.home && !n.override) { n.pos.set(n.home[0], n.pos.y || groundAt(n.home[0], n.home[1]), n.home[1]); }
     // 正在交谈：面向玩家
-    if (GAME.talkingTo === n) { const want = Math.atan2(ppos.x - n.pos.x, ppos.z - n.pos.z); let dy = want - n.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); n.yaw += dy * Math.min(1, dt * 6); if (mode === 'path' || mode === 'wander' || mode === 'idle' || mode === 'phone') { mode = 'talk'; speed = 0; } }
+    if (GAME.talkingTo === n) { const want = Math.atan2(ppos.x - n.pos.x, ppos.z - n.pos.z); let dy = want - n.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); n.yaw += dy * Math.min(1, dt * 6); if (mode === 'path' || mode === 'wander' || mode === 'idle' || mode === 'phone' || mode === 'commute') { mode = 'talk'; speed = 0; } }
     const vis = dist < Q.npc;
     n.holder.visible = vis;
     if (!vis) continue;
@@ -183,9 +193,10 @@ function updateNPCs(dt, t, hour, ppos) {
     if (mode === 'sit' || n.override && n.override.mode === 'sit') { n.c.root.position.y = (n.override && n.override.sitY != null ? n.override.sitY : n.sitY) - n.pos.y; }
     setOutline(n.c, dist < Q.outline);
     if (dist > 60 && (n._skip = !n._skip)) continue;
-    let st = mode === 'path' || mode === 'wander' ? (speed > 0.1 ? (speed > 2 ? 'run' : 'walk') : 'idle') : mode === 'bike' ? 'bike' : mode;
+    let st = mode === 'path' || mode === 'wander' || mode === 'commute' ? (speed > 0.1 ? (speed > 2 ? 'run' : 'walk') : 'idle') : mode === 'bike' ? 'bike' : mode;
     if (st === 'run' && n.d.look.age !== 'kid' && speed < 2.6) st = 'walk';
     poseCharacter(n.c, dt * (dist > 60 ? 2 : 1), st, speed, t);
+    if (n.umb) n.umb.visible = WEATHER.rain > 0.45 && (st === 'walk' || st === 'run' || st === 'idle' || st === 'talk');
     if (n.bikeObj) for (const w of n.bikeObj.wheels) w.rotation.x += speed * dt / 0.33;
   }
 }
