@@ -194,10 +194,12 @@ function frame(now) {
     const a = T * 0.04; camera.position.set(PLAZA.x + Math.cos(a) * 70, TOWN_Y + 32, PLAZA.z - 30 + Math.sin(a) * 70); camera.lookAt(PLAZA.x, TOWN_Y + 6, PLAZA.z - 30);
     playerHolder.position.copy(PLAYER.pos); poseCharacter(playerChar, dt, 'idle', 0, T);
   }
-  updateNPCs(dt, T, hour, PLAYER.pos); updateTrain(dt); updateCrossings(dt, T); updateTraffic(dt, PLAYER.pos);
+  updateNPCs(dt, T, hour, PLAYER.pos); updateTrain(dt); updateCrossings(dt, T); updateTraffic(dt, PLAYER.pos); updateRide(dt, T);
   updateAnimals(dt, T, hour); updateDate(dt, T, hour); updateFishing(dt, T); updateSparks(dt);
   for (const f of UPDATERS) f(dt, T);
-  SEA_U.time.value = T; WIND.uTime.value = T; WIND.uWind.value = 0.8 + Math.sin(T * 0.23) * 0.35 + Math.sin(T * 0.071) * 0.25;
+  SEA_U.time.value = T; WIND.uTime.value = T; WIND.uWind.value = (0.8 + Math.sin(T * 0.23) * 0.35 + Math.sin(T * 0.071) * 0.25) * WX.wind;
+  SEA_U.waves.value = Q.waves * WX.waves;
+  RAIN_U.time.value = T; RAIN_U.camPos.value.copy(camera.position); RAIN_U.amt.value = WEATHER.rain * (insideHome(PLAYER.pos.x, PLAYER.pos.z) ? 0 : 1); RAIN_U.tilt.value.x = 0.08 + WX.wind * 0.14;
   PETAL_U.camPos.value.copy(camera.position); updateGrass();
   // 阴影相机跟随（按纹素对齐，避免闪烁）
   const tp = PLAYER.pos; const snap = 0.5; sun.target.position.set(Math.round(tp.x / snap) * snap, Math.round(tp.y), Math.round(tp.z / snap) * snap); sun.position.copy(sun.target.position).addScaledVector(LIGHT_DIR, 200); sun.target.updateMatrixWorld();
@@ -217,6 +219,7 @@ function frame(now) {
     if (GAME.sitting) { pr.hidden = false; $('promptText').textContent = '起身'; pr.firstChild.textContent = k('空格'); }
     else if (GAME.fishing) { pr.hidden = false; $('promptText').textContent = GAME.fishing.bite > 0 ? '快收竿！' : '收竿'; pr.firstChild.textContent = k('E'); }
     else if (DRIVE.v) { pr.hidden = Math.abs(DRIVE.v.v) > 2; $('promptText').textContent = '下车'; pr.firstChild.textContent = k('F'); }
+    else if (GAME.ride) { pr.hidden = false; const r = GAME.ride; const open = r.kind === 'train' ? r.T.state === 'stop' : r.v.dwell > 0; $('promptText').textContent = open ? '下车' : (r.kind === 'train' ? '列车行驶中…' : '巴士行驶中…'); pr.firstChild.textContent = k('F'); }
     else if (currentInteract) { pr.hidden = false; $('promptText').textContent = currentInteract.label; pr.firstChild.textContent = k(currentInteract.key || 'E'); }
     else pr.hidden = true;
     if (hudT < 0) { hudT = 0.25; UI.tickHUD(st, hour); }

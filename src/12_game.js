@@ -10,7 +10,15 @@ function freshState() { return { v: 1, day: 1, min: 9 * 60, coins: 20, inv: {}, 
 GAME.S = store.get('save', null);
 if (!GAME.S || GAME.S.v !== 1) GAME.S = freshState();
 const S = () => GAME.S;
-GAME.save = () => { S().pos = [PLAYER.pos.x, PLAYER.pos.y, PLAYER.pos.z, PLAYER.yaw]; store.set('save', S()); };
+GAME.save = () => {
+  if (GAME.ride) { // 乘车中存档记在乘车站台上，读档时站在站台上
+    const r = GAME.ride; let p;
+    if (r.kind === 'train') { const a = railAt(RAIL.stops[r.boardSi].s); p = [a.x, a.y + 1.3, a.z, PLAYER.yaw]; }
+    else { const b = BUS_STOPS[r.boardSi]; p = [b.sx, 0, b.sz, PLAYER.yaw]; p[1] = groundAt(b.sx, b.sz, 3); }
+    S().pos = p;
+  } else S().pos = [PLAYER.pos.x, PLAYER.pos.y, PLAYER.pos.z, PLAYER.yaw];
+  store.set('save', S());
+};
 GAME.hour = () => S().min / 60;
 const fmtTime = (m) => { const h = Math.floor(m / 60) % 24, mm = Math.floor(m % 60); return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0'); };
 GAME.diary = (text) => { S().diary.push({ day: S().day, t: fmtTime(S().min), text }); if (S().diary.length > 80) S().diary.shift(); };
@@ -167,10 +175,10 @@ canvasEl.addEventListener('touchmove', (e) => {
 const endTouch = (e) => { for (const t of e.changedTouches) { if (TOUCH.move && t.identifier === TOUCH.move.id) { TOUCH.move = null; UI.joy(false); } if (TOUCH.look && t.identifier === TOUCH.look.id) TOUCH.look = null; } };
 canvasEl.addEventListener('touchend', endTouch); canvasEl.addEventListener('touchcancel', endTouch);
 
-GAME.vehicleKey = () => { if (DRIVE.v) { exitVehicle(); return; } if (GAME.sitting || GAME.fishing) return; const v = nearestVehicle(PLAYER.pos); if (v) enterVehicle(v); else UI.toast('附近没有可以驾驶的车辆。'); };
+GAME.vehicleKey = () => { if (GAME.ride) { leaveRide(); return; } if (DRIVE.v) { exitVehicle(); return; } if (GAME.sitting || GAME.fishing) return; const v = nearestVehicle(PLAYER.pos); if (v) enterVehicle(v); else UI.toast('附近没有可以驾驶的车辆。'); };
 GAME.cycleTime = () => { const presets = [[15 * 60, '下午'], [18 * 60, '黄昏'], [21 * 60, '夜樱']]; const h = S().min; let i = presets.findIndex(p => p[0] > h + 1); if (i < 0) i = 0; GAME.setTime(presets[i][0]); UI.toast('时间来到「' + presets[i][1] + '」'); };
 GAME.setTime = (m) => { if (m < S().min - 60 && m < 6 * 60) { } S().min = m; UI.refreshHUD(); };
-GAME.teleport = (i) => { const p = PLACES[i]; if (!p) return; GAME.standUp(); PLAYER.fly = false; PLAYER.pos.set(p.x, 0, p.z); PLAYER.pos.y = groundAt(p.x, p.z, terrainH(p.x, p.z) + 1.5); PLAYER.yaw = p.ry; PLAYER.camYaw = p.ry; PLAYER.vy = 0; UI.toast('来到「' + p.name + '」'); UI.closeAll(); };
+GAME.teleport = (i) => { const p = PLACES[i]; if (!p) return; GAME.standUp(); if (GAME.ride) { GAME.ride = null; scene.add(playerHolder); playerHolder.scale.setScalar(1); playerHolder.rotation.set(0, 0, 0); playerHolder.visible = true; } PLAYER.fly = false; PLAYER.pos.set(p.x, 0, p.z); PLAYER.pos.y = groundAt(p.x, p.z, terrainH(p.x, p.z) + 1.5); PLAYER.yaw = p.ry; PLAYER.camYaw = p.ry; PLAYER.vy = 0; UI.toast('来到「' + p.name + '」'); UI.closeAll(); };
 
 /* ---------------- 坐下 / 起身 ---------------- */
 GAME.sit = (x, y, z, ry, onLeave, attach) => {
@@ -193,7 +201,7 @@ GAME.standUp = () => {
 let currentInteract = null;
 function findInteract() {
   const p = PLAYER.pos; let best = null, bd = 1e9;
-  if (GAME.sitting || DRIVE.v) return null;
+  if (GAME.sitting || DRIVE.v || GAME.ride) return null;
   { const v = nearestVehicle(p, 2.6); if (v) { const d = Math.hypot(v.x - p.x, v.z - p.z) - v.M.halfW; best = { kind: 'veh', v, label: '驾驶「' + v.T.name + '」', key: 'F' }; bd = d + 0.6; } }
   // 居民
   for (const n of NPCS) {
@@ -210,6 +218,7 @@ function findInteract() {
 }
 GAME.interact = () => {
   if (GAME.fishing) { GAME.fish(); return; }
+  if (GAME.ride) { leaveRide(); return; }
   if (GAME.sitting) { GAME.standUp(); return; }
   if (DRIVE.v) { exitVehicle(); return; }
   const c = currentInteract; if (!c) return; AUDIO.click();
@@ -459,6 +468,7 @@ function homeInteractables() {
 const _fw = new THREE.Vector3();
 function updatePlayer(dt, t) {
   const P = PLAYER;
+  if (GAME.ride) { INPUT.jump = false; return; } // 乘车中：坐标与姿态由 updateRide 接管
   // 移动输入
   let mx = 0, mz = 0;
   if (KEYS.has('w') || KEYS.has('arrowup')) mz += 1; if (KEYS.has('s') || KEYS.has('arrowdown')) mz -= 1;
@@ -517,6 +527,7 @@ const CAM = { lastLook: -10, fov: 58, T: 0 };
 const _side = new THREE.Vector3();
 function updateCamera(dt) {
   const P = PLAYER; const v = DRIVE.v; CAM.T += dt;
+  if (GAME.ride) { updateRideCam(dt); return; }
   if (INPUT.lookX || INPUT.lookY) { CAM.lastLook = CAM.T; P.camYaw -= INPUT.lookX; P.camPitch = clamp(P.camPitch + INPUT.lookY * (store.get('invertY', false) ? -1 : 1), -0.9, 1.2); INPUT.lookX = INPUT.lookY = 0; }
   const idle = CAM.T - CAM.lastLook > (v ? 1.2 : 2.2);
   const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
