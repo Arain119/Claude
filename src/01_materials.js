@@ -102,6 +102,7 @@ regMat('gravel', pm(TEX.gravel, { roughness: 1, polygonOffset: true, polygonOffs
 regMat('ballast', pm(TEX.ballast, { roughness: 1 }), { cast: false, tint: 0 });
 regMat('stone', pm(TEX.stone, { roughness: 0.92 }), { tint: 0.3 });
 regMat('sandMat', pm(TEX.sand, { roughness: 1 }), { cast: false, tint: 0.2 });
+regMat('ground', pm(TEX.ground, { roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), { cast: false, tint: 0.4 });
 regMat('rockMat', pm(TEX.rock, { roughness: 0.95 }), { tint: 0.3 });
 regMat('paddyMat', stdMat({ map: TEX.paddy, roughness: 0.15, envMapIntensity: 1.9 }), { cast: false, tint: 0 });
 regMat('glass', new THREE.MeshStandardMaterial({ color: lin(0x9db8c4), roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 0.65 }), { cast: false, receive: false });

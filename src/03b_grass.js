@@ -75,7 +75,7 @@ function buildGrass() {
   const field = new THREE.DataTexture(G.data, G.nx, G.nz, THREE.RGBAFormat, THREE.FloatType);
   field.minFilter = field.magFilter = THREE.NearestFilter; field.generateMipmaps = false; field.needsUpdate = true;
   const cover = renderGrassCover(Q.grass >= 1 ? 2048 : 1024);
-  const S = GRASS.size = Q.grass >= 1 ? 56 : 42, n = Math.round((Q.grass >= 1 ? 190000 : 80000));
+  const S = GRASS.size = Q.grass >= 1 ? 72 : 54, n = Math.round((Q.grass >= 1 ? 300000 : 130000));
   // 草叶模板：两节 + 尖（5 顶点 3 三角形）
   const TV = [[-1, 0], [1, 0], [-0.75, 0.45], [0.75, 0.45], [0, 1]], TI = [0, 1, 2, 2, 1, 3, 2, 3, 4];
   const pos = new Float32Array(n * 15), bl = new Float32Array(n * 20), idx = new Uint32Array(n * 9);

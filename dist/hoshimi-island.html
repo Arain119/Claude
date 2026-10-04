@@ -710,6 +710,7 @@ regMat('gravel', pm(TEX.gravel, { roughness: 1, polygonOffset: true, polygonOffs
 regMat('ballast', pm(TEX.ballast, { roughness: 1 }), { cast: false, tint: 0 });
 regMat('stone', pm(TEX.stone, { roughness: 0.92 }), { tint: 0.3 });
 regMat('sandMat', pm(TEX.sand, { roughness: 1 }), { cast: false, tint: 0.2 });
+regMat('ground', pm(TEX.ground, { roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), { cast: false, tint: 0.4 });
 regMat('rockMat', pm(TEX.rock, { roughness: 0.95 }), { tint: 0.3 });
 regMat('paddyMat', stdMat({ map: TEX.paddy, roughness: 0.15, envMapIntensity: 1.9 }), { cast: false, tint: 0 });
 regMat('glass', new THREE.MeshStandardMaterial({ color: lin(0x9db8c4), roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 0.65 }), { cast: false, receive: false });
@@ -1941,7 +1942,7 @@ function sakuraTree(x, z, s = 1, o = {}) {
   const cl = clusterTips(tips.map(t => [t.p[0] + Math.cos(t.az) * 0.3 * s, t.p[1] + 0.25 * s, t.p[2] + Math.sin(t.az) * 0.3 * s]), 1.05 * s);
   const clumps = cl.map(c => ({ x: c.x, y: c.y, z: c.z, r: (0.85 + 0.12 * Math.min(c.n, 4)) * s, sq: R(0.55, 0.68) }));
   const tint = R(-0.02, 0.02); const base = SAK_BASE.clone().offsetHSL(tint, 0, 0);
-  const C = canopy(kit, x, y, z, clumps, { kind: 'sakura', base, lite: SAK_LITE, shade: SAK_SHADE, card: 0.4 * Math.sqrt(s) * (o.cardK || 1), dens: 2.7 * (o.cards || 1400) / 1400, crop: true, body: 0.6, bodyMin: 0.7, inner: 0.3, local: 0.4, sway: 0.7 });
+  const C = canopy(kit, x, y, z, clumps, { kind: 'sakura', base, lite: SAK_LITE, shade: SAK_SHADE, card: 0.4 * Math.sqrt(s) * (o.cardK || 1), dens: 3.0 * (o.cards || 1400) / 1400, crop: true, body: 0.7, bodyMin: 0.7, inner: 0.3, local: 0.4, sway: 0.7 });
   let crown = C.ext;
   // 落花地毯：树冠下密、向外渐稀
   const rr = crown + 1.2 * s;
@@ -1970,7 +1971,7 @@ function greenTree(x, z, s = 1, o = {}) {
   let tx = 0, tz = 0, ty = 0; for (const c of clumps) { tx += c.x; tz += c.z; ty = Math.max(ty, c.y); } clumps.push({ x: tx / clumps.length, y: ty + 0.7 * s, z: tz / clumps.length, r: 1.3 * s, sq: 0.75 });
   const hue = o.hue != null ? o.hue : R(0, 1);
   const base = new THREE.Color().setHSL(lerp(0.24, 0.3, hue), 0.42, 0.36), lite = new THREE.Color().setHSL(lerp(0.17, 0.22, hue), 0.55, 0.62), shade = new THREE.Color().setHSL(0.42, 0.3, 0.2);
-  const C = canopy(kit, x, y, z, clumps, { kind: 'leaf', base, lite, shade, card: (o.proto ? 0.85 : 0.62) * Math.sqrt(s), dens: 2.0 * (o.cards || 700) / 700, crop: true, body: 0.62, inner: o.proto ? 0 : 0.12, local: 0.45, sway: 0.5, lo: o.proto });
+  const C = canopy(kit, x, y, z, clumps, { kind: 'leaf', base, lite, shade, card: (o.proto ? 0.85 : 0.62) * Math.sqrt(s), dens: 2.4 * (o.cards || 700) / 700, crop: true, body: 0.72, inner: o.proto ? 0 : 0.12, local: 0.45, sway: 0.5, lo: o.proto });
   TREES.push({ x, z, r: C.ext, kind: 'green', y });
 }
 
@@ -1990,7 +1991,7 @@ function pineTree(x, z, s = 1, o = {}) {
       clumps.push({ x: e[0], y: e[1] + 0.25 * s, z: e[2], r: R(1.15, 1.55) * s * (1 - i * 0.06), sq: 0.55 });
     }
   }
-  canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3f5c48), lite: new THREE.Color(0x8aa874), shade: new THREE.Color(0x1f3436), card: (o.proto ? 0.8 : 0.6) * Math.sqrt(s), dens: o.proto ? 1.0 : 2.0, crop: true, body: 0.62, inner: o.proto ? 0 : 0.1, local: 0.6, sway: 0.3, lo: o.proto });
+  canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3f5c48), lite: new THREE.Color(0x8aa874), shade: new THREE.Color(0x1f3436), card: (o.proto ? 0.8 : 0.6) * Math.sqrt(s), dens: o.proto ? 1.0 : 2.4, crop: true, body: 0.7, inner: o.proto ? 0 : 0.1, local: 0.6, sway: 0.3, lo: o.proto });
   TREES.push({ x, z, r: 2.5 * s, kind: 'pine', y });
 }
 
@@ -2056,7 +2057,7 @@ function sugiTree(x, z, s = 1, o = {}) {
     const t = (h - 4.4 * s) / (H - 4.4 * s); const r = lerp(2.7, 0.7, Math.pow(t, 0.9)) * s; const n = t > 0.6 ? 1 : 2; const a0 = R(0, TAU);
     for (let k = 0; k < n; k++) { const a = a0 + k * Math.PI, d = n > 1 ? r * 0.3 : 0; clumps.push({ x: Math.cos(a) * d, y: h, z: Math.sin(a) * d, r: n > 1 ? r * 0.82 : r, sq: 0.72 }); }
   }
-  canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3c5a40), lite: new THREE.Color(0x7d9c64), shade: new THREE.Color(0x1c3032), card: 1.2 * s, dens: 1.1, crop: true, body: 0.64, local: 0.5, sway: 0.25, lo: o.proto });
+  canopy(kit, x, y, z, clumps, { kind: 'pine', base: new THREE.Color(0x3c5a40), lite: new THREE.Color(0x7d9c64), shade: new THREE.Color(0x1c3032), card: 1.2 * s, dens: 1.4, crop: true, body: 0.72, local: 0.5, sway: 0.25, lo: o.proto });
   if (!o.proto) TREES.push({ x, z, r: 3 * s, kind: 'sugi', y });
 }
 const FOREST = { meshes: [] };
@@ -2209,7 +2210,7 @@ function buildGrass() {
   const field = new THREE.DataTexture(G.data, G.nx, G.nz, THREE.RGBAFormat, THREE.FloatType);
   field.minFilter = field.magFilter = THREE.NearestFilter; field.generateMipmaps = false; field.needsUpdate = true;
   const cover = renderGrassCover(Q.grass >= 1 ? 2048 : 1024);
-  const S = GRASS.size = Q.grass >= 1 ? 56 : 42, n = Math.round((Q.grass >= 1 ? 190000 : 80000));
+  const S = GRASS.size = Q.grass >= 1 ? 72 : 54, n = Math.round((Q.grass >= 1 ? 300000 : 130000));
   // 草叶模板：两节 + 尖（5 顶点 3 三角形）
   const TV = [[-1, 0], [1, 0], [-0.75, 0.45], [0.75, 0.45], [0, 1]], TI = [0, 1, 2, 2, 1, 3, 2, 3, 4];
   const pos = new Float32Array(n * 15), bl = new Float32Array(n * 20), idx = new Uint32Array(n * 9);
@@ -2678,8 +2679,10 @@ function bicycleStatic(K, x, z, ry, col) {
 
 /* ---------------- 街道 ---------------- */
 function buildStreets() {
-  const road = (x0, x1, z0, z1, y = TOWN_Y) => WK.box('asphalt', (x0 + x1) / 2, y + 0.02, (z0 + z1) / 2, x1 - x0, 0.04, z1 - z0, 0xffffff, { wuv: 0.25, nochunk: false });
-  const walk = (x0, x1, z0, z1, mat = 'paving', col = 0xffffff, h = 0.15) => { WK.box(mat, (x0 + x1) / 2, TOWN_Y + h / 2, (z0 + z1) / 2, x1 - x0, h, z1 - z0, col, { wuv: 0.5, solid: { walk: true } }); };
+  // 铺装边缘垫一圈略宽的泥土路肩：草→土→硬质面过渡，消除草地贴着沥青的硬切边
+  const shoulder = (x0, x1, z0, z1, y, top) => WK.box('ground', (x0 + x1) / 2, y + top / 2 - 0.001 + ((Math.abs(x0 * 7 + z0 * 3) % 3) - 1) * 0.0012, (z0 + z1) / 2, x1 - x0 + 0.9, top, z1 - z0 + 0.9, 0x8f8271, { wuv: 0.4 });
+  const road = (x0, x1, z0, z1, y = TOWN_Y) => { shoulder(x0, x1, z0, z1, y, 0.032); WK.box('asphalt', (x0 + x1) / 2, y + 0.02, (z0 + z1) / 2, x1 - x0, 0.04, z1 - z0, 0xffffff, { wuv: 0.25, nochunk: false }); };
+  const walk = (x0, x1, z0, z1, mat = 'paving', col = 0xffffff, h = 0.15) => { shoulder(x0, x1, z0, z1, TOWN_Y, 0.03); WK.box(mat, (x0 + x1) / 2, TOWN_Y + h / 2, (z0 + z1) / 2, x1 - x0, h, z1 - z0, col, { wuv: 0.5, solid: { walk: true } }); };
   // 主街
   road(-3.5, 3.5, -84, 44);
   walk(3.5, 7, -48, 36); walk(-7, -3.5, -48, 36);
