@@ -91,7 +91,7 @@ function buildGrass() {
   const U = GRASS.U = {
     gCam: { value: new THREE.Vector2() }, gSize: { value: S }, gField: { value: field }, gFieldBox: { value: new THREE.Vector4(G.x0, G.z0, G.dx, G.dz) }, gFieldN: { value: new THREE.Vector2(G.nx, G.nz) },
     gCover: { value: cover }, gCoverBox: { value: new THREE.Vector4(WORLD.x0, WORLD.z0, WORLD.x1 - WORLD.x0, WORLD.z1 - WORLD.z0) },
-    gH: { value: 0.36 }, gW: { value: 0.028 }, uTime: WIND.uTime, uWind: WIND.uWind, gTex: TERRAIN_U.tGrass,
+    gH: { value: 0.5 }, gW: { value: 0.045 }, uTime: WIND.uTime, uWind: WIND.uWind, gTex: TERRAIN_U.tGrass,
     gPlayer: { value: new THREE.Vector3(1e6, 0, 1e6) }, gNPC: { value: new THREE.Vector3(1e6, 0, 1e6) }
   };
   const m = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
@@ -150,8 +150,8 @@ function buildGrass() {
         vec3 gc = gb * mix(0.42, 1.18, smoothstep(0.0, 0.9, vGT)) * mix(0.82, 1.15, vGRand) * mix(0.85, 1.12, vGMacro);
         // 每根草的色相微抖（青黄↔草绿↔偏褐），消除同色的塑料感
         gc *= mix(vec3(0.86, 1.0, 0.78), vec3(1.04, 0.93, 0.8), fract(vGRand * 6.7));
-        gc = mix(gc, gc * vec3(1.22, 1.12, 0.62), vGT * vGT * 0.55);
-        gc = mix(gc, gc * vec3(1.3, 1.25, 0.9), vGust * vGT * 0.7);
+        gc = mix(gc, gc * vec3(1.16, 1.08, 0.68), vGT * vGT * 0.4);
+        gc = mix(gc, gc * vec3(1.22, 1.16, 0.9), vGust * vGT * 0.6);
         // 零星野花：白、黄、淡紫
         vec3 fc = vGRand < 0.33 ? vec3(0.95, 0.95, 0.9) : vGRand < 0.66 ? vec3(1.0, 0.82, 0.2) : vec3(0.75, 0.6, 0.95);
         gc = mix(gc, fc, vFlower * smoothstep(0.5, 0.7, vGT));
